@@ -14,4 +14,15 @@ class UserProvider extends ChangeNotifier{
     registeredUsers.remove(user);
     notifyListeners();
   }
+
+  void update(User updatedUser) {
+    int index = registeredUsers.indexWhere(
+          (user) => user.email == updatedUser.email,
+    );
+
+    if (index != -1) {
+      registeredUsers[index] = updatedUser;
+      notifyListeners();
+    }
+  }
 }

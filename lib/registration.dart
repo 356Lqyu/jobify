@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:jobify/user.dart';
 ///import 'package:intl/intl.dart' as intl;
 
 class Registration extends StatefulWidget {
@@ -350,8 +351,30 @@ class _RegistrationState extends State<Registration> {
                       setState(() {});
 
                       if (isValid) {
-                        print("Form is valid! Proceed to create account");
+                        // Create a User object
+                        User newUser = User(
+                          email: emailCtrl.text.trim(),
+                          password: passwordCtrl.text,
+                          role: selectedRole,
+                        );
+
+                        print("User created: $newUser");
+
+                        // Show success message
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text("Registration Successful !", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),),
+                            backgroundColor: Colors.green,
+                            duration: Duration(seconds: 3),
+                          ),
+                        );
+
+                        // Clear form after success
+                        emailCtrl.clear();
+                        passwordCtrl.clear();
+                        confirmPasswordCtrl.clear();
                       }
+
                     },
                     child: const Text(
                       "Create Account",

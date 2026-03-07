@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:intl/intl.dart' as intl;
+///import 'package:intl/intl.dart' as intl;
 
 class Registration extends StatefulWidget {
   const Registration({super.key});

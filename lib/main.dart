@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:jobify/registration.dart';
 
 void main() {
   runApp(const MainApp());
@@ -39,8 +40,8 @@ class _AnimatedHomePageState extends State<AnimatedHomePage>
     );
 
     _scaleAnimation = Tween<double>(
-      begin: 1.0,
-      end: 1.2,
+      begin: 0.9,
+      end: 1.1,
     ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
 
     _controller.repeat(reverse: true);
@@ -65,8 +66,8 @@ class _AnimatedHomePageState extends State<AnimatedHomePage>
               ScaleTransition(
                 scale: _scaleAnimation,
                 child: Container(
-                  width: 330,
-                  height: 200,
+                  width: 260,
+                  height: 130,
                   child: Image.asset(
                     'assets/images/logo3.png',
                     fit: BoxFit.contain,
@@ -109,7 +110,7 @@ class _AnimatedHomePageState extends State<AnimatedHomePage>
                     children: const [
                       Icon(Icons.work, color: Colors.white, size: 25),
                       SizedBox(width: 10),
-                      Text("I'm Looking for a job.", style: TextStyle(fontSize: 17)),
+                      Text("I'm Looking for a job", style: TextStyle(fontSize: 17)),
                     ],
                   ),
                 ),
@@ -137,7 +138,7 @@ class _AnimatedHomePageState extends State<AnimatedHomePage>
                     children: const [
                       Icon(Icons.group_add, color: Colors.white, size: 25),
                       SizedBox(width: 10),
-                      Text("I'm Hiring.", style: TextStyle(fontSize: 17)),
+                      Text("I'm Hiring", style: TextStyle(fontSize: 17)),
                     ],
                   ),
                 ),
@@ -145,23 +146,23 @@ class _AnimatedHomePageState extends State<AnimatedHomePage>
 
               const SizedBox(height: 25),
 
-              /// Login Row
+              /// Register Row
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    'Already have an account?',
+                    "Don't have an account?",
                     style: TextStyle(fontSize: 15, color: Colors.blueGrey),
                   ),
                   TextButton(
                     onPressed: () {
-                      /*Navigator.push(
+                      Navigator.push(
                               context,
-                              MaterialPageRoute(builder: (context) => LoginPage()),
-                            ); */
+                              MaterialPageRoute(builder: (context) => Registration()),
+                      );
                     },
                     child: Text(
-                      'Log in',
+                      'Register',
                       style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.bold,

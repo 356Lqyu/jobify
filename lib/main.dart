@@ -1,8 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:jobify/registration.dart';
+import 'package:provider/provider.dart';
+import 'login.dart';
+import 'user_provider.dart';
 
 void main() {
-  runApp(const MainApp());
+  runApp(
+    ChangeNotifierProvider(
+      create: (_) => UserProvider(),
+      child: const MainApp(),
+    ),
+  );
 }
 
 class MainApp extends StatelessWidget {
@@ -104,7 +112,12 @@ class _AnimatedHomePageState extends State<AnimatedHomePage>
                       borderRadius: BorderRadius.circular(30),
                     ),
                   ),
-                  onPressed: () {},
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const Login()),
+                    );
+                  },
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: const [
@@ -132,7 +145,12 @@ class _AnimatedHomePageState extends State<AnimatedHomePage>
                       side: const BorderSide(color: Colors.blue),
                     ),
                   ),
-                  onPressed: () {},
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const Login()),
+                    );
+                  },
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: const [

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:jobify/login.dart';
 import 'package:jobify/user.dart';
+import 'package:jobify/user_provider.dart';
+import 'package:provider/provider.dart';
 ///import 'package:intl/intl.dart' as intl;
 
 class Registration extends StatefulWidget {
@@ -358,6 +361,9 @@ class _RegistrationState extends State<Registration> {
                           role: selectedRole,
                         );
 
+                        final userProvider = Provider.of<UserProvider>(context, listen: false);
+                        userProvider.add(newUser);
+
                         print("User created: $newUser");
 
                         // Show success message
@@ -397,7 +403,7 @@ class _RegistrationState extends State<Registration> {
                       onPressed: () {
                         Navigator.push(
                           context,
-                          MaterialPageRoute(builder: (context) => Registration()),
+                          MaterialPageRoute(builder: (context) => Login()),
                         );
                         },
                       child: Text(

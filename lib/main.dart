@@ -18,9 +18,41 @@ class MainApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
+    return MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: AnimatedHomePage(),
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.blue,
+          brightness: Brightness.light,
+        ),
+
+        scaffoldBackgroundColor: const Color((0xFFEEF4FF)),
+
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Colors.blue,
+          foregroundColor: Colors.white,
+          elevation: 0,
+        ),
+
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.blue,
+            foregroundColor: Colors.white,
+            elevation: 8,
+            padding: EdgeInsets.symmetric(vertical: 16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.all(Radius.circular(30)),
+            ),
+          ),
+        ),
+
+        textButtonTheme: TextButtonThemeData(
+          style: TextButton.styleFrom(foregroundColor: Colors.blueAccent),
+        ),
+        useMaterial3: true,
+      ),
+
+      home: const AnimatedHomePage(),
     );
   }
 }
@@ -44,7 +76,6 @@ class _AnimatedHomePageState extends State<AnimatedHomePage>
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 2),
-
     );
 
     _scaleAnimation = Tween<double>(
@@ -123,7 +154,10 @@ class _AnimatedHomePageState extends State<AnimatedHomePage>
                     children: const [
                       Icon(Icons.work, color: Colors.white, size: 25),
                       SizedBox(width: 10),
-                      Text("I'm Looking for a job", style: TextStyle(fontSize: 17)),
+                      Text(
+                        "I'm Looking for a job",
+                        style: TextStyle(fontSize: 17),
+                      ),
                     ],
                   ),
                 ),
@@ -175,8 +209,8 @@ class _AnimatedHomePageState extends State<AnimatedHomePage>
                   TextButton(
                     onPressed: () {
                       Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (context) => Registration()),
+                        context,
+                        MaterialPageRoute(builder: (context) => Registration()),
                       );
                     },
                     child: Text(

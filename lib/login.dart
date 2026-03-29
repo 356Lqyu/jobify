@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:jobify/navigation_menu.dart';
 import 'package:jobify/registration.dart';
 import 'package:jobify/user.dart';
 import 'package:jobify/user_provider.dart';
@@ -225,9 +226,13 @@ class _LoginState extends State<Login> {
                               duration: Duration(seconds: 2),
                             ),
                           );
-
                           emailCtrl.clear();
                           passwordCtrl.clear();
+                          Navigator.of(context).pushAndRemoveUntil(
+                            MaterialPageRoute(builder: (_) => NavigationMenu(user: foundUser!)),
+                                (route) => false,
+                          );
+
                         } else {
                           // Login failed
                           ScaffoldMessenger.of(context).showSnackBar(

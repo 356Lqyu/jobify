@@ -14,30 +14,12 @@ class NavigationMenu extends StatefulWidget {
 class _NavigationMenuState extends State<NavigationMenu> {
   int selectedIndex = 0;
 
-  // Job Seeker Screen
-  final jobSeekerScreens=[
-    SocialFeed(),
-    JobDiscovery(),
-    // TODO
-    // Application(),
-    // Profile();
-  ];
-
   // Job Seeker Menu
   List<NavigationDestination> get jobSeekerItems => const [
     NavigationDestination(icon: Icon(Icons.home), label: 'Home'),
     NavigationDestination(icon: Icon(Icons.work), label: 'Jobs'),
     NavigationDestination(icon: Icon(Icons.description), label: 'Applications'),
     NavigationDestination(icon: Icon(Icons.person), label: 'Profile'),
-  ];
-
-  // Company Screen
-  final companyScreens=[
-    SocialFeed(),
-    JobDiscovery(),
-    // TODO
-    // Post(),
-    // Profile();
   ];
 
   // Company Menu
@@ -51,6 +33,20 @@ class _NavigationMenuState extends State<NavigationMenu> {
   @override
   Widget build(BuildContext context) {
     bool isJobSeeker = widget.user.role == 'job_seeker';
+
+    final jobSeekerScreens = [
+      SocialFeedPage(user: widget.user),
+      JobDiscoveryPage(user: widget.user),
+      Container(),
+      Container(),
+    ];
+
+    final companyScreens = [
+      SocialFeedPage(user: widget.user),
+      JobDiscoveryPage(user: widget.user),
+      Container(),
+      Container(),
+    ];
     
     return Scaffold(
       bottomNavigationBar: NavigationBar(

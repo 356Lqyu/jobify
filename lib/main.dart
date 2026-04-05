@@ -1,332 +1,205 @@
 import 'package:flutter/material.dart';
+import 'package:jobify/registration.dart';
+import 'package:provider/provider.dart';
+import 'login.dart';
+import 'user_provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'job_post_management.dart';
 
-void main() {
-  runApp(const MyApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Supabase.initialize(
+    url: 'https://nejlppdligklddlwvzub.supabase.co',
+    anonKey: 'sb_secret_518COekCnlz8R_OAgQVCIw_2E9LVs8_',
+  );
+
+  runApp(
+    ChangeNotifierProvider(
+      create: (_) => UserProvider(),
+      child: const MainApp(),
+    ),
+  );
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class MainApp extends StatelessWidget {
+  const MainApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Jobify',
-      theme: ThemeData(
-        primarySwatch: Colors.blue),
-      home: const FeedPage(), //const MyHomePage(title: 'Flutter Demo Home Page'),
+    return const MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: JobPostManagementPage(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-  final String title;
+class AnimatedHomePage extends StatefulWidget {
+  const AnimatedHomePage({super.key});
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<AnimatedHomePage> createState() => _AnimatedHomePageState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        title: Text(widget.title),
-      ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: .center,
-          children: [
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ---------- Model ----------
-enum PostType { job, update }
-
-class Post {
-  final String companyName;
-  final String companyInitials;
-  final PostType type;
-  final String timeAgo;
-  final String content;
-  final String? jobTitle;
-  final int baseLikes;      // likes from other users
-  final int baseComments;   // comments from other users
-  final int shares;
-
-  Post({
-    required this.companyName,
-    required this.companyInitials,
-    required this.type,
-    required this.timeAgo,
-    required this.content,
-    this.jobTitle,
-    required this.baseLikes,
-    required this.baseComments,
-    required this.shares,
-  });
-}
-
-// ---------- Mock Data ----------
-final List<Post> mockPosts = [
-  Post(
-    companyName: 'Tech Solutions Inc.',
-    companyInitials: 'TS',
-    type: PostType.job,
-    timeAgo: '2h ago',
-    content:
-    'We are hiring! Join our team as a Senior Frontend Developer. Remote position with competitive salary and benefits.',
-    jobTitle: 'Senior Frontend Developer',
-    baseLikes: 45,
-    baseComments: 12,
-    shares: 8,
-  ),
-  Post(
-    companyName: 'Creative Agency',
-    companyInitials: 'CA',
-    type: PostType.update,
-    timeAgo: '5h ago',
-    content:
-    'Excited to share that our team has grown to 100+ talented individuals! Thank you to everyone who has been part of this journey. 🎉',
-    jobTitle: null,
-    baseLikes: 120,
-    baseComments: 24,
-    shares: 15,
-  ),
-  Post(
-    companyName: 'GreenTech Startup',
-    companyInitials: 'GT',
-    type: PostType.job,
-    timeAgo: '1d ago',
-    content:
-    'Looking for a passionate Flutter Developer to build the next generation of sustainable apps. On-site in Berlin.',
-    jobTitle: 'Flutter Developer',
-    baseLikes: 32,
-    baseComments: 5,
-    shares: 3,
-  ),
-];
-
-// ---------- Feed Page ----------
-class FeedPage extends StatelessWidget {
-  const FeedPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Home'),
-        centerTitle: false,
-        elevation: 0,
-      ),
-      body: ListView.builder(
-        itemCount: mockPosts.length,
-        itemBuilder: (context, index) {
-          return PostCard(post: mockPosts[index]);
-        },
-      ),
-    );
-  }
-}
-
-// ---------- Stateful Post Card ----------
-class PostCard extends StatefulWidget {
-  final Post post;
-
-  const PostCard({super.key, required this.post});
-
-  @override
-  State<PostCard> createState() => _PostCardState();
-}
-
-class _PostCardState extends State<PostCard> {
-  late bool _liked;
-  late int _baseLikes;
-  late int _baseComments;
-  late List<String> _userComments;
-  final TextEditingController _commentController = TextEditingController();
+class _AnimatedHomePageState extends State<AnimatedHomePage>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _scaleAnimation;
 
   @override
   void initState() {
     super.initState();
-    _liked = false;
-    _baseLikes = widget.post.baseLikes;
-    _baseComments = widget.post.baseComments;
-    _userComments = [];
+
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+
+    );
+
+    _scaleAnimation = Tween<double>(
+      begin: 0.9,
+      end: 1.1,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+
+    _controller.repeat(reverse: true);
   }
 
-  int get displayLikes => _baseLikes + (_liked ? 1 : 0);
-  int get displayComments => _baseComments + _userComments.length;
-
-  void _toggleLike() {
-    setState(() {
-      _liked = !_liked;
-    });
-  }
-
-  void _postComment() {
-    final text = _commentController.text.trim();
-    if (text.isNotEmpty) {
-      setState(() {
-        _userComments.add(text);
-        _commentController.clear();
-      });
-    }
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final post = widget.post;
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header: company initials, name, time
-            Row(
-              children: [
-                CircleAvatar(
-                  backgroundColor: Colors.blue.shade100,
-                  child: Text(
-                    post.companyInitials,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
+    return Scaffold(
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(25.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              /// Logo
+              ScaleTransition(
+                scale: _scaleAnimation,
+                child: Container(
+                  width: 260,
+                  height: 130,
+                  child: Image.asset(
+                    'assets/images/logo3.png',
+                    fit: BoxFit.contain,
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        post.companyName,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                      Text(
-                        post.timeAgo,
-                        style: TextStyle(
-                          color: Colors.grey.shade600,
-                          fontSize: 12,
-                        ),
-                      ),
+              ),
+
+              /// Title
+              Text(
+                'Welcome to Jobify',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+              ),
+
+              /// Subtitle
+              Text(
+                'Find jobs or hire talent easily',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 16, color: Colors.blueGrey),
+              ),
+
+              const SizedBox(height: 40),
+
+              /// Job Button
+              /*SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                    foregroundColor: Colors.white,
+                    elevation: 8,
+                    padding: EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                  ),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const Login()),
+                    );
+                  },
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: const [
+                      Icon(Icons.work, color: Colors.white, size: 25),
+                      SizedBox(width: 10),
+                      Text("I'm Looking for a job", style: TextStyle(fontSize: 17)),
                     ],
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            // Content
-            Text(post.content),
-            if (post.type == PostType.job) ...[
-              const SizedBox(height: 12),
-              OutlinedButton(
-                onPressed: () {
-                  // TODO: navigate to job details
-                },
-                style: OutlinedButton.styleFrom(
-                  side: BorderSide(color: Colors.blue.shade700),
-                ),
-                child: Text('View Job: ${post.jobTitle}'),
-              ),
-            ],
-            const SizedBox(height: 12),
-            // Stats row with interactive like and comment counts
-            Row(
-              children: [
-                // Like button with count
-                Row(
-                  children: [
-                    IconButton(
-                      onPressed: _toggleLike,
-                      icon: Icon(
-                        _liked ? Icons.favorite : Icons.favorite_border,
-                        color: _liked ? Colors.red : Colors.grey.shade700,
-                        size: 20,
-                      ),
-                      constraints: const BoxConstraints(),
-                      padding: EdgeInsets.zero,
+              ),*/
+
+              const SizedBox(height: 15),
+
+              /// Hiring Button
+              /*SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                    foregroundColor: Colors.white,
+                    elevation: 8,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(30),
+                      side: const BorderSide(color: Colors.blue),
                     ),
-                    const SizedBox(width: 2),
-                    Text('$displayLikes'),
-                  ],
-                ),
-                const SizedBox(width: 16),
-                // Comment icon with count (non-interactive, just display)
-                Row(
-                  children: [
-                    Icon(Icons.comment_outlined,
-                        size: 18, color: Colors.grey.shade700),
-                    const SizedBox(width: 4),
-                    Text('$displayComments'),
-                  ],
-                ),
-                const SizedBox(width: 16),
-                // Share icon with count
-                Row(
-                  children: [
-                    Icon(Icons.share_outlined,
-                        size: 18, color: Colors.grey.shade700),
-                    const SizedBox(width: 4),
-                    Text('${post.shares}'),
-                  ],
-                ),
-                const Spacer(),
-                // Share link button
-                TextButton(
-                  onPressed: () {},
-                  child: const Text('Share'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            // Comment input row
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _commentController,
-                    decoration: const InputDecoration(
-                      hintText: 'Write a comment...',
-                      border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    ),
-                    maxLines: null, // allow multiple lines if needed
+                  ),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const Login()),
+                    );
+                  },
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: const [
+                      Icon(Icons.group_add, color: Colors.white, size: 25),
+                      SizedBox(width: 10),
+                      Text("I'm Hiring", style: TextStyle(fontSize: 17)),
+                    ],
                   ),
                 ),
-                const SizedBox(width: 8),
-                IconButton(
-                  onPressed: _postComment,
-                  icon: const Icon(Icons.send),
-                  color: Colors.blue,
-                ),
-              ],
-            ),
-            // Display user comments
-            if (_userComments.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              ..._userComments.map((comment) => Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Icon(Icons.person, size: 16, color: Colors.grey),
-                    const SizedBox(width: 6),
-                    Expanded(child: Text(comment)),
-                  ],
-                ),
-              )),
+              ),*/
+
+              const SizedBox(height: 25),
+
+              /// Register Row
+             /* Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    "Don't have an account?",
+                    style: TextStyle(fontSize: 15, color: Colors.blueGrey),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => Registration()),
+                      );
+                    },
+                    child: Text(
+                      'Register',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blueAccent,
+                      ),
+                    ),
+                  ),
+                ],
+              ),*/
             ],
-          ],
+          ),
         ),
       ),
     );

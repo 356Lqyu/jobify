@@ -2,9 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:jobify/job_post_service.dart';
 import 'package:jobify/create_job_post.dart';
 import 'package:jobify/job_detail_employer.dart';
-import 'package:provider/provider.dart';
-import 'package:jobify/user_provider.dart';
-import 'package:jobify/user.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class JobPostManagementPage extends StatefulWidget {
   const JobPostManagementPage({super.key});
@@ -17,45 +15,37 @@ class _JobPostManagementPageState extends State<JobPostManagementPage> {
   final JobPostService _service = JobPostService();
   List<Map<String, dynamic>> _jobs = [];
   bool _isLoading = true;
-
-  /*@override
-  void initState() {
-    super.initState();
-    _loadJobs();
-  }*/
+  String? _userId;
+  String? _userRole;
 
   @override
   void initState() {
     super.initState();
-    // Temporary: set a test user if none exists
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final userProvider = Provider.of<UserProvider>(context, listen: false);
-      if (userProvider.currentUser == null) {
-        final testUser = User(
-          userId: '4b164b12-bde1-4ecb-b64d-062a0ad435e1',
-          role: 'POSTER',
-          fullname: 'Test Employer',
-          email: 'ww@gmail.com',
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
-        );
-        userProvider.setUser(testUser);
-        // Now load jobs after user is set
-        _loadJobs();
-      } else {
-        // User already exists, load jobs
-        _loadJobs();
-      }
-    });
+    _getCurrentUser();
+  }
+
+  Future<void> _getCurrentUser() async {
+    final supabase = Supabase.instance.client;
+    final session = supabase.auth.currentSession;
+    if (session == null) {
+      setState(() => _isLoading = false);
+      return;
+    }
+    _userId = session.user.id;
+    final userData = await supabase
+        .from('users')
+        .select('role')
+        .eq('user_id', _userId!)
+        .maybeSingle();
+    if (userData != null) _userRole = userData['role'];
+    await _loadJobs();
   }
 
   Future<void> _loadJobs() async {
+    if (_userId == null) return;
     setState(() => _isLoading = true);
     try {
-      final userId = Provider.of<UserProvider>(context, listen: false).userId;
-      print("Using userId: $userId");
-      final data = await _service.fetchMyJobPosts(userId: userId);
-      print("Fetched ${data.length} jobs");
+      final data = await _service.fetchMyJobPosts(userId: _userId);
       setState(() => _jobs = data);
     } catch (e) {
       print("Error loading jobs: $e");
@@ -97,10 +87,30 @@ class _JobPostManagementPageState extends State<JobPostManagementPage> {
 
   @override
   Widget build(BuildContext context) {
-    final role = Provider.of<UserProvider>(context).role;
-    if (role != 'POSTER') {
+    if (_isLoading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    if (_userId == null || _userRole?.toUpperCase() != 'POSTER') {
       return Scaffold(
-        body: Center(child: Text('Access denied. Employers only.')),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.lock_outline, size: 64, color: Colors.red),
+              const SizedBox(height: 16),
+              Text(
+                _userId == null ? 'Please log in as an employer.' : 'Access denied. Employers only.',
+                style: const TextStyle(fontSize: 16),
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: () => Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false),
+                child: const Text('Go to Login'),
+              ),
+            ],
+          ),
+        ),
       );
     }
 
@@ -111,7 +121,6 @@ class _JobPostManagementPageState extends State<JobPostManagementPage> {
         title: const Text('My Jobs'),
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
-        elevation: 0,
       ),
       body: RefreshIndicator(
         onRefresh: _loadJobs,
@@ -119,7 +128,7 @@ class _JobPostManagementPageState extends State<JobPostManagementPage> {
           children: [
             // Summary cards
             Padding(
-              padding: const EdgeInsets.all(16.0),
+              padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
                   _buildSummaryCard('Active Jobs', activeCount, Icons.work, Colors.blue),
@@ -130,14 +139,17 @@ class _JobPostManagementPageState extends State<JobPostManagementPage> {
             ),
             // Header with Post button
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text('Your Job Posts', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                   ElevatedButton.icon(
                     onPressed: () async {
-                      final result = await Navigator.push(context, MaterialPageRoute(builder: (_) => const CreateJobPost()));
+                      final result = await Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const CreateJobPost()),
+                      );
                       if (result == true) _loadJobs();
                     },
                     icon: const Icon(Icons.add, size: 20),
@@ -151,10 +163,9 @@ class _JobPostManagementPageState extends State<JobPostManagementPage> {
                 ],
               ),
             ),
+            // Job list
             Expanded(
-              child: _isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _jobs.isEmpty
+              child: _jobs.isEmpty
                   ? const Center(child: Text('No job posts yet. Tap + to create one.'))
                   : ListView.builder(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -162,6 +173,9 @@ class _JobPostManagementPageState extends State<JobPostManagementPage> {
                 itemBuilder: (ctx, i) {
                   final job = _jobs[i];
                   final isActive = job['status'] == 'active';
+                  final List<String> imageUrls = List<String>.from(job['image_urls'] ?? []);
+                  final thumbnail = imageUrls.isNotEmpty ? imageUrls.first : null;
+
                   return Card(
                     margin: const EdgeInsets.only(bottom: 12),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -172,6 +186,14 @@ class _JobPostManagementPageState extends State<JobPostManagementPage> {
                         children: [
                           Row(
                             children: [
+                              if (thumbnail != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(right: 8),
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(6),
+                                    child: Image.network(thumbnail, width: 50, height: 50, fit: BoxFit.cover),
+                                  ),
+                                ),
                               Expanded(
                                 child: Text(
                                   job['job_title'] ?? 'Untitled',
@@ -279,7 +301,12 @@ class _JobPostManagementPageState extends State<JobPostManagementPage> {
     );
   }
 
-  Widget _actionButton({required IconData icon, required String label, required VoidCallback onTap, Color color = Colors.blue}) {
+  Widget _actionButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+    Color color = Colors.blue,
+  }) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(20),

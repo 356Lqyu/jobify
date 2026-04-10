@@ -1,11 +1,10 @@
-/*
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:jobify/login.dart';
-import 'package:jobify/user.dart';
-import 'package:jobify/user_provider.dart';
+import 'package:jobify/user.dart' as local_user;
 import 'package:provider/provider.dart';
-///import 'package:intl/intl.dart' as intl;
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import 'auth/auth_service.dart';
 
 class Registration extends StatefulWidget {
   const Registration({super.key});
@@ -16,31 +15,120 @@ class Registration extends StatefulWidget {
 
 class _RegistrationState extends State<Registration> {
 
-  //declare local variables
-  String? email;
-  String? password;
-  String? confirmPassword;
+  final authService = AuthService();
+
   String selectedRole = "jobseeker";
 
-  // variable for error message
   String? passwordError;
   String? confirmPasswordError;
   String? emailError;
 
-  // variable of password visibility
   bool isPasswordVisible = false;
   bool isConfirmPasswordVisible = false;
 
-  //controller
   final emailCtrl = TextEditingController();
   final passwordCtrl = TextEditingController();
   final confirmPasswordCtrl = TextEditingController();
 
-  //set focus
-  final focusNode = FocusNode();
-
-  //form controller
   final _formKey = GlobalKey<FormState>();
+
+
+  Future<void> register() async {
+    setState(() {
+      emailError = null;
+      passwordError = null;
+      confirmPasswordError = null;
+    });
+
+    bool isValid = true;
+
+    String email = emailCtrl.text.trim();
+    String password = passwordCtrl.text;
+    String confirmPassword = confirmPasswordCtrl.text;
+
+    /// Email validation
+    String emailPattern = r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$';
+    RegExp emailRegex = RegExp(emailPattern);
+
+    if (email.isEmpty) {
+      emailError = "Email is required";
+      isValid = false;
+    } else if (!emailRegex.hasMatch(email)) {
+      emailError = "Invalid email format";
+      isValid = false;
+    }
+
+    /// Password validation
+    String passwordPattern = r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$';
+    RegExp passwordRegex = RegExp(passwordPattern);
+
+    if (password.isEmpty) {
+      passwordError = "Password is required";
+      isValid = false;
+    } else if (!passwordRegex.hasMatch(password)) {
+      passwordError = "Min 8 chars, uppercase, lowercase & number";
+      isValid = false;
+    }
+
+    /// Confirm password validation
+    if (confirmPassword.isEmpty) {
+      confirmPasswordError = "Confirm password required";
+      isValid = false;
+    } else if (confirmPassword != password) {
+      confirmPasswordError = "Passwords do not match";
+      isValid = false;
+    }
+
+    setState(() {});
+
+    if (!isValid) return;
+
+    final supabase = Supabase.instance.client;
+
+    try {
+      final res = await authService
+          .signUpWithEmailAndPassword(email, password);
+
+      final user = res.user;
+      if (user == null) throw Exception("Signup failed");
+
+      await supabase.from('users').insert({
+        'user_id': user.id,
+        'role': selectedRole == "jobseeker"
+            ? 'JOB_SEEKER'
+            : 'POSTER',
+        'fullname': '',
+        'email': email,
+      });
+
+      if (selectedRole == "jobseeker") {
+        await supabase.from('job_seeker_profile').insert({
+          'user_id': user.id,
+        });
+      } else {
+        await supabase.from('company_profile').insert({
+          'user_id': user.id,
+          'company_name': '',
+          'location': '',
+        });
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Registration successful")),
+      );
+
+      await Future.delayed(const Duration(seconds: 1));
+
+      Navigator.pop(context);
+
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Register error: $e")),
+      );
+    }
+  }
+
+
 
   @override
   Widget build(BuildContext context) {
@@ -52,12 +140,11 @@ class _RegistrationState extends State<Registration> {
           child: SizedBox(
             width: 400,
             child: Column(
-              mainAxisAlignment: MainAxisAlignment.start,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+
                 const SizedBox(height: 30),
 
-                /// Back icon (return main page)
                 Align(
                   alignment: Alignment.topLeft,
                   child: IconButton(
@@ -68,100 +155,83 @@ class _RegistrationState extends State<Registration> {
                   ),
                 ),
 
-                const SizedBox(height: 5),
-
-                /// Title
-                Text(
-                    'Create Account',
-                    textAlign: TextAlign.left,
-                    style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold)
+                const Text(
+                  'Create Account',
+                  style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
                 ),
 
-                /// Subtitle
-                Text(
+                const Text(
                   "Join us and start connecting with opportunities today",
-                  style: TextStyle(
-                    fontSize: 15,
-                    color: Colors.blueGrey,
-                  ),
+                  style: TextStyle(fontSize: 15, color: Colors.blueGrey),
                 ),
 
                 const SizedBox(height: 40),
 
-                /// Select role heading
-                Text(
+                const Text(
                   "Role",
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                 ),
 
                 const SizedBox(height: 10),
 
-                /// Select role button (job seeker / employer)
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    /// Job Seeker Button
+
                     SizedBox(
                       width: 180,
                       child: ElevatedButton(
                         style: ElevatedButton.styleFrom(
-                          /// change color based on the selection
-                          backgroundColor: selectedRole == "jobseeker" ? Colors.blue : Colors.grey[300],
-                          foregroundColor: selectedRole == "jobseeker" ? Colors.white : Colors.black,
-                          elevation: 5,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12),),
+                          backgroundColor:
+                          selectedRole == "jobseeker"
+                              ? Colors.blue
+                              : Colors.grey[300],
+                          foregroundColor:
+                          selectedRole == "jobseeker"
+                              ? Colors.white
+                              : Colors.black,
                         ),
                         onPressed: () {
-                          setState(() {selectedRole = "jobseeker";});
+                          setState(() {
+                            selectedRole = "jobseeker";
+                          });
                         },
-                        child: const Text(
-                          "Job Seeker",
-                          style: TextStyle(fontSize: 16),
-                        ),
+                        child: const Text("Job Seeker"),
                       ),
                     ),
 
                     const SizedBox(width: 15),
 
-                    /// Employer Button
                     SizedBox(
                       width: 180,
                       child: ElevatedButton(
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: selectedRole == "employer" ? Colors.blue : Colors.grey[300],
-                          foregroundColor: selectedRole == "employer" ? Colors.white : Colors.black,
-                          elevation: 5,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
+                          backgroundColor:
+                          selectedRole == "employer"
+                              ? Colors.blue
+                              : Colors.grey[300],
+                          foregroundColor:
+                          selectedRole == "employer"
+                              ? Colors.white
+                              : Colors.black,
                         ),
                         onPressed: () {
-                          setState(() {selectedRole = "employer";});
+                          setState(() {
+                            selectedRole = "employer";
+                          });
                         },
-                        child: const Text(
-                          "Employer",
-                          style: TextStyle(fontSize: 16),
-                        ),
+                        child: const Text("Employer"),
                       ),
                     ),
+
                   ],
                 ),
 
                 const SizedBox(height: 20),
 
-                /// Email column heading
-                Text(
-                  "Email",
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+                const Text("Email",
+                    style:
+                    TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
 
                 const SizedBox(height: 8),
 
@@ -171,42 +241,32 @@ class _RegistrationState extends State<Registration> {
                     hintText: "your@email.com",
                     prefixIcon: const Icon(Icons.email_outlined),
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                        borderRadius: BorderRadius.circular(12)),
                   ),
                 ),
 
-                const SizedBox(height: 5),
-
-                // Error message
                 if (emailError != null)
-                  Text(
-                    emailError!,
-                    style: TextStyle(fontSize: 15, color: Colors.red),
-                  ),
+                  Text(emailError!,
+                      style:
+                      const TextStyle(color: Colors.red, fontSize: 14)),
 
                 const SizedBox(height: 20),
 
-                /// Password heading
-                Text(
-                  "Password",
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+                const Text("Password",
+                    style:
+                    TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
 
                 const SizedBox(height: 8),
 
                 TextFormField(
                   controller: passwordCtrl,
-                  /// password visibility
                   obscureText: !isPasswordVisible,
                   decoration: InputDecoration(
-                    hintText: "••••••••",
                     prefixIcon: const Icon(Icons.lock_outline),
                     suffixIcon: IconButton(
-                      icon: Icon( isPasswordVisible ? Icons.visibility : Icons.visibility_off,),
+                      icon: Icon(isPasswordVisible
+                          ? Icons.visibility
+                          : Icons.visibility_off),
                       onPressed: () {
                         setState(() {
                           isPasswordVisible = !isPasswordVisible;
@@ -214,216 +274,93 @@ class _RegistrationState extends State<Registration> {
                       },
                     ),
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                        borderRadius: BorderRadius.circular(12)),
                   ),
-                  onChanged: (_) {
-                    // Clear error when user types
-                    setState(() {
-                      passwordError = null;
-                    });
-                  },
                 ),
 
-                const SizedBox(height: 5),
-
-                // Password criteria text
-                Text(
-                  'At least 8 characters with uppercase, lowercase, and numbers',
-                  style: TextStyle(fontSize: 15, color: Colors.blueGrey),
+                const Text(
+                  'At least 8 characters with uppercase, lowercase, and number',
+                  style: TextStyle(color: Colors.blueGrey),
                 ),
 
-                // Error message
                 if (passwordError != null)
-                  Text(
-                    passwordError!,
-                    style: TextStyle(fontSize: 15, color: Colors.red),
-                  ),
+                  Text(passwordError!,
+                      style:
+                      const TextStyle(color: Colors.red, fontSize: 14)),
 
                 const SizedBox(height: 20),
 
-                /// Confirm password heading
-                Text(
-                  "Confirm Password",
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+                const Text("Confirm Password",
+                    style:
+                    TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
 
                 const SizedBox(height: 8),
 
                 TextFormField(
                   controller: confirmPasswordCtrl,
-                  /// confirm password visibility
                   obscureText: !isConfirmPasswordVisible,
                   decoration: InputDecoration(
-                    hintText: "••••••••",
                     prefixIcon: const Icon(Icons.lock_outline),
                     suffixIcon: IconButton(
-                      icon: Icon(isConfirmPasswordVisible ? Icons.visibility : Icons.visibility_off,),
+                      icon: Icon(isConfirmPasswordVisible
+                          ? Icons.visibility
+                          : Icons.visibility_off),
                       onPressed: () {
                         setState(() {
-                          isConfirmPasswordVisible = !isConfirmPasswordVisible;
+                          isConfirmPasswordVisible =
+                          !isConfirmPasswordVisible;
                         });
                       },
                     ),
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                        borderRadius: BorderRadius.circular(12)),
                   ),
-                  onChanged: (_) {
-                    // Clear error when user types
-                    setState(() {
-                      confirmPasswordError = null;
-                    });
-                  },
                 ),
 
-                const SizedBox(height: 5),
-
-                // Error message
                 if (confirmPasswordError != null)
-                  Text(
-                    confirmPasswordError!,
-                    style: TextStyle(fontSize: 15, color: Colors.red),
-                  ),
+                  Text(confirmPasswordError!,
+                      style:
+                      const TextStyle(color: Colors.red, fontSize: 14)),
 
                 const SizedBox(height: 25),
 
-                /// create account button
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
+                    onPressed: register,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue,
-                      foregroundColor: Colors.white,
-                      elevation: 8,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    onPressed: () {
-
-                      setState(() {
-                        emailError = null;
-                        passwordError = null;
-                        confirmPasswordError = null;
-                      });
-
-                      bool isValid = true;
-
-                      /// Email validation
-                      String email = emailCtrl.text.trim();
-                      String emailPattern = r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$';
-                      RegExp emailRegex = RegExp(emailPattern);
-
-                      if (email.isEmpty) {
-                        emailError = "Email is required";
-                        isValid = false;
-                      } else if (!emailRegex.hasMatch(email)) {
-                        emailError = "Email format invalid";
-                        isValid = false;
-                      }
-
-                      /// Password validation
-                      String password = passwordCtrl.text;
-                      String passwordPattern = r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$';
-                      RegExp passwordRegex = RegExp(passwordPattern);
-
-                      if (password.isEmpty) {
-                        passwordError = "Password is required";
-                        isValid = false;
-                      } else if (!passwordRegex.hasMatch(password)) {
-                        passwordError = "Password format invalid";
-                        isValid = false;
-                      }
-
-                      String confirmPassword = confirmPasswordCtrl.text;
-
-                      /// Confirm password validation
-                      if (confirmPassword.isEmpty) {
-                        confirmPasswordError = "Confirm your password";
-                        isValid = false;
-                      } else if (confirmPassword != password) {
-                        confirmPasswordError = "Passwords do not match";
-                        isValid = false;
-                      }
-
-                      // Refresh UI
-                      setState(() {});
-
-                      if (isValid) {
-                        // Create a User object
-                        User newUser = User(
-                          email: emailCtrl.text.trim(),
-                          password: passwordCtrl.text,
-                          role: selectedRole,
-                        );
-
-                        final userProvider = Provider.of<UserProvider>(context, listen: false);
-                        userProvider.add(newUser);
-
-                        print("User created: $newUser");
-
-                        // Show success message
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text("Registration Successful !", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),),
-                            backgroundColor: Colors.green,
-                            duration: Duration(seconds: 3),
-                          ),
-                        );
-
-                        // Clear form after success
-                        emailCtrl.clear();
-                        passwordCtrl.clear();
-                        confirmPasswordCtrl.clear();
-                      }
-
-                    },
-                    child: const Text(
-                      "Create Account",
-                      style: TextStyle(fontSize: 16),
-                    ),
+                        backgroundColor: Colors.blue,
+                        foregroundColor: Colors.white,
+                        padding:
+                        const EdgeInsets.symmetric(vertical: 16)),
+                    child: const Text("Create Account"),
                   ),
                 ),
 
-                const SizedBox(height: 10),
-
-                /// Login Row
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(
-                      "Already have an account?",
-                      style: TextStyle(fontSize: 15, color: Colors.blueGrey),
-                    ),
+
+                    const Text("Already have an account?"),
+
                     TextButton(
                       onPressed: () {
                         Navigator.push(
                           context,
-                          MaterialPageRoute(builder: (context) => Login()),
+                          MaterialPageRoute(
+                              builder: (context) => const Login()),
                         );
                       },
-                      child: Text(
-                        'Login',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.blueAccent,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+                      child: const Text("Login"),
+                    )
 
+                  ],
+                )
+              ],
             ),
           ),
         ),
       ),
     );
   }
-}*/
+}

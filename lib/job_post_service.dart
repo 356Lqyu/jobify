@@ -10,12 +10,12 @@ class JobPostService {
     final response = await supabase
         .from('job_post')
         .select('''
-        *,
-        job_category(name),
-        job_type(name),
-        experience_level(name),
-        company_profile(company_name)
-      ''')
+          *,
+          job_category(name),
+          job_type(name),
+          experience_level(name),
+          company_profile(company_name)
+        ''')
         .eq('created_by', uid)
         .order('created_at', ascending: false);
     return List<Map<String, dynamic>>.from(response);

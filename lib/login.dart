@@ -1,11 +1,9 @@
-/*
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:jobify/auth/auth_service.dart';
+import 'package:jobify/home.dart';
 import 'package:jobify/registration.dart';
 import 'package:jobify/user.dart';
-import 'package:jobify/user_provider.dart';
-import 'package:provider/provider.dart';
-///import 'package:intl/intl.dart' as intl;
+import 'package:supabase_flutter/supabase_flutter.dart' hide User;
 
 class Login extends StatefulWidget {
   const Login({super.key});
@@ -15,27 +13,80 @@ class Login extends StatefulWidget {
 }
 
 class _LoginState extends State<Login> {
-
-  //declare local variables
-  String? email;
-  String? password;
-
-  // variable for error message
-  String? passwordError;
-  String? emailError;
-
-  // variable of password visibility
-  bool isPasswordVisible = false;
-
-  //controller
+  final authService = AuthService();
   final emailCtrl = TextEditingController();
   final passwordCtrl = TextEditingController();
 
-  //set focus
-  final focusNode = FocusNode();
-
-  //form controller
+  String? passwordError;
+  String? emailError;
+  bool isPasswordVisible = false;
+  bool isLoading = false;
   final _formKey = GlobalKey<FormState>();
+
+  void login() async {
+    final email = emailCtrl.text.trim();
+    final password = passwordCtrl.text;
+
+    setState(() {
+      emailError = null;
+      passwordError = null;
+    });
+
+    bool isValid = true;
+    final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+
+    if (email.isEmpty) {
+      emailError = "Email is required";
+      isValid = false;
+    } else if (!emailRegex.hasMatch(email)) {
+      emailError = "Email format invalid";
+      isValid = false;
+    }
+
+    if (password.isEmpty) {
+      passwordError = "Password is required";
+      isValid = false;
+    }
+
+    if (!isValid) return;
+
+    setState(() => isLoading = true);
+
+    try {
+      final res = await authService.signInWithEmailAndPassword(email, password);
+      if (res.user == null) throw Exception("Invalid login");
+
+      final supabase = Supabase.instance.client;
+      final userId = res.user!.id;
+
+      // ✅ Fetch ALL required fields for the User model
+      final userData = await supabase
+          .from('users')
+          .select('user_id, role, fullname, phone, profile_image_url, created_at, updated_at, email')
+          .eq('user_id', userId)
+          .single();
+
+      final user = User.fromJson(userData);
+
+      if (!mounted) return;
+
+      emailCtrl.clear();
+      passwordCtrl.clear();
+
+      // ✅ Navigate to HomePage – role‑based UI is handled inside HomePage
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => HomePage(user: user)),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Login error: $e")),
+      );
+    } finally {
+      if (mounted) setState(() => isLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -51,112 +102,53 @@ class _LoginState extends State<Login> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 30),
-
-                /// Back icon (return main page)
                 Align(
                   alignment: Alignment.topLeft,
                   child: IconButton(
                     icon: const Icon(Icons.arrow_back, size: 28),
-                    onPressed: () {
-                      Navigator.pop(context);
-                    },
+                    onPressed: () => Navigator.pop(context),
                   ),
                 ),
-
                 const SizedBox(height: 5),
-
-                /// Title
-                Text(
-                    'Login',
-                    textAlign: TextAlign.left,
-                    style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold)
+                const Text(
+                  'Login',
+                  style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
                 ),
-
-                /// Subtitle
-                Text(
+                const Text(
                   "Join us and start connecting with opportunities today",
-                  style: TextStyle(
-                    fontSize: 15,
-                    color: Colors.blueGrey,
-                  ),
+                  style: TextStyle(fontSize: 15, color: Colors.blueGrey),
                 ),
-
                 const SizedBox(height: 40),
-
-                /// Email column heading
-                Text(
-                  "Email",
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-
+                const Text("Email", style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 8),
-
                 TextFormField(
                   controller: emailCtrl,
                   decoration: InputDecoration(
                     hintText: "your@email.com",
                     prefixIcon: const Icon(Icons.email_outlined),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                 ),
-
-                const SizedBox(height: 5),
-
-                // Error message
-                if (emailError != null)
-                  Text(
-                    emailError!,
-                    style: TextStyle(fontSize: 15, color: Colors.red),
-                  ),
-
+                if (emailError != null) Text(emailError!, style: const TextStyle(fontSize: 15, color: Colors.red)),
                 const SizedBox(height: 20),
-
-                /// Password heading
-                Text(
-                  "Password",
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-
+                const Text("Password", style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 8),
-
                 TextFormField(
                   controller: passwordCtrl,
-                  /// password visibility
                   obscureText: !isPasswordVisible,
                   decoration: InputDecoration(
                     hintText: "••••••••",
                     prefixIcon: const Icon(Icons.lock_outline),
                     suffixIcon: IconButton(
-                      icon: Icon( isPasswordVisible ? Icons.visibility : Icons.visibility_off,),
-                      onPressed: () {
-                        setState(() {
-                          isPasswordVisible = !isPasswordVisible;
-                        });
-                      },
+                      icon: Icon(isPasswordVisible ? Icons.visibility : Icons.visibility_off),
+                      onPressed: () => setState(() => isPasswordVisible = !isPasswordVisible),
                     ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  onChanged: (_) {
-                    // Clear error when user types
-                    setState(() {
-                      passwordError = null;
-                    });
-                  },
+                  onChanged: (_) => setState(() => passwordError = null),
                 ),
-
+                if (passwordError != null) Text(passwordError!, style: const TextStyle(fontSize: 15, color: Colors.red)),
                 const SizedBox(height: 25),
-
-                /// Login button
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
@@ -165,124 +157,30 @@ class _LoginState extends State<Login> {
                       foregroundColor: Colors.white,
                       elevation: 8,
                       padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
-                    onPressed: () {
-
-                      setState(() {
-                        emailError = null;
-                        passwordError = null;
-                      });
-
-                      bool isValid = true;
-
-                      /// Email validation
-                      String email = emailCtrl.text.trim();
-                      String emailPattern = r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$';
-                      RegExp emailRegex = RegExp(emailPattern);
-
-                      if (email.isEmpty) {
-                        emailError = "Email is required";
-                        isValid = false;
-                      } else if (!emailRegex.hasMatch(email)) {
-                        emailError = "Email format invalid";
-                        isValid = false;
-                      }
-
-                      String password = passwordCtrl.text;
-
-                      if (password.isEmpty) {
-                        passwordError = "Password is required";
-                        isValid = false;
-                      }
-
-                      // Refresh UI
-                      setState(() {});
-
-                      if (isValid) {
-                        String email = emailCtrl.text.trim();
-                        String password = passwordCtrl.text;
-
-                        final userProvider = Provider.of<UserProvider>(context, listen: false);
-
-                        User? foundUser;
-
-                        try {
-                          foundUser = userProvider.registeredUsers.firstWhere(
-                                (user) => user.email == email && user.password == password,
-                          );
-                        } catch (e) {
-                          foundUser = null;
-                        }
-
-                        if (foundUser != null) {
-                          // Login success
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text("Login Successful !", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),),
-                              backgroundColor: Colors.green,
-                              duration: Duration(seconds: 2),
-                            ),
-                          );
-
-                          emailCtrl.clear();
-                          passwordCtrl.clear();
-                        } else {
-                          // Login failed
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text("Invalid email or password !", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),),
-                              backgroundColor: Colors.red,
-                              duration: Duration(seconds: 2),
-                            ),
-                          );
-                        }
-                      }
-
-                    },
-                    child: const Text(
-                      "Login",
-                      style: TextStyle(fontSize: 16),
-                    ),
+                    onPressed: isLoading ? null : login,
+                    child: isLoading
+                        ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                        : const Text("Login", style: TextStyle(fontSize: 16)),
                   ),
                 ),
-
                 const SizedBox(height: 10),
-
-                /// Register Row
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(
-                      "Don't have an account?",
-                      style: TextStyle(fontSize: 15, color: Colors.blueGrey),
-                    ),
+                    const Text("Don't have an account?", style: TextStyle(fontSize: 15, color: Colors.blueGrey)),
                     TextButton(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (context) => Registration()),
-                        );
-                      },
-                      child: Text(
-                        'Register',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.blueAccent,
-                        ),
-                      ),
+                      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const Registration())),
+                      child: const Text('Register', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.blueAccent)),
                     ),
                   ],
                 ),
               ],
-
             ),
           ),
         ),
       ),
     );
   }
-}*/
+}

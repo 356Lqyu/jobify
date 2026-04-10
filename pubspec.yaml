@@ -37,6 +37,9 @@ dependencies:
   supabase_flutter: ^2.12.2
   provider: ^6.1.5+1
   supabase_client: ^0.0.33
+  file_picker: ^11.0.1
+  carousel_slider: ^5.0.0
+  youtube_player_flutter: ^9.1.1
 
 dev_dependencies:
   flutter_test:

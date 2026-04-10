@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:carousel_slider/carousel_slider.dart';
+import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 import 'package:jobify/job_post_service.dart';
 import 'package:jobify/create_job_post.dart';
 
@@ -14,16 +16,36 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
   final JobPostService _service = JobPostService();
   late Map<String, dynamic> _job;
   bool _isLoading = false;
+  YoutubePlayerController? _youtubeController;
 
   @override
   void initState() {
     super.initState();
     _job = Map.from(widget.job);
+    _initYoutubePlayer();
+  }
+
+  void _initYoutubePlayer() {
+    final videoUrl = _job['video_url'] as String?;
+    if (videoUrl != null && videoUrl.isNotEmpty) {
+      final videoId = YoutubePlayer.convertUrlToId(videoUrl);
+      if (videoId != null) {
+        _youtubeController = YoutubePlayerController(
+          initialVideoId: videoId,
+          flags: const YoutubePlayerFlags(autoPlay: false),
+        );
+      }
+    }
   }
 
   Future<void> _refresh() async {
     final updated = await _service.fetchJobPostById(_job['job_id']);
-    if (updated != null) setState(() => _job = updated);
+    if (updated != null) {
+      setState(() {
+        _job = updated;
+        _initYoutubePlayer();
+      });
+    }
   }
 
   Future<void> _toggleStatus() async {
@@ -43,7 +65,10 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
         content: const Text('This cannot be undone. Delete this job?'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete', style: TextStyle(color: Colors.red))),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
         ],
       ),
     );
@@ -57,6 +82,10 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
   @override
   Widget build(BuildContext context) {
     final isActive = _job['status'] == 'active';
+    final List<String> imageUrls = List<String>.from(_job['image_urls'] ?? []);
+    final hasCover = imageUrls.isNotEmpty;
+    final hasVideo = _youtubeController != null;
+
     return Scaffold(
       appBar: AppBar(
         title: Text(_job['job_title'] ?? 'Job Details'),
@@ -82,7 +111,40 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Employer notice (no apply button)
+              // ---- Image gallery (carousel) ----
+              if (imageUrls.isNotEmpty)
+                CarouselSlider(
+                  options: CarouselOptions(
+                    height: 250,
+                    enlargeCenterPage: true,
+                    viewportFraction: 0.9,
+                  ),
+                  items: imageUrls.map((url) {
+                    return Builder(
+                      builder: (BuildContext context) {
+                        return ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Image.network(url, fit: BoxFit.cover, width: double.infinity),
+                        );
+                      },
+                    );
+                  }).toList(),
+                ),
+              if (imageUrls.isNotEmpty) const SizedBox(height: 16),
+
+              // ---- Video player ----
+              if (hasVideo)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Video', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    const SizedBox(height: 8),
+                    YoutubePlayer(controller: _youtubeController!),
+                    const SizedBox(height: 16),
+                  ],
+                ),
+
+              // ---- Employer notice ----
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
@@ -96,24 +158,33 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
                 ),
               ),
               const SizedBox(height: 16),
+
+              // ---- Job title & company ----
               Text(_job['job_title'], style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               Text('${_job['company_profile']?['company_name'] ?? 'Company'} • ${_job['location']}'),
               const SizedBox(height: 12),
+
+              // ---- Info chips ----
               Wrap(
                 spacing: 8,
                 children: [
-                  _infoChip(Icons.attach_money, '${_job['salary_min']} - ${_job['salary_max']} MYR'),
+                  if (_job['salary_min'] != null && _job['salary_max'] != null)
+                    _infoChip(Icons.attach_money, '${_job['salary_min']} - ${_job['salary_max']} MYR'),
                   _infoChip(Icons.work, _job['job_type']?['name'] ?? 'Full-time'),
                   _infoChip(Icons.trending_up, _job['experience_level']?['name'] ?? 'Junior'),
                   if (_job['remote_option'] == true) _infoChip(Icons.wifi, 'Remote'),
                 ],
               ),
               const SizedBox(height: 16),
+
+              // ---- Description ----
               const Text('Job Description', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               Text(_job['description'] ?? 'No description provided.'),
               const SizedBox(height: 24),
+
+              // ---- Action buttons ----
               Row(
                 children: [
                   Expanded(

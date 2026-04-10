@@ -56,11 +56,18 @@ class _JobPostManagementPageState extends State<JobPostManagementPage> {
 
   Future<void> _toggleJobStatus(String jobId, bool isActive) async {
     final newStatus = isActive ? 'closed' : 'active';
-    await _service.updateJobPost(jobId, {'status': newStatus});
-    _loadJobs();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Job ${newStatus == 'active' ? 'reopened' : 'closed'}')),
-    );
+    try {
+      await _service.updateJobPost(jobId, {'status': newStatus});
+      await _loadJobs();  // reload after successful update
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Job ${newStatus == 'active' ? 'reopened' : 'closed'}')),
+      );
+    } catch (e) {
+      print("Error updating status: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to update status: $e')),
+      );
+    }
   }
 
   Future<void> _deleteJob(String jobId) async {

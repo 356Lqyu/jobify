@@ -37,6 +37,22 @@ class JobPostService {
     return response;
   }
 
+  Future<List<Map<String, dynamic>>> fetchAllActiveJobs() async {
+    final response = await supabase
+        .from('job_post')
+        .select('''
+        *,
+        job_category(name),
+        job_type(name),
+        experience_level(name),
+        company_profile(company_name, logo_url)
+      ''')
+        .eq('status', 'active')
+        .or('application_deadline.is.null,application_deadline.gt.now()')
+        .order('created_at', ascending: false);
+    return List<Map<String, dynamic>>.from(response);
+  }
+
   // Create a new job post
   Future<void> createJobPost(Map<String, dynamic> data) async {
     await supabase.from('job_post').insert(data);
@@ -79,4 +95,6 @@ class JobPostService {
         .maybeSingle();
     return response;
   }
+
+
 }

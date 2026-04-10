@@ -1,17 +1,27 @@
 import 'package:flutter/material.dart';
+import 'package:jobify/edit_profile_page.dart';
+import 'package:jobify/profile_page.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:jobify/registration.dart';
-import 'package:provider/provider.dart';
 import 'login.dart';
-import 'user_provider.dart';
+import 'setting_page.dart';
 
-void main() {
-  runApp(
-    ChangeNotifierProvider(
-      create: (_) => UserProvider(),
-      child: const MainApp(),
-    ),
+const String supabaseUrl = 'https://nejlppdligklddlwvzub.supabase.co';
+const String supabaseKey = 'sb_secret_518COekCnlz8R_OAgQVCIw_2E9LVs8_'; //Secret key
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // supabase setup
+  await Supabase.initialize(
+    url: supabaseUrl,
+    anonKey: supabaseKey,
   );
+
+  runApp(const MainApp());
 }
+
+final supabase = Supabase.instance.client;
 
 class MainApp extends StatelessWidget {
   const MainApp({super.key});
@@ -19,40 +29,16 @@ class MainApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      title: 'Jobify',
+      initialRoute: '/',
+      routes: {
+        '/': (context) => const AnimatedHomePage(),
+        '/Login': (context) => const Login(),
+        '/ProfilePage': (context) => const ProfilePage(),
+        '/EditProfilePage': (context) => const EditProfilePage(),
+        '/Settings': (context) => const SettingPage(),
+      },
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.blue,
-          brightness: Brightness.light,
-        ),
-
-        scaffoldBackgroundColor: const Color((0xFFEEF4FF)),
-
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Colors.blue,
-          foregroundColor: Colors.white,
-          elevation: 0,
-        ),
-
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.blue,
-            foregroundColor: Colors.white,
-            elevation: 8,
-            padding: EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.all(Radius.circular(30)),
-            ),
-          ),
-        ),
-
-        textButtonTheme: TextButtonThemeData(
-          style: TextButton.styleFrom(foregroundColor: Colors.blueAccent),
-        ),
-        useMaterial3: true,
-      ),
-
-      home: const AnimatedHomePage(),
     );
   }
 }
@@ -75,12 +61,13 @@ class _AnimatedHomePageState extends State<AnimatedHomePage>
 
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 2),
+      duration: const Duration(seconds: 4),
+
     );
 
     _scaleAnimation = Tween<double>(
-      begin: 0.9,
-      end: 1.1,
+      begin: 0.95,
+      end: 1.0,
     ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
 
     _controller.repeat(reverse: true);
@@ -154,10 +141,7 @@ class _AnimatedHomePageState extends State<AnimatedHomePage>
                     children: const [
                       Icon(Icons.work, color: Colors.white, size: 25),
                       SizedBox(width: 10),
-                      Text(
-                        "I'm Looking for a job",
-                        style: TextStyle(fontSize: 17),
-                      ),
+                      Text("I'm Looking for a job", style: TextStyle(fontSize: 17)),
                     ],
                   ),
                 ),

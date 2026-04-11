@@ -433,7 +433,7 @@ class _ProfilePageState extends State<ProfilePage> {
   // Resume Methods
   Future<void> _uploadResume() async {
     try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
+      FilePickerResult? result = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['pdf', 'doc', 'docx'],
       );

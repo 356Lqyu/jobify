@@ -3,6 +3,7 @@ import 'package:jobify/edit_profile_page.dart';
 import 'package:jobify/profile_page.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:jobify/registration.dart';
+import 'company_profile_page.dart';
 import 'login.dart';
 import 'setting_page.dart';
 
@@ -193,8 +194,8 @@ class _AnimatedHomePageState extends State<AnimatedHomePage>
                   TextButton(
                     onPressed: () {
                       Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => Registration()),
+                              context,
+                              MaterialPageRoute(builder: (context) => Registration()),
                       );
                     },
                     child: Text(

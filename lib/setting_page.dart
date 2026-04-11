@@ -3,8 +3,6 @@ import 'package:jobify/edit_profile_page.dart';
 import 'package:jobify/profile_page.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'company_profile_page.dart';
-
 class SettingPage extends StatefulWidget {
   const SettingPage({super.key});
 

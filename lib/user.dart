@@ -1,30 +1,41 @@
 import 'package:flutter/material.dart';
 
 class User {
-  String email;
-  String password;
-  String role;
+  final String userId;
+  final String role;
+  final String fullname;
+  final String? phone;
+  final String? profileImageUrl;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final String email;
 
-  // Job Seeker fields
-  String? name;
-  String? phoneNumber;
-  String? locationJS; // Job seeker location
-  List<String>? skills;
-  List<String>? workExperience;
-  Image? resume;
+  User({
+    required this.userId,
+    required this.role,
+    required this.fullname,
+    this.phone,
+    this.profileImageUrl,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.email,
+  });
 
-  // Employer fields
-  String? companyName;
-  List<String>? industry;
-  List<String>? companySize;
-  String? locationEMP; // Employer location
-  String? description;
-
-  // Constructor
-  User({required this.email, required this.password, required this.role});
+  factory User.fromJson(Map<String, dynamic> json) {
+    return User(
+      userId: json['user_id'].toString(),
+      role: json['role'] as String,
+      fullname: json['fullname'] as String,
+      phone: json['phone'] as String?,
+      profileImageUrl: json['profile_image_url'] as String?,
+      createdAt: DateTime.parse(json['created_at']),
+      updatedAt: DateTime.parse(json['updated_at']),
+      email: json['email'] as String,
+    );
+  }
 
   @override
   String toString() {
-    return 'Email: $email, Password: $password, Role: $role';
+    return 'Email: $email, Fullname: $fullname, Phone: $phone, ProfileRole: $role';
   }
 }

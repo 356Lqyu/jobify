@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:jobify/auth/auth_service.dart';
+import 'package:jobify/home.dart';
 import 'package:jobify/registration.dart';
 import 'package:jobify/user.dart';
-import 'package:jobify/user_provider.dart';
-import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' hide User;
+
 ///import 'package:intl/intl.dart' as intl;
 
 class Login extends StatefulWidget {
@@ -15,9 +17,12 @@ class Login extends StatefulWidget {
 
 class _LoginState extends State<Login> {
 
-  //declare local variables
-  String? email;
-  String? password;
+  //get auth service
+  final authService = AuthService();
+
+  //controller
+  final emailCtrl = TextEditingController();
+  final passwordCtrl = TextEditingController();
 
   // variable for error message
   String? passwordError;
@@ -26,15 +31,81 @@ class _LoginState extends State<Login> {
   // variable of password visibility
   bool isPasswordVisible = false;
 
-  //controller
-  final emailCtrl = TextEditingController();
-  final passwordCtrl = TextEditingController();
-
   //set focus
   final focusNode = FocusNode();
 
   //form controller
   final _formKey = GlobalKey<FormState>();
+
+  // Login function
+  void login() async {
+    final email = emailCtrl.text.trim();
+    final password = passwordCtrl.text;
+
+    // Reset previous errors
+    setState(() {
+      emailError = null;
+      passwordError = null;
+    });
+
+    bool isValid = true;
+
+    // Email validation
+    RegExp emailRegex =
+    RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+
+    if (email.isEmpty) {
+      emailError = "Email is required";
+      isValid = false;
+    } else if (!emailRegex.hasMatch(email)) {
+      emailError = "Email format invalid";
+      isValid = false;
+    }
+
+    if (password.isEmpty) {
+      passwordError = "Password is required";
+      isValid = false;
+    }
+
+    setState(() {});
+    if (!isValid) return;
+
+
+    try {
+      final res = await authService.signInWithEmailAndPassword(email, password);
+
+      if (res.user == null) {
+        throw Exception("Invalid login");
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Login Successful!")),
+      );
+
+      emailCtrl.clear();
+      passwordCtrl.clear();
+
+      // Fetch role from 'users' table
+      final supabase = Supabase.instance.client;
+      final userId = res.user!.id;
+      final userData = await supabase
+          .from('users')
+          .select('user_id, role, fullname, phone, profile_image_url, created_at, updated_at, email')
+          .eq('user_id', userId)
+          .single();
+
+      final user = User.fromJson(userData);
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => HomePage(user: user)),
+      );
+
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Login error: $e")),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -51,7 +122,7 @@ class _LoginState extends State<Login> {
               children: [
                 const SizedBox(height: 30),
 
-                /// Back icon (return main page)
+                /// Back icon
                 Align(
                   alignment: Alignment.topLeft,
                   child: IconButton(
@@ -65,14 +136,14 @@ class _LoginState extends State<Login> {
                 const SizedBox(height: 5),
 
                 /// Title
-                Text(
-                    'Login',
-                    textAlign: TextAlign.left,
-                    style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold)
+                const Text(
+                  'Login',
+                  textAlign: TextAlign.left,
+                  style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
                 ),
 
                 /// Subtitle
-                Text(
+                const Text(
                   "Join us and start connecting with opportunities today",
                   style: TextStyle(
                     fontSize: 15,
@@ -82,17 +153,12 @@ class _LoginState extends State<Login> {
 
                 const SizedBox(height: 40),
 
-                /// Email column heading
-                Text(
+                /// Email heading
+                const Text(
                   "Email",
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                 ),
-
                 const SizedBox(height: 8),
-
                 TextFormField(
                   controller: emailCtrl,
                   decoration: InputDecoration(
@@ -103,38 +169,31 @@ class _LoginState extends State<Login> {
                     ),
                   ),
                 ),
-
-                const SizedBox(height: 5),
-
-                // Error message
                 if (emailError != null)
                   Text(
                     emailError!,
-                    style: TextStyle(fontSize: 15, color: Colors.red),
+                    style: const TextStyle(fontSize: 15, color: Colors.red),
                   ),
-
                 const SizedBox(height: 20),
 
                 /// Password heading
-                Text(
+                const Text(
                   "Password",
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                 ),
-
                 const SizedBox(height: 8),
-
                 TextFormField(
                   controller: passwordCtrl,
-                  /// password visibility
                   obscureText: !isPasswordVisible,
                   decoration: InputDecoration(
                     hintText: "••••••••",
                     prefixIcon: const Icon(Icons.lock_outline),
                     suffixIcon: IconButton(
-                      icon: Icon( isPasswordVisible ? Icons.visibility : Icons.visibility_off,),
+                      icon: Icon(
+                        isPasswordVisible
+                            ? Icons.visibility
+                            : Icons.visibility_off,
+                      ),
                       onPressed: () {
                         setState(() {
                           isPasswordVisible = !isPasswordVisible;
@@ -146,13 +205,16 @@ class _LoginState extends State<Login> {
                     ),
                   ),
                   onChanged: (_) {
-                    // Clear error when user types
                     setState(() {
                       passwordError = null;
                     });
                   },
                 ),
-
+                if (passwordError != null)
+                  Text(
+                    passwordError!,
+                    style: const TextStyle(fontSize: 15, color: Colors.red),
+                  ),
                 const SizedBox(height: 25),
 
                 /// Login button
@@ -168,93 +230,20 @@ class _LoginState extends State<Login> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    onPressed: () {
-
-                      setState(() {
-                        emailError = null;
-                        passwordError = null;
-                      });
-
-                      bool isValid = true;
-
-                      /// Email validation
-                      String email = emailCtrl.text.trim();
-                      String emailPattern = r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$';
-                      RegExp emailRegex = RegExp(emailPattern);
-
-                      if (email.isEmpty) {
-                        emailError = "Email is required";
-                        isValid = false;
-                      } else if (!emailRegex.hasMatch(email)) {
-                        emailError = "Email format invalid";
-                        isValid = false;
-                      }
-
-                      String password = passwordCtrl.text;
-
-                      if (password.isEmpty) {
-                        passwordError = "Password is required";
-                        isValid = false;
-                      }
-
-                      // Refresh UI
-                      setState(() {});
-
-                      if (isValid) {
-                        String email = emailCtrl.text.trim();
-                        String password = passwordCtrl.text;
-
-                        final userProvider = Provider.of<UserProvider>(context, listen: false);
-
-                        User? foundUser;
-
-                        try {
-                          foundUser = userProvider.registeredUsers.firstWhere(
-                                (user) => user.email == email && user.password == password,
-                          );
-                        } catch (e) {
-                          foundUser = null;
-                        }
-
-                        if (foundUser != null) {
-                          // Login success
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text("Login Successful !", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),),
-                              backgroundColor: Colors.green,
-                              duration: Duration(seconds: 2),
-                            ),
-                          );
-
-                          emailCtrl.clear();
-                          passwordCtrl.clear();
-                        } else {
-                          // Login failed
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text("Invalid email or password !", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),),
-                              backgroundColor: Colors.red,
-                              duration: Duration(seconds: 2),
-                            ),
-                          );
-                        }
-                      }
-
-                    },
+                    onPressed: login,
                     child: const Text(
                       "Login",
                       style: TextStyle(fontSize: 16),
                     ),
                   ),
                 ),
-
                 const SizedBox(height: 10),
 
-                /// Register Row
+                /// Register row
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(
+                    const Text(
                       "Don't have an account?",
                       style: TextStyle(fontSize: 15, color: Colors.blueGrey),
                     ),
@@ -262,22 +251,21 @@ class _LoginState extends State<Login> {
                       onPressed: () {
                         Navigator.push(
                           context,
-                          MaterialPageRoute(builder: (context) => Registration()),
+                          MaterialPageRoute(
+                              builder: (context) => Registration()),
                         );
                       },
-                      child: Text(
+                      child: const Text(
                         'Register',
                         style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.blueAccent,
-                        ),
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blueAccent),
                       ),
                     ),
                   ],
                 ),
               ],
-
             ),
           ),
         ),

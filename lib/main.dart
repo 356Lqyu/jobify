@@ -1,26 +1,45 @@
 import 'package:flutter/material.dart';
+import 'package:jobify/edit_profile_page.dart';
+import 'package:jobify/profile_page.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:jobify/registration.dart';
-import 'package:provider/provider.dart';
+import 'company_profile_page.dart';
 import 'login.dart';
-import 'user_provider.dart';
+import 'setting_page.dart';
 
-void main() {
-  runApp(
-    ChangeNotifierProvider(
-      create: (_) => UserProvider(),
-      child: const MainApp(),
-    ),
+const String supabaseUrl = 'https://nejlppdligklddlwvzub.supabase.co';
+const String supabaseKey = 'sb_secret_518COekCnlz8R_OAgQVCIw_2E9LVs8_'; //Secret key
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // supabase setup
+  await Supabase.initialize(
+    url: supabaseUrl,
+    anonKey: supabaseKey,
   );
+
+  runApp(const MainApp());
 }
+
+final supabase = Supabase.instance.client;
 
 class MainApp extends StatelessWidget {
   const MainApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
+    return MaterialApp(
+      title: 'Jobify',
+      initialRoute: '/',
+      routes: {
+        '/': (context) => const AnimatedHomePage(),
+        '/Login': (context) => const Login(),
+        '/ProfilePage': (context) => const ProfilePage(),
+        '/EditProfilePage': (context) => const EditProfilePage(),
+        '/Settings': (context) => const SettingPage(),
+      },
       debugShowCheckedModeBanner: false,
-      home: AnimatedHomePage(),
     );
   }
 }
@@ -43,13 +62,13 @@ class _AnimatedHomePageState extends State<AnimatedHomePage>
 
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 2),
+      duration: const Duration(seconds: 4),
 
     );
 
     _scaleAnimation = Tween<double>(
-      begin: 0.9,
-      end: 1.1,
+      begin: 0.95,
+      end: 1.0,
     ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
 
     _controller.repeat(reverse: true);

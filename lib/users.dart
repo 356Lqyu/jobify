@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-class User {
+class Users {
   final String userId;
   final String role;
   final String fullname;
@@ -10,7 +10,7 @@ class User {
   final DateTime updatedAt;
   final String email;
 
-  User({
+  Users({
     required this.userId,
     required this.role,
     required this.fullname,
@@ -21,16 +21,20 @@ class User {
     required this.email,
   });
 
-  factory User.fromJson(Map<String, dynamic> json) {
-    return User(
+  factory Users.fromJson(Map<String, dynamic> json) {
+    return Users(
       userId: json['user_id'].toString(),
-      role: json['role'] as String,
-      fullname: json['fullname'] as String,
-      phone: json['phone'] as String?,
-      profileImageUrl: json['profile_image_url'] as String?,
-      createdAt: DateTime.parse(json['created_at']),
-      updatedAt: DateTime.parse(json['updated_at']),
-      email: json['email'] as String,
+      role: (json['role'] ?? 'JOB_SEEKER').toString(),
+      fullname: (json['fullname'] ?? json['company_name'] ?? '').toString(),
+      phone: json['phone']?.toString(), // Allow null
+      profileImageUrl: json['profile_image_url']?.toString(),
+      createdAt: json['created_at'] != null
+          ? DateTime.parse(json['created_at'])
+          : DateTime.now(),
+      updatedAt: json['updated_at'] != null
+          ? DateTime.parse(json['updated_at'])
+          : DateTime.now(),
+      email: (json['email'] ?? '').toString(),
     );
   }
 

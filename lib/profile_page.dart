@@ -1,7 +1,12 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:jobify/users.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:file_picker/file_picker.dart';
-import 'main.dart';
+import 'package:jobify/main.dart';
+import 'package:jobify/data/user_repository.dart';
+import 'package:jobify/data/local_db.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -12,6 +17,7 @@ class ProfilePage extends StatefulWidget {
 
 class _ProfilePageState extends State<ProfilePage> {
   final supabase = Supabase.instance.client;
+  late final UserRepository _userRepo;
 
   /// Basic user info
   String? userId;
@@ -21,6 +27,7 @@ class _ProfilePageState extends State<ProfilePage> {
   /// User data
   String fullname = '';
   String phone = '';
+  String profileImageUrl = '';
 
   /// Job seeker data
   String dateOfBirth = '';
@@ -34,6 +41,9 @@ class _ProfilePageState extends State<ProfilePage> {
   String industry = '';
   String companySize = '';
   String location = '';
+  String companyPhone = '';
+  String companyEmail = '';
+  String websiteUrl = '';
 
   /// Skills
   List<Map<String, dynamic>> skills = [];
@@ -48,362 +58,415 @@ class _ProfilePageState extends State<ProfilePage> {
   List<Map<String, dynamic>> resumes = [];
 
   bool isLoading = true;
+  bool isRefreshing = false;
+  bool isEditingAbout = false;
+  final TextEditingController _aboutController = TextEditingController();
+
+  // Industry options
+  final List<String> industryOptions = [
+    'Technology',
+    'Healthcare',
+    'Finance',
+    'Marketing',
+    'Retail',
+    'Manufacturing',
+    'Education',
+    'Construction',
+    'Hospitality',
+    'Transportation',
+    'Real Estate',
+    'Consulting',
+    'Legal',
+    'Entertainment',
+    'Agriculture',
+    'Energy',
+    'Telecommunications',
+    'Other'
+  ];
+
+  // Company size options
+  final List<String> companySizeOptions = [
+    '1-10 employees',
+    '11-50 employees',
+    '51-200 employees',
+    '201-500 employees',
+    '500+ employees'
+  ];
 
   @override
   void initState() {
     super.initState();
-    fetchProfile();
-  }
-
-  /// FETCH PROFILE
-  Future<void> fetchProfile() async {
-    final user = supabase.auth.currentUser;
-    if (user == null) return;
-
-    userId = user.id;
-    userEmail = user.email;
-
-    final userData = await supabase
-        .from('users')
-        .select()
-        .eq('user_id', userId!)
-        .single();
-
-    role = userData['role'];
-    fullname = userData['fullname'] ?? '';
-    phone = userData['phone'] ?? '';
-
-    if (role == 'JOB_SEEKER') {
-      final profile = await supabase
-          .from('job_seeker_profile')
-          .select()
-          .eq('user_id', userId!)
-          .maybeSingle();
-
-      if (profile != null) {
-        dateOfBirth = profile['date_of_birth'] ?? '';
-        gender = profile['gender'] ?? '';
-        address = profile['address'] ?? '';
-        bio = profile['bio'] ?? '';
-      }
-
-      // Fetch resumes
-      final resumeData = await supabase
-          .from('resume')
-          .select()
-          .eq('user_id', userId!);
-      resumes = List<Map<String, dynamic>>.from(resumeData);
-    } else if (role == 'POSTER') {
-      final profile = await supabase
-          .from('company_profile')
-          .select()
-          .eq('user_id', userId!)
-          .maybeSingle();
-
-      if (profile != null) {
-        companyName = profile['company_name'] ?? '';
-        companyDescription = profile['company_description'] ?? '';
-        industry = profile['industry'] ?? '';
-        companySize = profile['company_size'] ?? '';
-        location = profile['location'] ?? '';
-      }
-    }
-
-    final skillData = await supabase
-        .from('skills')
-        .select()
-        .eq('user_id', userId!);
-    skills = List<Map<String, dynamic>>.from(skillData);
-
-    final eduData = await supabase
-        .from('education')
-        .select()
-        .eq('user_id', userId!);
-    educationList = List<Map<String, dynamic>>.from(eduData);
-
-    final workData = await supabase
-        .from('experience')
-        .select()
-        .eq('user_id', userId!);
-    workList = List<Map<String, dynamic>>.from(workData);
-
-    setState(() {
-      isLoading = false;
-    });
+    _userRepo = UserRepository();
+    _loadProfile();
   }
 
   @override
-  Widget build(BuildContext context) {
-    if (isLoading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+  void dispose() {
+    _aboutController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadProfile() async {
+    if (!mounted) return;
+    setState(() => isLoading = true);
+
+    try {
+      final user = supabase.auth.currentUser;
+      if (user == null) {
+        if (mounted) setState(() => isLoading = false);
+        return;
+      }
+
+      userId = user.id;
+      userEmail = user.email;
+
+      debugPrint('Loading profile for user: $userId');
+
+      await _loadFromCacheOnly();
+      await _fetchFreshData();
+
+    } catch (e) {
+      debugPrint('Error loading profile: $e');
+      await _loadFromCacheOnly();
+    } finally {
+      if (mounted) {
+        setState(() => isLoading = false);
+      }
     }
+  }
 
-    return Scaffold(
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(25, 25, 25, 0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              /// Header with Back Button
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.arrow_back, size: 28),
-                    onPressed: () {
-                      Navigator.pop(context);
-                    },
-                  ),
-                  const Text(
-                    'My Profile',
-                    style: TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(width: 48),
-                ],
-              ),
-              const SizedBox(height: 30),
+  Future<void> _fetchFreshData() async {
+    if (userId == null) return;
 
-              /// PROFILE PHOTO SECTION
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
-                      blurRadius: 8,
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    const CircleAvatar(
-                      radius: 40,
-                      backgroundColor: Colors.blue,
-                      child: Icon(
-                        Icons.person,
-                        size: 40,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(width: 15),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            fullname.isNotEmpty ? fullname : 'No name set',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 18,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            userEmail ?? '',
-                            style: TextStyle(
-                              color: Colors.grey[600],
-                              fontSize: 14,
-                            ),
-                          ),
-                          if (role != null)
-                            Container(
-                              margin: const EdgeInsets.only(top: 8),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: role == 'JOB_SEEKER'
-                                    ? Colors.green.shade50
-                                    : Colors.blue.shade50,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: role == 'JOB_SEEKER'
-                                      ? Colors.green.shade200
-                                      : Colors.blue.shade200,
-                                ),
-                              ),
-                              child: Text(
-                                role == 'JOB_SEEKER' ? 'Job Seeker' : 'Employer',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: role == 'JOB_SEEKER'
-                                      ? Colors.green.shade700
-                                      : Colors.blue.shade700,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 15),
+    try {
+      debugPrint('Fetching fresh profile data from Supabase...');
 
-              /// PERSONAL INFO with Edit Button
-              buildCardWithEditButton(
-                title: "Personal Information",
-                onEdit: () => _showEditPersonalInfoBottomSheet(),
-                child: Column(
-                  children: [
-                    buildInfoRow("Full Name", fullname.isNotEmpty ? fullname : "Not set"),
-                    buildInfoRow("Phone Number", phone.isNotEmpty ? phone : "Not set"),
-                    if (role == 'JOB_SEEKER') ...[
-                      buildInfoRow("Date of Birth", dateOfBirth.isNotEmpty ? dateOfBirth : "Not set"),
-                      buildInfoRow("Gender", gender.isNotEmpty ? gender : "Not set"),
-                      buildInfoRow("Address", address.isNotEmpty ? address : "Not set"),
-                      buildInfoRow("Bio", bio.isNotEmpty ? bio : "Not set", isMultiline: true),
-                    ],
-                    if (role == 'POSTER') ...[
-                      buildInfoRow("Company Name", companyName.isNotEmpty ? companyName : "Not set"),
-                      buildInfoRow(
-                        "Company Description",
-                        companyDescription.isNotEmpty ? companyDescription : "Not set",
-                        isMultiline: true,
-                      ),
-                      buildInfoRow("Industry", industry.isNotEmpty ? industry : "Not set"),
-                      buildInfoRow("Company Size", companySize.isNotEmpty ? companySize : "Not set"),
-                      buildInfoRow("Location", location.isNotEmpty ? location : "Not set"),
-                    ],
-                  ],
-                ),
-              ),
+      final userData = await supabase
+          .from('users')
+          .select()
+          .eq('user_id', userId!)
+          .single();
 
-              /// SKILLS
-              if (role == 'JOB_SEEKER')
-                buildCardWithAddButton(
-                  title: "Skills",
-                  onAdd: () => _showAddSkillBottomSheet(),
-                  child: skills.isEmpty
-                      ? const Padding(
-                    padding: EdgeInsets.all(16.0),
-                    child: Text(
-                      "No skills added yet. Tap + to add skills.",
-                      style: TextStyle(color: Colors.grey),
-                    ),
-                  )
-                      : Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: skills.map((skill) {
-                      return SkillChip(
-                        skill: skill,
-                        onEdit: () => _showEditSkillBottomSheet(skill),
-                        onDelete: () => _deleteSkill(skill),
-                      );
-                    }).toList(),
-                  ),
-                ),
+      final user = Users.fromJson(userData);
+      await LocalDB.cacheUser(user);
 
-              /// EDUCATION
-              if (role == 'JOB_SEEKER')
-                buildCardWithAddButton(
-                  title: "Education",
-                  onAdd: () => _showAddEducationBottomSheet(),
-                  child: educationList.isEmpty
-                      ? const Padding(
-                    padding: EdgeInsets.all(16.0),
-                    child: Text(
-                      "No education added yet. Tap + to add education.",
-                      style: TextStyle(color: Colors.grey),
-                    ),
-                  )
-                      : Column(
-                    children: educationList.map((edu) {
-                      return EducationItem(
-                        education: edu,
-                        onEdit: () => _showEditEducationBottomSheet(edu),
-                        onDelete: () => _deleteEducation(edu),
-                      );
-                    }).toList(),
-                  ),
-                ),
+      if (mounted) {
+        setState(() {
+          fullname = user.fullname;
+          phone = user.phone ?? '';
+          role = user.role;
+          profileImageUrl = user.profileImageUrl ?? '';
+        });
+      }
 
-              /// WORK EXPERIENCE
-              if (role == 'JOB_SEEKER')
-                buildCardWithAddButton(
-                  title: "Work Experience",
-                  onAdd: () => _showAddWorkBottomSheet(),
-                  child: workList.isEmpty
-                      ? const Padding(
-                    padding: EdgeInsets.all(16.0),
-                    child: Text(
-                      "No work experience added yet. Tap + to add experience.",
-                      style: TextStyle(color: Colors.grey),
-                    ),
-                  )
-                      : Column(
-                    children: workList.map((work) {
-                      return WorkItem(
-                        work: work,
-                        onEdit: () => _showEditWorkBottomSheet(work),
-                        onDelete: () => _deleteWork(work),
-                      );
-                    }).toList(),
-                  ),
-                ),
+      if (role == 'JOB_SEEKER') {
+        final profile = await supabase
+            .from('job_seeker_profile')
+            .select()
+            .eq('user_id', userId!)
+            .maybeSingle();
 
-              /// RESUME
-              if (role == 'JOB_SEEKER')
-                buildCardWithAddButton(
-                  title: "Resume",
-                  onAdd: () => _uploadResume(),
-                  child: resumes.isEmpty
-                      ? const Padding(
-                    padding: EdgeInsets.all(16.0),
-                    child: Text(
-                      "No resume uploaded yet. Tap + to upload resume.",
-                      style: TextStyle(color: Colors.grey),
-                    ),
-                  )
-                      : Column(
-                    children: resumes.map((resume) {
-                      return ResumeItem(
-                        resume: resume,
-                        onDelete: () => _deleteResume(resume),
-                        onDownload: () => _downloadResume(resume),
-                      );
-                    }).toList(),
-                  ),
-                ),
+        if (profile != null && mounted) {
+          setState(() {
+            dateOfBirth = profile['date_of_birth'] ?? '';
+            gender = profile['gender'] ?? '';
+            address = profile['address'] ?? '';
+            bio = profile['bio'] ?? '';
+          });
+          await LocalDB.cacheJobSeekerProfile(userId!, profile);
+        }
 
-              const SizedBox(height: 20),
-            ],
+        final resumeData = await supabase
+            .from('resume')
+            .select()
+            .eq('user_id', userId!);
+        if (mounted) {
+          setState(() {
+            resumes = List<Map<String, dynamic>>.from(resumeData);
+          });
+          await LocalDB.cacheResumes(userId!, resumes);
+        }
+
+        // Fetch skills, education, experience
+        final skillData = await supabase
+            .from('skills')
+            .select()
+            .eq('user_id', userId!);
+        if (mounted) {
+          setState(() {
+            skills = List<Map<String, dynamic>>.from(skillData);
+          });
+          await LocalDB.cacheSkills(userId!, skills);
+        }
+
+        final eduData = await supabase
+            .from('education')
+            .select()
+            .eq('user_id', userId!);
+        if (mounted) {
+          setState(() {
+            educationList = List<Map<String, dynamic>>.from(eduData);
+          });
+          await LocalDB.cacheEducation(userId!, educationList);
+        }
+
+        final workData = await supabase
+            .from('experience')
+            .select()
+            .eq('user_id', userId!);
+        if (mounted) {
+          setState(() {
+            workList = List<Map<String, dynamic>>.from(workData);
+          });
+          await LocalDB.cacheExperience(userId!, workList);
+        }
+
+      } else if (role == 'POSTER') {
+        final profile = await supabase
+            .from('company_profile')
+            .select()
+            .eq('user_id', userId!)
+            .maybeSingle();
+
+        if (profile != null && mounted) {
+          setState(() {
+            companyName = profile['company_name'] ?? '';
+            companyDescription = profile['company_description'] ?? '';
+            industry = profile['industry'] ?? '';
+            companySize = profile['company_size'] ?? '';
+            location = profile['location'] ?? '';
+          });
+          await LocalDB.cacheCompanyProfile(userId!, profile);
+        }
+      }
+
+      debugPrint('Fresh profile data loaded successfully');
+
+    } catch (e) {
+      debugPrint('Error fetching fresh data: $e');
+    }
+  }
+
+  Future<void> _loadFromCacheOnly() async {
+    if (userId == null) return;
+
+    try {
+      debugPrint('Loading profile from cache...');
+
+      final cachedUser = await LocalDB.getCachedUser(userId!);
+      if (cachedUser != null && mounted) {
+        setState(() {
+          fullname = cachedUser.fullname;
+          phone = cachedUser.phone ?? '';
+          role = cachedUser.role;
+          userEmail = cachedUser.email;
+          profileImageUrl = cachedUser.profileImageUrl ?? '';
+        });
+      }
+
+      if (role == 'JOB_SEEKER') {
+        final cachedSkills = await LocalDB.getCachedSkills(userId!);
+        final cachedEducation = await LocalDB.getCachedEducation(userId!);
+        final cachedExperience = await LocalDB.getCachedExperience(userId!);
+        final cachedResumes = await LocalDB.getCachedResumes(userId!);
+
+        if (mounted) {
+          setState(() {
+            skills = List<Map<String, dynamic>>.from(cachedSkills);
+            educationList = List<Map<String, dynamic>>.from(cachedEducation);
+            workList = List<Map<String, dynamic>>.from(cachedExperience);
+            resumes = List<Map<String, dynamic>>.from(cachedResumes);
+          });
+        }
+
+        final cachedProfile = await LocalDB.getCachedJobSeekerProfile(userId!);
+        if (cachedProfile != null && mounted) {
+          setState(() {
+            dateOfBirth = cachedProfile['date_of_birth'] ?? '';
+            gender = cachedProfile['gender'] ?? '';
+            address = cachedProfile['address'] ?? '';
+            bio = cachedProfile['bio'] ?? '';
+          });
+        }
+      } else if (role == 'POSTER') {
+        final cachedProfile = await LocalDB.getCachedCompanyProfile(userId!);
+        if (cachedProfile != null && mounted) {
+          setState(() {
+            companyName = cachedProfile['company_name'] ?? '';
+            companyDescription = cachedProfile['company_description'] ?? '';
+            industry = cachedProfile['industry'] ?? '';
+            companySize = cachedProfile['company_size'] ?? '';
+            location = cachedProfile['location'] ?? '';
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading from cache: $e');
+    }
+  }
+
+  Future<void> _refreshProfile() async {
+    if (!mounted) return;
+    setState(() => isRefreshing = true);
+    await _fetchFreshData();
+    if (mounted) setState(() => isRefreshing = false);
+  }
+
+  // ==================== PROFILE IMAGE UPLOAD ====================
+  Future<void> _uploadProfileImage() async {
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? image = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 500,
+        maxHeight: 500,
+        imageQuality: 80,
+      );
+
+      if (image != null && mounted) {
+        final File imageFile = File(image.path);
+        final bytes = await imageFile.readAsBytes();
+        final fileName = '${DateTime.now().millisecondsSinceEpoch}.jpg';
+        final storagePath = 'profile_images/$userId/$fileName';
+
+        // Upload to storage
+        await supabase.storage.from('avatars').uploadBinary(
+          storagePath,
+          bytes,
+          fileOptions: const FileOptions(
+            cacheControl: '3600',
+            upsert: true,
           ),
-        ),
+        );
+
+        final publicUrl = supabase.storage.from('avatars').getPublicUrl(storagePath);
+
+        // Update users table
+        await _userRepo.updateUser(userId!, {
+          'profile_image_url': publicUrl,
+        });
+
+        await _refreshProfile();
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Profile image updated!")),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error uploading image: $e")),
+        );
+      }
+    }
+  }
+
+  // ==================== COMPANY LOGO UPLOAD ====================
+  Future<void> _uploadCompanyLogo() async {
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? image = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 500,
+        maxHeight: 500,
+        imageQuality: 80,
+      );
+
+      if (image != null && mounted) {
+        // Check if userId is not null
+        if (userId == null) {
+          throw Exception("User ID is null");
+        }
+
+        final File imageFile = File(image.path);
+        final bytes = await imageFile.readAsBytes();
+        final fileName = '${DateTime.now().millisecondsSinceEpoch}.jpg';
+        final storagePath = 'company_logos/$userId/$fileName';
+
+        // Upload to storage
+        await supabase.storage.from('company-logos').uploadBinary(
+          storagePath,
+          bytes,
+          fileOptions: const FileOptions(
+            cacheControl: '3600',
+            upsert: true,
+          ),
+        );
+
+        final publicUrl = supabase.storage.from('company-logos').getPublicUrl(storagePath);
+
+        if (publicUrl != null) {
+          // Update company_profile table - userId is now guaranteed non-null
+          await supabase
+              .from('company_profile')
+              .update({'logo_url': publicUrl})
+              .eq('user_id', userId!);  // userId is now String, not String?
+
+          await _refreshProfile();
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("Company logo updated!")),
+            );
+          }
+        } else {
+          throw Exception("Failed to get public URL for uploaded logo");
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error uploading logo: $e")),
+        );
+      }
+    }
+  }
+
+  // ==================== COMPANY INFO EDIT ====================
+  void _showEditCompanyInfoBottomSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      bottomNavigationBar: Container(
-        height: 90,
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          border: Border(
-            top: BorderSide(color: Colors.grey),
-          ),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            buildNavItem(Icons.home_outlined, "Home", isActive: false),
-            buildNavItem(Icons.work_outline, "Jobs", isActive: false),
-            buildNavItem(Icons.description_outlined, "Applications", isActive: false),
-            buildNavItem(Icons.person_outline, "Profile", isActive: true),
-          ],
-        ),
+      builder: (context) => CompanyInfoFormBottomSheet(
+        userId: userId!,
+        companyName: companyName,
+        industry: industry,
+        companySize: companySize,
+        location: location,
+        companyPhone: companyPhone,
+        companyEmail: companyEmail,
+        websiteUrl: websiteUrl,
+        industryOptions: industryOptions,
+        companySizeOptions: companySizeOptions,
+        userRepository: _userRepo,
+        onSuccess: () => _refreshProfile(),
       ),
     );
   }
 
-  // Personal Info Bottom Sheet
+  // ==================== COMPANY DESCRIPTION EDIT ====================
+  void _showEditCompanyDescriptionBottomSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => CompanyDescriptionFormBottomSheet(
+        userId: userId!,
+        companyDescription: companyDescription,
+        userRepository: _userRepo,
+        onSuccess: () => _refreshProfile(),
+      ),
+    );
+  }
+
+  // ==================== PERSONAL INFO EDIT ====================
   void _showEditPersonalInfoBottomSheet() {
     showModalBottomSheet(
       context: context,
@@ -425,26 +488,33 @@ class _ProfilePageState extends State<ProfilePage> {
         industry: industry,
         companySize: companySize,
         location: location,
-        onSuccess: () => fetchProfile(),
+        userRepository: _userRepo,
+        onSuccess: () => _refreshProfile(),
       ),
     );
   }
 
-  // Resume Methods
+  // ==================== RESUME METHODS ====================
   Future<void> _uploadResume() async {
+    if (userId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please wait, profile is loading...")),
+      );
+      return;
+    }
+
     try {
       FilePickerResult? result = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['pdf', 'doc', 'docx'],
       );
 
-      if (result != null) {
+      if (result != null && mounted) {
         final file = result.files.first;
         final bytes = file.bytes;
         final fileName = file.name;
 
         if (bytes != null) {
-          // Upload to Supabase Storage
           final storagePath = 'resumes/$userId/$fileName';
           await supabase.storage.from('resumes').uploadBinary(
             storagePath,
@@ -455,32 +525,30 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
           );
 
-          // Get public URL
           final publicUrl = supabase.storage.from('resumes').getPublicUrl(storagePath);
 
-          // Save to resume table
-          await supabase.from('resume').insert({
-            'user_id': userId,
-            'file_url': publicUrl,
-            'file_name': fileName,
-            'uploaded_at': DateTime.now().toIso8601String(),
-            'is_default': resumes.isEmpty,
-          });
+          await _userRepo.addResume(userId!, publicUrl, fileName);
+          await _refreshProfile();
 
-          await fetchProfile();
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Resume uploaded successfully!")),
-          );
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("Resume uploaded successfully!")),
+            );
+          }
         }
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error uploading resume: $e")),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error uploading resume: $e")),
+        );
+      }
     }
   }
 
   Future<void> _deleteResume(Map<String, dynamic> resume) async {
+    if (!mounted) return;
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -497,21 +565,21 @@ class _ProfilePageState extends State<ProfilePage> {
               try {
                 final url = resume['file_url'] as String;
                 final path = url.split('/resumes/').last;
-
                 await supabase.storage.from('resumes').remove([path]);
-                await supabase
-                    .from('resume')
-                    .delete()
-                    .eq('resume_id', resume['resume_id']);
+                await _userRepo.deleteResume(resume['resume_id']);
+                await _refreshProfile();
 
-                await fetchProfile();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("Resume deleted")),
-                );
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("Resume deleted")),
+                  );
+                }
               } catch (e) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text("Error deleting resume: $e")),
-                );
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text("Error deleting resume: $e")),
+                  );
+                }
               }
             },
             child: const Text("Delete", style: TextStyle(color: Colors.red)),
@@ -521,20 +589,7 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  Future<void> _downloadResume(Map<String, dynamic> resume) async {
-    try {
-      final url = resume['file_url'] as String;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Opening: ${resume['file_name']}")),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error opening resume: $e")),
-      );
-    }
-  }
-
-  // Skill Methods
+  // ==================== SKILL METHODS ====================
   void _showAddSkillBottomSheet() {
     showModalBottomSheet(
       context: context,
@@ -544,7 +599,8 @@ class _ProfilePageState extends State<ProfilePage> {
       ),
       builder: (context) => SkillFormBottomSheet(
         userId: userId!,
-        onSuccess: () => fetchProfile(),
+        userRepository: _userRepo,
+        onSuccess: () => _refreshProfile(),
       ),
     );
   }
@@ -559,7 +615,8 @@ class _ProfilePageState extends State<ProfilePage> {
       builder: (context) => SkillFormBottomSheet(
         userId: userId!,
         skill: skill,
-        onSuccess: () => fetchProfile(),
+        userRepository: _userRepo,
+        onSuccess: () => _refreshProfile(),
       ),
     );
   }
@@ -578,14 +635,13 @@ class _ProfilePageState extends State<ProfilePage> {
           TextButton(
             onPressed: () async {
               Navigator.pop(context);
-              await supabase
-                  .from('skills')
-                  .delete()
-                  .eq('skill_id', skill['skill_id']);
-              await fetchProfile();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text("Skill deleted")),
-              );
+              await _userRepo.deleteSkill(skill['skill_id']);
+              await _refreshProfile();
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Skill deleted")),
+                );
+              }
             },
             child: const Text("Delete", style: TextStyle(color: Colors.red)),
           ),
@@ -594,7 +650,7 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  // Education Methods
+  // ==================== EDUCATION METHODS ====================
   void _showAddEducationBottomSheet() {
     showModalBottomSheet(
       context: context,
@@ -604,7 +660,8 @@ class _ProfilePageState extends State<ProfilePage> {
       ),
       builder: (context) => EducationFormBottomSheet(
         userId: userId!,
-        onSuccess: () => fetchProfile(),
+        userRepository: _userRepo,
+        onSuccess: () => _refreshProfile(),
       ),
     );
   }
@@ -619,7 +676,8 @@ class _ProfilePageState extends State<ProfilePage> {
       builder: (context) => EducationFormBottomSheet(
         userId: userId!,
         education: education,
-        onSuccess: () => fetchProfile(),
+        userRepository: _userRepo,
+        onSuccess: () => _refreshProfile(),
       ),
     );
   }
@@ -638,14 +696,13 @@ class _ProfilePageState extends State<ProfilePage> {
           TextButton(
             onPressed: () async {
               Navigator.pop(context);
-              await supabase
-                  .from('education')
-                  .delete()
-                  .eq('education_id', education['education_id']);
-              await fetchProfile();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text("Education deleted")),
-              );
+              await _userRepo.deleteEducation(education['education_id']);
+              await _refreshProfile();
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Education deleted")),
+                );
+              }
             },
             child: const Text("Delete", style: TextStyle(color: Colors.red)),
           ),
@@ -654,7 +711,7 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  // Work Experience Methods
+  // ==================== WORK METHODS ====================
   void _showAddWorkBottomSheet() {
     showModalBottomSheet(
       context: context,
@@ -664,7 +721,8 @@ class _ProfilePageState extends State<ProfilePage> {
       ),
       builder: (context) => WorkFormBottomSheet(
         userId: userId!,
-        onSuccess: () => fetchProfile(),
+        userRepository: _userRepo,
+        onSuccess: () => _refreshProfile(),
       ),
     );
   }
@@ -679,7 +737,8 @@ class _ProfilePageState extends State<ProfilePage> {
       builder: (context) => WorkFormBottomSheet(
         userId: userId!,
         work: work,
-        onSuccess: () => fetchProfile(),
+        userRepository: _userRepo,
+        onSuccess: () => _refreshProfile(),
       ),
     );
   }
@@ -698,14 +757,13 @@ class _ProfilePageState extends State<ProfilePage> {
           TextButton(
             onPressed: () async {
               Navigator.pop(context);
-              await supabase
-                  .from('experience')
-                  .delete()
-                  .eq('experience_id', work['experience_id']);
-              await fetchProfile();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text("Work experience deleted")),
-              );
+              await _userRepo.deleteExperience(work['experience_id']);
+              await _refreshProfile();
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Work experience deleted")),
+                );
+              }
             },
             child: const Text("Delete", style: TextStyle(color: Colors.red)),
           ),
@@ -714,6 +772,402 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  @override
+  Widget build(BuildContext context) {
+    if (isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    final bool isJobSeeker = role == 'JOB_SEEKER';
+
+    return Scaffold(
+      body: RefreshIndicator(
+        onRefresh: _refreshProfile,
+        child: SafeArea(
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(25, 25, 25, 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header with Back Button
+                Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back, size: 28),
+                      onPressed: () {
+                        Navigator.pop(context);
+                      },
+                    ),
+                    const Text(
+                      'My Profile',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(width: 48),
+                  ],
+                ),
+                const SizedBox(height: 30),
+
+                // PROFILE PHOTO SECTION (with upload icon)
+                _buildProfileHeader(isJobSeeker),
+
+                // COMPANY INFO (for Poster)
+                if (!isJobSeeker) ...[
+                  const SizedBox(height: 20),
+                  _buildCompanyInfoCard(),
+                  const SizedBox(height: 15),
+                  _buildCompanyDescriptionCard(),
+                  const SizedBox(height: 15),
+                ],
+
+                // PERSONAL INFO (for Job Seeker)
+                if (isJobSeeker) ...[
+                  const SizedBox(height: 15),
+                  _buildPersonalInfoCard(),
+                  const SizedBox(height: 15),
+                  _buildSkillsCard(),
+                  const SizedBox(height: 15),
+                  _buildEducationCard(),
+                  const SizedBox(height: 15),
+                  _buildWorkCard(),
+                  const SizedBox(height: 15),
+                  _buildResumeCard(),
+                ],
+
+                const SizedBox(height: 20),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ==================== PROFILE HEADER WIDGET ====================
+  Widget _buildProfileHeader(bool isJobSeeker) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 8,
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          // Profile Image with Upload Icon
+          Stack(
+            children: [
+              CircleAvatar(
+                radius: 50,
+                backgroundColor: Colors.grey[200],
+                backgroundImage: profileImageUrl.isNotEmpty
+                    ? NetworkImage(profileImageUrl)
+                    : null,
+                child: profileImageUrl.isEmpty
+                    ? Icon(
+                  isJobSeeker ? Icons.person : Icons.business,
+                  size: 50,
+                  color: Colors.blue,
+                )
+                    : null,
+              ),
+              Positioned(
+                bottom: 0,
+                right: 0,
+                child: GestureDetector(
+                  onTap: isJobSeeker ? _uploadProfileImage : _uploadCompanyLogo,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: Colors.blue,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 2),
+                    ),
+                    child: const Icon(
+                      Icons.camera_alt,
+                      size: 16,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(width: 15),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isJobSeeker
+                      ? (fullname.isNotEmpty ? fullname : 'No name set')
+                      : (companyName.isNotEmpty ? companyName : 'No company name'),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  userEmail ?? '',
+                  style: TextStyle(
+                    color: Colors.grey[600],
+                    fontSize: 14,
+                  ),
+                ),
+                if (role != null)
+                  Container(
+                    margin: const EdgeInsets.only(top: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isJobSeeker
+                          ? Colors.green.shade50
+                          : Colors.blue.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isJobSeeker
+                            ? Colors.green.shade200
+                            : Colors.blue.shade200,
+                      ),
+                    ),
+                    child: Text(
+                      isJobSeeker ? 'Job Seeker' : 'Employer',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isJobSeeker
+                            ? Colors.green.shade700
+                            : Colors.blue.shade700,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ==================== COMPANY INFO CARD ====================
+  Widget _buildCompanyInfoCard() {
+    return buildCardWithEditButton(
+      title: "Company Information",
+      onEdit: _showEditCompanyInfoBottomSheet,
+      child: Column(
+        children: [
+          buildInfoRow("Company Name", companyName.isNotEmpty ? companyName : "Not set"),
+          buildInfoRow("Industry", industry.isNotEmpty ? industry : "Not set"),
+          buildInfoRow("Company Size", companySize.isNotEmpty ? companySize : "Not set"),
+          buildInfoRow("Location", location.isNotEmpty ? location : "Not set"),
+          buildInfoRow("Phone Number", phone.isNotEmpty ? phone : "Not set"),
+        ],
+      ),
+    );
+  }
+
+  // ==================== COMPANY DESCRIPTION CARD ====================
+  Widget _buildCompanyDescriptionCard() {
+    return buildCardWithEditButton(
+      title: "About Company",
+      onEdit: _showEditCompanyDescriptionBottomSheet,
+      child: Padding(
+        padding: const EdgeInsets.all(8.0),
+        child: Text(
+          companyDescription.isNotEmpty ? companyDescription : "No company description provided yet.",
+          style: TextStyle(
+            fontSize: 14,
+            color: companyDescription.isNotEmpty ? Colors.black87 : Colors.grey,
+            height: 1.5,
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ==================== PERSONAL INFO CARD ====================
+  Widget _buildPersonalInfoCard() {
+    final bool isJobSeeker = role == 'JOB_SEEKER';
+
+    return buildCardWithEditButton(
+      title: isJobSeeker ? "Personal Information" : "Contact Person",
+      onEdit: _showEditPersonalInfoBottomSheet,
+      child: isJobSeeker
+          ? Column(
+        children: [
+          buildInfoRow("Full Name", fullname.isNotEmpty ? fullname : "Not set"),
+          buildInfoRow("Phone Number", phone.isNotEmpty ? phone : "Not set"),
+          buildInfoRow("Email", userEmail ?? "Not set"),
+          buildInfoRow("Date of Birth", dateOfBirth.isNotEmpty ? dateOfBirth : "Not set"),
+          buildInfoRow("Gender", gender.isNotEmpty ? gender : "Not set"),
+          buildInfoRow("Address", address.isNotEmpty ? address : "Not set"),
+          buildInfoRow("Bio", bio.isNotEmpty ? bio : "Not set", isMultiline: true),
+        ],
+      )
+          : Row(
+        children: [
+          CircleAvatar(
+            radius: 30,
+            backgroundColor: Colors.grey[200],
+            backgroundImage: profileImageUrl.isNotEmpty
+                ? NetworkImage(profileImageUrl)
+                : null,
+            child: profileImageUrl.isEmpty
+                ? const Icon(Icons.person, size: 30, color: Colors.blue)
+                : null,
+          ),
+          const SizedBox(width: 15),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  fullname.isNotEmpty ? fullname : "No name set",
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  phone.isNotEmpty ? phone : "No phone number",
+                  style: TextStyle(
+                    color: Colors.grey[600],
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  userEmail ?? "No email",
+                  style: TextStyle(
+                    color: Colors.grey[600],
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ==================== SKILLS CARD ====================
+  Widget _buildSkillsCard() {
+    return buildCardWithAddButton(
+      title: "Skills",
+      onAdd: _showAddSkillBottomSheet,
+      child: skills.isEmpty
+          ? const Padding(
+        padding: EdgeInsets.all(16.0),
+        child: Text(
+          "No skills added yet. Tap + to add skills.",
+          style: TextStyle(color: Colors.grey),
+        ),
+      )
+          : Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: skills.map((skill) {
+          return SkillChip(
+            skill: skill,
+            onEdit: () => _showEditSkillBottomSheet(skill),
+            onDelete: () => _deleteSkill(skill),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  // ==================== EDUCATION CARD ====================
+  Widget _buildEducationCard() {
+    return buildCardWithAddButton(
+      title: "Education",
+      onAdd: _showAddEducationBottomSheet,
+      child: educationList.isEmpty
+          ? const Padding(
+        padding: EdgeInsets.all(16.0),
+        child: Text(
+          "No education added yet. Tap + to add education.",
+          style: TextStyle(color: Colors.grey),
+        ),
+      )
+          : Column(
+        children: educationList.map((edu) {
+          return EducationItem(
+            education: edu,
+            onEdit: () => _showEditEducationBottomSheet(edu),
+            onDelete: () => _deleteEducation(edu),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  // ==================== WORK CARD ====================
+  Widget _buildWorkCard() {
+    return buildCardWithAddButton(
+      title: "Work Experience",
+      onAdd: _showAddWorkBottomSheet,
+      child: workList.isEmpty
+          ? const Padding(
+        padding: EdgeInsets.all(16.0),
+        child: Text(
+          "No work experience added yet. Tap + to add experience.",
+          style: TextStyle(color: Colors.grey),
+        ),
+      )
+          : Column(
+        children: workList.map((work) {
+          return WorkItem(
+            work: work,
+            onEdit: () => _showEditWorkBottomSheet(work),
+            onDelete: () => _deleteWork(work),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  // ==================== RESUME CARD ====================
+  Widget _buildResumeCard() {
+    return buildCardWithAddButton(
+      title: "Resume",
+      onAdd: _uploadResume,
+      child: resumes.isEmpty
+          ? const Padding(
+        padding: EdgeInsets.all(16.0),
+        child: Text(
+          "No resume uploaded yet. Tap + to upload resume.",
+          style: TextStyle(color: Colors.grey),
+        ),
+      )
+          : Column(
+        children: resumes.map((resume) {
+          return ResumeItem(
+            resume: resume,
+            onDelete: () => _deleteResume(resume),
+            onDownload: () => _downloadResume(resume),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  // ==================== HELPER WIDGETS ====================
   Widget buildInfoRow(String label, String value, {bool isMultiline = false}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -869,217 +1323,115 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  Widget buildNavItem(
-      IconData icon,
-      String label,
-      {bool isActive = false}) {
-    return InkWell(
-      onTap: () {
-        if (label == "Home") {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => const AnimatedHomePage()),
-          );
-        }
-      },
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            icon,
-            size: 35,
-            color: isActive ? Colors.blue : Colors.grey,
-          ),
-          const SizedBox(height: 5),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: isActive ? Colors.blue : Colors.grey,
-            ),
-          )
-        ],
-      ),
-    );
+  Future<void> _downloadResume(Map<String, dynamic> resume) async {
+    try {
+      final url = resume['file_url'] as String;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Opening: ${resume['file_name']}")),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error opening resume: $e")),
+      );
+    }
   }
 }
 
-// Personal Info Form Bottom Sheet
-class PersonalInfoFormBottomSheet extends StatefulWidget {
+// ==================== COMPANY INFO FORM BOTTOM SHEET ====================
+class CompanyInfoFormBottomSheet extends StatefulWidget {
   final String userId;
-  final String role;
-  final String fullname;
-  final String phone;
-  final String dateOfBirth;
-  final String gender;
-  final String address;
-  final String bio;
   final String companyName;
-  final String companyDescription;
   final String industry;
   final String companySize;
   final String location;
+  final String companyPhone;
+  final String companyEmail;
+  final String websiteUrl;
+  final List<String> industryOptions;
+  final List<String> companySizeOptions;
+  final UserRepository userRepository;
   final VoidCallback onSuccess;
 
-  const PersonalInfoFormBottomSheet({
+  const CompanyInfoFormBottomSheet({
     super.key,
     required this.userId,
-    required this.role,
-    required this.fullname,
-    required this.phone,
-    required this.dateOfBirth,
-    required this.gender,
-    required this.address,
-    required this.bio,
     required this.companyName,
-    required this.companyDescription,
     required this.industry,
     required this.companySize,
     required this.location,
+    required this.companyPhone,
+    required this.companyEmail,
+    required this.websiteUrl,
+    required this.industryOptions,
+    required this.companySizeOptions,
+    required this.userRepository,
     required this.onSuccess,
   });
 
   @override
-  State<PersonalInfoFormBottomSheet> createState() => _PersonalInfoFormBottomSheetState();
+  State<CompanyInfoFormBottomSheet> createState() => _CompanyInfoFormBottomSheetState();
 }
 
-class _PersonalInfoFormBottomSheetState extends State<PersonalInfoFormBottomSheet> {
+class _CompanyInfoFormBottomSheetState extends State<CompanyInfoFormBottomSheet> {
   final _formKey = GlobalKey<FormState>();
-  late TextEditingController _fullnameCtrl;
-  late TextEditingController _phoneCtrl;
-
-  // Job seeker controllers
-  late TextEditingController _dobCtrl;
-  late TextEditingController _addressCtrl;
-  late TextEditingController _bioCtrl;
-  late String _selectedGender;
-
-  // Company controllers
   late TextEditingController _companyNameCtrl;
-  late TextEditingController _companyDescCtrl;
-  late TextEditingController _industryCtrl;
-  late TextEditingController _companySizeCtrl;
   late TextEditingController _locationCtrl;
-
+  late TextEditingController _companyPhoneCtrl;
+  late TextEditingController _companyEmailCtrl;
+  late TextEditingController _websiteUrlCtrl;
+  late String _selectedIndustry;
+  late String _selectedCompanySize;
   bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
-    _fullnameCtrl = TextEditingController(text: widget.fullname);
-    _phoneCtrl = TextEditingController(text: widget.phone);
-
-    if (widget.role == 'JOB_SEEKER') {
-      _dobCtrl = TextEditingController(text: widget.dateOfBirth);
-      _addressCtrl = TextEditingController(text: widget.address);
-      _bioCtrl = TextEditingController(text: widget.bio);
-      _selectedGender = widget.gender;
-    } else {
-      _companyNameCtrl = TextEditingController(text: widget.companyName);
-      _companyDescCtrl = TextEditingController(text: widget.companyDescription);
-      _industryCtrl = TextEditingController(text: widget.industry);
-      _companySizeCtrl = TextEditingController(text: widget.companySize);
-      _locationCtrl = TextEditingController(text: widget.location);
-    }
+    _companyNameCtrl = TextEditingController(text: widget.companyName);
+    _locationCtrl = TextEditingController(text: widget.location);
+    _companyPhoneCtrl = TextEditingController(text: widget.companyPhone);
+    _companyEmailCtrl = TextEditingController(text: widget.companyEmail);
+    _websiteUrlCtrl = TextEditingController(text: widget.websiteUrl);
+    _selectedIndustry = widget.industry;
+    _selectedCompanySize = widget.companySize;
   }
 
   @override
   void dispose() {
-    _fullnameCtrl.dispose();
-    _phoneCtrl.dispose();
-    if (widget.role == 'JOB_SEEKER') {
-      _dobCtrl.dispose();
-      _addressCtrl.dispose();
-      _bioCtrl.dispose();
-    } else {
-      _companyNameCtrl.dispose();
-      _companyDescCtrl.dispose();
-      _industryCtrl.dispose();
-      _companySizeCtrl.dispose();
-      _locationCtrl.dispose();
-    }
+    _companyNameCtrl.dispose();
+    _locationCtrl.dispose();
+    _companyPhoneCtrl.dispose();
+    _companyEmailCtrl.dispose();
+    _websiteUrlCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
+
     setState(() => _isLoading = true);
     try {
-      final supabase = Supabase.instance.client;
-
-      // Update users table
-      await supabase.from('users').update({
-        'fullname': _fullnameCtrl.text.trim(),
-        'phone': _phoneCtrl.text.trim(),
-        'updated_at': DateTime.now().toIso8601String(),
-      }).eq('user_id', widget.userId);
-
-      // Update role-specific tables
-      if (widget.role == 'JOB_SEEKER') {
-        final existingProfile = await supabase
-            .from('job_seeker_profile')
-            .select()
-            .eq('user_id', widget.userId)
-            .maybeSingle();
-
-        final profileData = {
-          'date_of_birth': _dobCtrl.text.isEmpty ? null : _dobCtrl.text,
-          'gender': _selectedGender,
-          'address': _addressCtrl.text,
-          'bio': _bioCtrl.text,
-          'updated_at': DateTime.now().toIso8601String(),
-        };
-
-        if (existingProfile == null) {
-          await supabase.from('job_seeker_profile').insert({
-            'user_id': widget.userId,
-            ...profileData,
-          });
-        } else {
-          await supabase
-              .from('job_seeker_profile')
-              .update(profileData)
-              .eq('user_id', widget.userId);
-        }
-      } else {
-        final existingProfile = await supabase
-            .from('company_profile')
-            .select()
-            .eq('user_id', widget.userId)
-            .maybeSingle();
-
-        final profileData = {
-          'company_name': _companyNameCtrl.text.trim(),
-          'company_description': _companyDescCtrl.text.trim(),
-          'industry': _industryCtrl.text.trim(),
-          'company_size': _companySizeCtrl.text.trim(),
-          'location': _locationCtrl.text.trim(),
-        };
-
-        if (existingProfile == null) {
-          await supabase.from('company_profile').insert({
-            'user_id': widget.userId,
-            ...profileData,
-          });
-        } else {
-          await supabase
-              .from('company_profile')
-              .update(profileData)
-              .eq('user_id', widget.userId);
-        }
-      }
+      await widget.userRepository.updateCompanyProfile(widget.userId, {
+        'company_name': _companyNameCtrl.text.trim(),
+        'industry': _selectedIndustry,
+        'company_size': _selectedCompanySize,
+        'location': _locationCtrl.text.trim(),
+      });
 
       widget.onSuccess();
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Profile updated successfully!")),
-      );
+      if (mounted) Navigator.pop(context);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Company info updated successfully!")),
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: $e")),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error: $e")),
+        );
+      }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -1110,8 +1462,380 @@ class _PersonalInfoFormBottomSheetState extends State<PersonalInfoFormBottomShee
                 ),
               ),
               const SizedBox(height: 20),
+              const Text(
+                "Edit Company Information",
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              TextFormField(
+                controller: _companyNameCtrl,
+                decoration: const InputDecoration(
+                  labelText: "Company Name",
+                  border: OutlineInputBorder(),
+                ),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return "Please enter company name";
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+
+              DropdownButtonFormField<String>(
+                value: _selectedIndustry.isEmpty ? null : _selectedIndustry,
+                decoration: const InputDecoration(
+                  labelText: "Industry",
+                  border: OutlineInputBorder(),
+                ),
+                items: widget.industryOptions.map((industry) {
+                  return DropdownMenuItem(
+                    value: industry,
+                    child: Text(industry),
+                  );
+                }).toList(),
+                onChanged: (value) {
+                  setState(() {
+                    _selectedIndustry = value!;
+                  });
+                },
+              ),
+              const SizedBox(height: 16),
+
+              DropdownButtonFormField<String>(
+                value: _selectedCompanySize.isEmpty ? null : _selectedCompanySize,
+                decoration: const InputDecoration(
+                  labelText: "Company Size",
+                  border: OutlineInputBorder(),
+                ),
+                items: widget.companySizeOptions.map((size) {
+                  return DropdownMenuItem(
+                    value: size,
+                    child: Text(size),
+                  );
+                }).toList(),
+                onChanged: (value) {
+                  setState(() {
+                    _selectedCompanySize = value!;
+                  });
+                },
+              ),
+              const SizedBox(height: 16),
+
+              TextFormField(
+                controller: _locationCtrl,
+                decoration: const InputDecoration(
+                  labelText: "Location",
+                  border: OutlineInputBorder(),
+                ),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return "Please enter location";
+                  }
+                  return null;
+                },
+              ),
+
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: _isLoading ? null : _save,
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  child: _isLoading
+                      ? const SizedBox(
+                    height: 20,
+                    width: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                      : const Text("Save Changes"),
+                ),
+              ),
+              const SizedBox(height: 20),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ==================== COMPANY DESCRIPTION FORM BOTTOM SHEET ====================
+class CompanyDescriptionFormBottomSheet extends StatefulWidget {
+  final String userId;
+  final String companyDescription;
+  final UserRepository userRepository;
+  final VoidCallback onSuccess;
+
+  const CompanyDescriptionFormBottomSheet({
+    super.key,
+    required this.userId,
+    required this.companyDescription,
+    required this.userRepository,
+    required this.onSuccess,
+  });
+
+  @override
+  State<CompanyDescriptionFormBottomSheet> createState() => _CompanyDescriptionFormBottomSheetState();
+}
+
+class _CompanyDescriptionFormBottomSheetState extends State<CompanyDescriptionFormBottomSheet> {
+  final _formKey = GlobalKey<FormState>();
+  late TextEditingController _descriptionCtrl;
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _descriptionCtrl = TextEditingController(text: widget.companyDescription);
+  }
+
+  @override
+  void dispose() {
+    _descriptionCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    setState(() => _isLoading = true);
+    try {
+      await widget.userRepository.updateCompanyProfile(widget.userId, {
+        'company_description': _descriptionCtrl.text.trim(),
+      });
+
+      widget.onSuccess();
+      if (mounted) Navigator.pop(context);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Company description updated!")),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error: $e")),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+        left: 20,
+        right: 20,
+        top: 20,
+      ),
+      child: SingleChildScrollView(
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                "Edit Company Description",
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 20),
+              TextFormField(
+                controller: _descriptionCtrl,
+                maxLines: 8,
+                decoration: const InputDecoration(
+                  labelText: "Company Description",
+                  hintText: "Tell us about your company...",
+                  border: OutlineInputBorder(),
+                  alignLabelWithHint: true,
+                ),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: _isLoading ? null : _save,
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  child: _isLoading
+                      ? const SizedBox(
+                    height: 20,
+                    width: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                      : const Text("Save Description"),
+                ),
+              ),
+              const SizedBox(height: 20),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ==================== PERSONAL INFO FORM BOTTOM SHEET ====================
+class PersonalInfoFormBottomSheet extends StatefulWidget {
+  final String userId;
+  final String role;
+  final String fullname;
+  final String phone;
+  final String dateOfBirth;
+  final String gender;
+  final String address;
+  final String bio;
+  final String companyName;
+  final String companyDescription;
+  final String industry;
+  final String companySize;
+  final String location;
+  final UserRepository userRepository;
+  final VoidCallback onSuccess;
+
+  const PersonalInfoFormBottomSheet({
+    super.key,
+    required this.userId,
+    required this.role,
+    required this.fullname,
+    required this.phone,
+    required this.dateOfBirth,
+    required this.gender,
+    required this.address,
+    required this.bio,
+    required this.companyName,
+    required this.companyDescription,
+    required this.industry,
+    required this.companySize,
+    required this.location,
+    required this.userRepository,
+    required this.onSuccess,
+  });
+
+  @override
+  State<PersonalInfoFormBottomSheet> createState() => _PersonalInfoFormBottomSheetState();
+}
+
+class _PersonalInfoFormBottomSheetState extends State<PersonalInfoFormBottomSheet> {
+  final _formKey = GlobalKey<FormState>();
+  late TextEditingController _fullnameCtrl;
+  late TextEditingController _phoneCtrl;
+  late TextEditingController _dobCtrl;
+  late TextEditingController _addressCtrl;
+  late TextEditingController _bioCtrl;
+  late String _selectedGender;
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _fullnameCtrl = TextEditingController(text: widget.fullname);
+    _phoneCtrl = TextEditingController(text: widget.phone);
+    _dobCtrl = TextEditingController(text: widget.dateOfBirth);
+    _addressCtrl = TextEditingController(text: widget.address);
+    _bioCtrl = TextEditingController(text: widget.bio);
+    _selectedGender = widget.gender;
+  }
+
+  @override
+  void dispose() {
+    _fullnameCtrl.dispose();
+    _phoneCtrl.dispose();
+    _dobCtrl.dispose();
+    _addressCtrl.dispose();
+    _bioCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    setState(() => _isLoading = true);
+    try {
+      await widget.userRepository.updateUser(widget.userId, {
+        'fullname': _fullnameCtrl.text.trim(),
+        'phone': _phoneCtrl.text.trim(),
+      });
+
+      if (widget.role == 'JOB_SEEKER') {
+        await widget.userRepository.updateJobSeekerProfile(widget.userId, {
+          'date_of_birth': _dobCtrl.text.isEmpty ? null : _dobCtrl.text,
+          'gender': _selectedGender,
+          'address': _addressCtrl.text,
+          'bio': _bioCtrl.text,
+        });
+      }
+
+      widget.onSuccess();
+      if (mounted) Navigator.pop(context);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Profile updated successfully!")),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error: $e")),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bool isJobSeeker = widget.role == 'JOB_SEEKER';
+
+    return Container(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+        left: 20,
+        right: 20,
+        top: 20,
+      ),
+      child: SingleChildScrollView(
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
               Text(
-                "Edit Personal Information",
+                isJobSeeker ? "Edit Personal Information" : "Edit Contact Person",
                 style: const TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
@@ -1136,14 +1860,15 @@ class _PersonalInfoFormBottomSheetState extends State<PersonalInfoFormBottomShee
 
               TextFormField(
                 controller: _phoneCtrl,
+                keyboardType: TextInputType.phone,
                 decoration: const InputDecoration(
                   labelText: "Phone Number",
                   border: OutlineInputBorder(),
                 ),
               ),
-              const SizedBox(height: 16),
 
-              if (widget.role == 'JOB_SEEKER') ...[
+              if (isJobSeeker) ...[
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _dobCtrl,
                   decoration: const InputDecoration(
@@ -1189,51 +1914,6 @@ class _PersonalInfoFormBottomSheetState extends State<PersonalInfoFormBottomShee
                     border: OutlineInputBorder(),
                   ),
                 ),
-              ] else ...[
-                TextFormField(
-                  controller: _companyNameCtrl,
-                  decoration: const InputDecoration(
-                    labelText: "Company Name",
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                TextFormField(
-                  controller: _companyDescCtrl,
-                  maxLines: 3,
-                  decoration: const InputDecoration(
-                    labelText: "Company Description",
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                TextFormField(
-                  controller: _industryCtrl,
-                  decoration: const InputDecoration(
-                    labelText: "Industry",
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                TextFormField(
-                  controller: _companySizeCtrl,
-                  decoration: const InputDecoration(
-                    labelText: "Company Size",
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                TextFormField(
-                  controller: _locationCtrl,
-                  decoration: const InputDecoration(
-                    labelText: "Location",
-                    border: OutlineInputBorder(),
-                  ),
-                ),
               ],
 
               const SizedBox(height: 24),
@@ -1262,16 +1942,21 @@ class _PersonalInfoFormBottomSheetState extends State<PersonalInfoFormBottomShee
   }
 }
 
-// Skill Form Bottom Sheet
+// ============================================================================
+// SKILL FORM BOTTOM SHEET
+// ============================================================================
+
 class SkillFormBottomSheet extends StatefulWidget {
   final String userId;
   final Map<String, dynamic>? skill;
+  final UserRepository userRepository;
   final VoidCallback onSuccess;
 
   const SkillFormBottomSheet({
     super.key,
     required this.userId,
     this.skill,
+    required this.userRepository,
     required this.onSuccess,
   });
 
@@ -1305,37 +1990,29 @@ class _SkillFormBottomSheetState extends State<SkillFormBottomSheet> {
 
     setState(() => _isLoading = true);
     try {
-      final supabase = Supabase.instance.client;
-
       if (widget.skill == null) {
-        await supabase.from('skills').insert({
-          'user_id': widget.userId,
-          'skill_name': _skillNameCtrl.text.trim(),
-          'skill_level': _selectedLevel,
-        });
+        await widget.userRepository.addSkill(widget.userId, _skillNameCtrl.text.trim(), _selectedLevel);
       } else {
-        await supabase
-            .from('skills')
-            .update({
-          'skill_name': _skillNameCtrl.text.trim(),
-          'skill_level': _selectedLevel,
-        })
-            .eq('skill_id', widget.skill!['skill_id']);
+        await widget.userRepository.updateSkill(widget.skill!['skill_id'], _skillNameCtrl.text.trim(), _selectedLevel);
       }
 
       widget.onSuccess();
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(widget.skill == null ? "Skill added" : "Skill updated"),
-        ),
-      );
+      if (mounted) Navigator.pop(context);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(widget.skill == null ? "Skill added" : "Skill updated"),
+          ),
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: $e")),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error: $e")),
+        );
+      }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -1431,16 +2108,21 @@ class _SkillFormBottomSheetState extends State<SkillFormBottomSheet> {
   }
 }
 
-// Education Form Bottom Sheet
+// ============================================================================
+// EDUCATION FORM BOTTOM SHEET
+// ============================================================================
+
 class EducationFormBottomSheet extends StatefulWidget {
   final String userId;
   final Map<String, dynamic>? education;
+  final UserRepository userRepository;
   final VoidCallback onSuccess;
 
   const EducationFormBottomSheet({
     super.key,
     required this.userId,
     this.education,
+    required this.userRepository,
     required this.onSuccess,
   });
 
@@ -1487,9 +2169,7 @@ class _EducationFormBottomSheetState extends State<EducationFormBottomSheet> {
 
     setState(() => _isLoading = true);
     try {
-      final supabase = Supabase.instance.client;
       final data = {
-        'user_id': widget.userId,
         'institution_name': _institutionCtrl.text.trim(),
         'qualification': _qualificationCtrl.text.trim(),
         'field_of_study': _fieldCtrl.text.trim(),
@@ -1499,27 +2179,28 @@ class _EducationFormBottomSheetState extends State<EducationFormBottomSheet> {
       };
 
       if (widget.education == null) {
-        await supabase.from('education').insert(data);
+        await widget.userRepository.addEducation(widget.userId, data);
       } else {
-        await supabase
-            .from('education')
-            .update(data)
-            .eq('education_id', widget.education!['education_id']);
+        await widget.userRepository.updateEducation(widget.education!['education_id'], data);
       }
 
       widget.onSuccess();
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(widget.education == null ? "Education added" : "Education updated"),
-        ),
-      );
+      if (mounted) Navigator.pop(context);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(widget.education == null ? "Education added" : "Education updated"),
+          ),
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: $e")),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error: $e")),
+        );
+      }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -1640,16 +2321,21 @@ class _EducationFormBottomSheetState extends State<EducationFormBottomSheet> {
   }
 }
 
-// Work Experience Form Bottom Sheet
+// ============================================================================
+// WORK FORM BOTTOM SHEET
+// ============================================================================
+
 class WorkFormBottomSheet extends StatefulWidget {
   final String userId;
   final Map<String, dynamic>? work;
+  final UserRepository userRepository;
   final VoidCallback onSuccess;
 
   const WorkFormBottomSheet({
     super.key,
     required this.userId,
     this.work,
+    required this.userRepository,
     required this.onSuccess,
   });
 
@@ -1693,9 +2379,7 @@ class _WorkFormBottomSheetState extends State<WorkFormBottomSheet> {
 
     setState(() => _isLoading = true);
     try {
-      final supabase = Supabase.instance.client;
       final data = {
-        'user_id': widget.userId,
         'company_name': _companyCtrl.text.trim(),
         'job_title': _titleCtrl.text.trim(),
         'start_date': _startDateCtrl.text.isEmpty ? null : _startDateCtrl.text,
@@ -1704,27 +2388,28 @@ class _WorkFormBottomSheetState extends State<WorkFormBottomSheet> {
       };
 
       if (widget.work == null) {
-        await supabase.from('experience').insert(data);
+        await widget.userRepository.addExperience(widget.userId, data);
       } else {
-        await supabase
-            .from('experience')
-            .update(data)
-            .eq('experience_id', widget.work!['experience_id']);
+        await widget.userRepository.updateExperience(widget.work!['experience_id'], data);
       }
 
       widget.onSuccess();
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(widget.work == null ? "Work experience added" : "Work experience updated"),
-        ),
-      );
+      if (mounted) Navigator.pop(context);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(widget.work == null ? "Work experience added" : "Work experience updated"),
+          ),
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: $e")),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error: $e")),
+        );
+      }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -1843,7 +2528,10 @@ class _WorkFormBottomSheetState extends State<WorkFormBottomSheet> {
   }
 }
 
-// Skill Chip Widget
+// ============================================================================
+// SKILL CHIP WIDGET
+// ============================================================================
+
 class SkillChip extends StatelessWidget {
   final Map<String, dynamic> skill;
   final VoidCallback onEdit;
@@ -1863,7 +2551,7 @@ class SkillChip extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(skill['skill_name']),
-          if (skill['skill_level'] != null)
+          if (skill['skill_level'] != null && skill['skill_level'].toString().isNotEmpty)
             Text(
               skill['skill_level'],
               style: const TextStyle(fontSize: 10),
@@ -1907,7 +2595,10 @@ class SkillChip extends StatelessWidget {
   }
 }
 
-// Education Item Widget
+// ============================================================================
+// EDUCATION ITEM WIDGET
+// ============================================================================
+
 class EducationItem extends StatelessWidget {
   final Map<String, dynamic> education;
   final VoidCallback onEdit;
@@ -1967,7 +2658,7 @@ class EducationItem extends StatelessWidget {
                 if (education['start_date'] != null)
                   Text(
                     _formatDate(education['start_date']) +
-                        (education['end_date'] != null
+                        (education['end_date'] != null && education['end_date'].toString().isNotEmpty
                             ? ' - ${_formatDate(education['end_date'])}'
                             : ' - Present'),
                     style: TextStyle(
@@ -2013,7 +2704,10 @@ class EducationItem extends StatelessWidget {
   }
 }
 
-// Work Item Widget
+// ============================================================================
+// WORK ITEM WIDGET
+// ============================================================================
+
 class WorkItem extends StatelessWidget {
   final Map<String, dynamic> work;
   final VoidCallback onEdit;
@@ -2071,7 +2765,7 @@ class WorkItem extends StatelessWidget {
                 if (work['start_date'] != null)
                   Text(
                     _formatDate(work['start_date']) +
-                        (work['end_date'] != null
+                        (work['end_date'] != null && work['end_date'].toString().isNotEmpty
                             ? ' - ${_formatDate(work['end_date'])}'
                             : ' - Present'),
                     style: TextStyle(
@@ -2117,7 +2811,10 @@ class WorkItem extends StatelessWidget {
   }
 }
 
-// Resume Item Widget
+// ============================================================================
+// RESUME ITEM WIDGET
+// ============================================================================
+
 class ResumeItem extends StatelessWidget {
   final Map<String, dynamic> resume;
   final VoidCallback onDelete;

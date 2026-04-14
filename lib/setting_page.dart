@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:jobify/edit_profile_page.dart';
 import 'package:jobify/profile_page.dart';
+import 'package:jobify/data/user_repository.dart';
+import 'package:jobify/data/local_db.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SettingPage extends StatefulWidget {
@@ -12,10 +13,12 @@ class SettingPage extends StatefulWidget {
 
 class _SettingPageState extends State<SettingPage> {
   final supabase = Supabase.instance.client;
+  final UserRepository _userRepo = UserRepository();
 
   String? role;
   String? userName;
   String? companyName;
+  String? profileImageUrl;
 
   bool showLogoutDialog = false;
 
@@ -26,25 +29,41 @@ class _SettingPageState extends State<SettingPage> {
   }
 
   Future<void> fetchUserInfo() async {
-    final user = supabase.auth.currentUser;
-    if (user == null) return;
+    // Use cached user data
+    final user = await _userRepo.getCurrentUser();
 
-    final userData = await supabase
-        .from('users')
-        .select()
-        .eq('user_id', user.id)
-        .single();
+    if (user != null && mounted) {
+      setState(() {
+        role = user.role.toLowerCase();
+        userName = user.fullname;
+        profileImageUrl = user.profileImageUrl;
+      });
+    }
 
-    setState(() {
-      role = userData['role']; // 'job-seeker' or 'employer'
-      userName = userData['fullname'] ?? '';
-      companyName = userData['company_name'] ?? '';
-    });
+    // Fetch company name if employer (from cache)
+    if (role?.toUpperCase() == 'POSTER') {
+      final userId = supabase.auth.currentUser?.id;
+      if (userId != null) {
+        final companyProfile = await LocalDB.getCachedCompanyProfile(userId);
+        if (companyProfile != null && mounted) {
+          setState(() {
+            companyName = companyProfile['company_name'];
+          });
+        }
+      }
+    }
   }
 
-  void handleLogout() {
-    supabase.auth.signOut();
-    Navigator.pushReplacementNamed(context, '/welcome');
+  void handleLogout() async {
+    // Clear user cache on logout
+    final userId = supabase.auth.currentUser?.id;
+    if (userId != null) {
+      await LocalDB.clearUserCache(userId);
+    }
+    await supabase.auth.signOut();
+    if (mounted) {
+      Navigator.pushReplacementNamed(context, '/');
+    }
   }
 
   Widget buildSectionHeader(String title) {
@@ -52,7 +71,7 @@ class _SettingPageState extends State<SettingPage> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: const BoxDecoration(
         border: Border(
-          bottom: BorderSide(color: Color(0xFFE5E7EB)), // gray-100
+          bottom: BorderSide(color: Color(0xFFE5E7EB)),
         ),
       ),
       child: Text(
@@ -93,7 +112,7 @@ class _SettingPageState extends State<SettingPage> {
   }
 
   Widget buildProfileSummary() {
-    final bool isJobSeeker = role == 'job-seeker';
+    final bool isJobSeeker = role == 'job_seeker';
     return Container(
       padding: const EdgeInsets.all(16),
       margin: const EdgeInsets.symmetric(vertical: 8),
@@ -109,11 +128,16 @@ class _SettingPageState extends State<SettingPage> {
           CircleAvatar(
             radius: 32,
             backgroundColor: Colors.grey[200],
-            child: Icon(
+            backgroundImage: profileImageUrl != null && profileImageUrl!.isNotEmpty
+                ? NetworkImage(profileImageUrl!)
+                : null,
+            child: profileImageUrl == null || profileImageUrl!.isEmpty
+                ? Icon(
               isJobSeeker ? Icons.person : Icons.business,
               size: 32,
               color: Colors.grey[400],
-            ),
+            )
+                : null,
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -121,7 +145,7 @@ class _SettingPageState extends State<SettingPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  isJobSeeker ? userName ?? '' : companyName ?? '',
+                  isJobSeeker ? userName ?? '' : companyName ?? userName ?? '',
                   style: const TextStyle(
                       fontWeight: FontWeight.bold, fontSize: 16),
                 ),
@@ -207,7 +231,7 @@ class _SettingPageState extends State<SettingPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF9FAFB), // gray-50
+      backgroundColor: const Color(0xFFF9FAFB),
       body: SafeArea(
         child: Stack(
           children: [
@@ -241,7 +265,6 @@ class _SettingPageState extends State<SettingPage> {
                     child: Column(
                       children: [
                         buildSectionHeader('Profile'),
-
                         buildListItem(Icons.edit, 'My Profile', () {
                           Navigator.push(
                             context,
@@ -249,23 +272,9 @@ class _SettingPageState extends State<SettingPage> {
                                 builder: (_) => const ProfilePage()),
                           );
                         }),
-
-                        buildListItem(Icons.edit, 'Edit Profile', () {
-                          if (role == 'POSTER') {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (_) => const EditProfilePage()),
-                            );
-                          } else {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (_) => const EditProfilePage()),
-                            );
-                          }
-                        }),
-                        if (role == 'JOB_SEEKER')
+                        if (role == 'job_seeker')
                           buildListItem(Icons.work, 'My Resume', () {}),
-                        if (role == 'POSTER')
+                        if (role == 'poster')
                           buildListItem(Icons.dashboard, 'My Dashboard', () {}),
                       ],
                     ),
@@ -292,7 +301,7 @@ class _SettingPageState extends State<SettingPage> {
                   ),
 
                   // Stats (Job Seeker Only)
-                  if (role == 'job-seeker') buildStats(),
+                  if (role == 'job_seeker') buildStats(),
 
                   // Logout Button
                   const SizedBox(height: 16),

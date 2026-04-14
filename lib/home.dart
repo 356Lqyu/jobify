@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:jobify/setting_page.dart';
 import 'package:jobify/social/social_feed.dart';
-import 'package:jobify/user.dart';
+import 'package:jobify/users.dart';
 import 'package:jobify/bottom_bar.dart';
-import 'package:jobify/company_profile_page.dart';
 
 class HomePage extends StatefulWidget {
-  final User user;
+  final Users user;
   const HomePage({super.key, required this.user});
 
   @override
@@ -33,7 +33,7 @@ class _HomePageState extends State<HomePage> {
         SocialFeedPage(user: widget.user),
         const DiscoverScreen(),
         const AppliedScreen(),
-        ProfileScreen(user: widget.user),
+        const SettingPage(),
       ];
 
       _items = const [
@@ -63,7 +63,7 @@ class _HomePageState extends State<HomePage> {
         SocialFeedPage(user: widget.user),
         const TalentScreen(),
         const PostScreen(),
-        CompanyProfilePage(companyId: widget.user.userId),
+        const SettingPage(),
       ];
 
       _items = const [
@@ -127,7 +127,7 @@ class AppliedScreen extends StatelessWidget {
 }
 
 class ProfileScreen extends StatelessWidget {
-  final User user;
+  final Users user;
   const ProfileScreen({super.key, required this.user});
 
   @override

@@ -6,10 +6,10 @@ import 'package:jobify/social/post_feed_setting.dart';
 import 'package:jobify/social/social_feed_provider.dart';
 import 'package:jobify/social/social_post_bottom_sheet.dart';
 import 'package:jobify/data/feed_repository.dart';
-import 'package:jobify/user.dart';
+import 'package:jobify/users.dart';
 
 class SocialFeedPage extends StatefulWidget {
-  final User user;
+  final Users user;
   const SocialFeedPage({super.key, required this.user});
 
   @override
@@ -321,7 +321,7 @@ class _SearchField extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _ForYouTab extends StatelessWidget {
-  final User user;
+  final Users user;
   const _ForYouTab({required this.user});
 
 
@@ -382,7 +382,7 @@ class _ForYouTab extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _FollowingTab extends StatelessWidget {
-  final User user;
+  final Users user;
   const _FollowingTab({required this.user});
 
   @override
@@ -438,7 +438,7 @@ class _FollowingTab extends StatelessWidget {
 
 class _FeedCard extends StatelessWidget {
   final FeedPost post;
-  final User     currentUser;
+  final Users     currentUser;
   const _FeedCard({required this.post, required this.currentUser});
 
   @override

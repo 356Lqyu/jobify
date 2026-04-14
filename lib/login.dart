@@ -3,8 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:jobify/auth/auth_service.dart';
 import 'package:jobify/home.dart';
 import 'package:jobify/registration.dart';
-import 'package:jobify/user.dart';
+import 'package:jobify/users.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide User;
+import 'data/user_repository.dart';
 
 ///import 'package:intl/intl.dart' as intl;
 
@@ -90,11 +91,16 @@ class _LoginState extends State<Login> {
       final userId = res.user!.id;
       final userData = await supabase
           .from('users')
-          .select('user_id, role, fullname, phone, profile_image_url, created_at, updated_at, email')
+          .select('user_id, role, fullname, profile_image_url, created_at, updated_at, email, phone')
           .eq('user_id', userId)
           .single();
 
-      final user = User.fromJson(userData);
+      final user = Users.fromJson(userData);
+
+      // Cache the user immediately
+      final userRepo = UserRepository();
+      await userRepo.cacheFullProfileAfterLogin(userId);
+
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => HomePage(user: user)),

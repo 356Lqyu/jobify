@@ -1,8 +1,11 @@
+// home.dart - Updated version
 import 'package:flutter/material.dart';
 import 'package:jobify/setting_page.dart';
 import 'package:jobify/social/social_feed.dart';
 import 'package:jobify/users.dart';
 import 'package:jobify/bottom_bar.dart';
+import 'job/my_applications.dart';
+import 'job/company_jobs_screen.dart';
 
 class HomePage extends StatefulWidget {
   final Users user;
@@ -32,7 +35,7 @@ class _HomePageState extends State<HomePage> {
       _screens = [
         SocialFeedPage(user: widget.user),
         const DiscoverScreen(),
-        const AppliedScreen(),
+        const MyApplicationsPage(),
         const SettingPage(),
       ];
 
@@ -63,7 +66,7 @@ class _HomePageState extends State<HomePage> {
         SocialFeedPage(user: widget.user),
         const TalentScreen(),
         const PostScreen(),
-        const SettingPage(),
+        CompanyJobsScreen(userId: widget.user.userId),
       ];
 
       _items = const [
@@ -114,27 +117,6 @@ class DiscoverScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Center(child: Text("Discover Screen"));
-  }
-}
-
-class AppliedScreen extends StatelessWidget {
-  const AppliedScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const Center(child: Text("Applied Screen"));
-  }
-}
-
-class ProfileScreen extends StatelessWidget {
-  final Users user;
-  const ProfileScreen({super.key, required this.user});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Text("Profile: ${user.fullname}"),
-    );
   }
 }
 

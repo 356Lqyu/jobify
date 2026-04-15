@@ -7,6 +7,7 @@ import 'package:jobify/social/social_feed_provider.dart';
 import 'package:jobify/social/social_post_bottom_sheet.dart';
 import 'package:jobify/data/feed_repository.dart';
 import 'package:jobify/users.dart';
+import 'package:jobify/job/apply_for_job.dart';
 
 class SocialFeedPage extends StatefulWidget {
   final Users user;
@@ -1106,12 +1107,53 @@ class _LinkedJobCard extends StatelessWidget {
                   label: job.jobType),
             ],
           ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: () => _applyForJob(context),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF2563EB),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: const Text('Apply Now',
+                  style: TextStyle(fontWeight: FontWeight.w600)),
+            ),
+          ),
         ],
       ),
     );
   }
-}
 
+
+  // In social_feed.dart, update the _LinkedJobCard's apply button
+
+  void _applyForJob(BuildContext context) {
+    final user = context.read<SocialFeedProvider>().userId;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ApplyForJobPage(
+          job: {
+            'job_id': job.jobId,
+            'job_title': job.jobTitle,
+            'company_name': job.companyName,
+            'location': job.location,
+            'salary_min': job.salaryMin,
+            'salary_max': job.salaryMax,
+            'job_type': job.jobType,
+            'description': job.description,
+          },
+          userId: user,
+        ),
+      ),
+    );
+  }
+}
 // ─────────────────────────────────────────────────────────────────────────────
 // SMALL REUSABLE WIDGETS
 // ─────────────────────────────────────────────────────────────────────────────

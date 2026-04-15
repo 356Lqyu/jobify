@@ -225,6 +225,29 @@ class LocalDB {
       FOREIGN KEY (user_id) REFERENCES cached_users (user_id) ON DELETE CASCADE
     )
   ''');
+
+  //14. Cached job applications
+    await db.execute('''
+  CREATE TABLE IF NOT EXISTS cached_job_applications (
+    application_id    TEXT PRIMARY KEY,
+    user_id           TEXT NOT NULL,
+    job_id            TEXT NOT NULL,
+    job_title         TEXT NOT NULL,
+    company_name      TEXT NOT NULL,
+    company_logo      TEXT,
+    location          TEXT,
+    salary_min        REAL,
+    salary_max        REAL,
+    job_type          TEXT,
+    description       TEXT,
+    resume_url        TEXT NOT NULL,
+    status            TEXT NOT NULL DEFAULT 'pending',
+    applied_at        TEXT NOT NULL,
+    updated_at        TEXT NOT NULL,
+    cached_at         TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES cached_users (user_id) ON DELETE CASCADE
+  )
+  ''');
   }
 
   static Future<void> _onUpgrade(Database db, int oldV, int newV) async {
@@ -442,7 +465,98 @@ class LocalDB {
     return rows.map((r) => r['job_id'] as String).toList();
   }
 
+  // ══════════════════════════════════════════════════════════════════════════
+  // JOBS APPLICATION
+  // ══════════════════════════════════════════════════════════════════════════
+  static Future<void> cacheJobApplications(
+      List<Map<String, dynamic>> applications, String userId) async {
+    final db = await LocalDB.db;
+    // Delete old applications for this user
+    await db.delete('cached_job_applications', where: 'user_id = ?', whereArgs: [userId]);
 
+    final batch = db.batch();
+    final now = DateTime.now().toIso8601String();
+    for (final app in applications) {
+      batch.insert('cached_job_applications', {
+        'application_id': app['application_id'] as String,
+        'user_id': userId,
+        'job_id': app['job_id'] as String,
+        'job_title': app['job_title'] ?? '',
+        'company_name': app['company_name'] ?? '',
+        'company_logo': app['company_logo'],
+        'location': app['location'] ?? '',
+        'salary_min': app['salary_min'],
+        'salary_max': app['salary_max'],
+        'job_type': app['job_type'] ?? '',
+        'description': app['description'] ?? '',
+        'resume_url': app['resume_url'] ?? '',
+        'status': app['status'] ?? 'pending',
+        'applied_at': app['applied_at'] ?? DateTime.now().toIso8601String(),
+        'updated_at': app['updated_at'] ?? DateTime.now().toIso8601String(),
+        'cached_at': now,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+    }
+    await batch.commit(noResult: true);
+  }
+
+  static Future<void> cacheJobApplication(
+      Map<String, dynamic> application, String userId) async {
+    final db = await LocalDB.db;
+    await db.insert('cached_job_applications', {
+      'application_id': application['application_id'] as String,
+      'user_id': userId,
+      'job_id': application['job_id'] as String,
+      'job_title': application['job_title'] ?? '',
+      'company_name': application['company_name'] ?? '',
+      'company_logo': application['company_logo'],
+      'location': application['location'] ?? '',
+      'salary_min': application['salary_min'],
+      'salary_max': application['salary_max'],
+      'job_type': application['job_type'] ?? '',
+      'description': application['description'] ?? '',
+      'resume_url': application['resume_url'] ?? '',
+      'status': application['status'] ?? 'pending',
+      'applied_at': application['applied_at'] ?? DateTime.now().toIso8601String(),
+      'updated_at': application['updated_at'] ?? DateTime.now().toIso8601String(),
+      'cached_at': DateTime.now().toIso8601String(),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  static Future<List<Map<String, dynamic>>> getCachedJobApplications(
+      String userId) async {
+    final db = await LocalDB.db;
+    final result = await db.query(
+      'cached_job_applications',
+      where: 'user_id = ?',
+      whereArgs: [userId],
+      orderBy: 'applied_at DESC',
+    );
+    return result;
+  }
+
+  static Future<void> deleteCachedJobApplication(
+      String applicationId, String userId) async {
+    final db = await LocalDB.db;
+    await db.delete(
+      'cached_job_applications',
+      where: 'application_id = ? AND user_id = ?',
+      whereArgs: [applicationId, userId],
+    );
+  }
+
+  static Future<void> updateCachedApplicationStatus(
+      String applicationId, String newStatus) async {
+    final db = await LocalDB.db;
+    await db.update(
+      'cached_job_applications',
+      {
+        'status': newStatus,
+        'updated_at': DateTime.now().toIso8601String(),
+      },
+      where: 'application_id = ?',
+      whereArgs: [applicationId],
+    );
+  }
   // ══════════════════════════════════════════════════════════════════════════
   // Users
   // ══════════════════════════════════════════════════════════════════════════

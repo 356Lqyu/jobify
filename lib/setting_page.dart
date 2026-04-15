@@ -3,6 +3,7 @@ import 'package:jobify/profile_page.dart';
 import 'package:jobify/data/user_repository.dart';
 import 'package:jobify/data/local_db.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:jobify/job/resume_management_page.dart';
 
 class SettingPage extends StatefulWidget {
   const SettingPage({super.key});
@@ -273,7 +274,12 @@ class _SettingPageState extends State<SettingPage> {
                           );
                         }),
                         if (role == 'job_seeker')
-                          buildListItem(Icons.work, 'My Resume', () {}),
+                          buildListItem(Icons.work, 'My Resume', () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const ResumeManagementPage()),
+                            );
+                          }),
                         if (role == 'poster')
                           buildListItem(Icons.dashboard, 'My Dashboard', () {}),
                       ],

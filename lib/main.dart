@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:jobify/edit_profile_page.dart';
 import 'package:jobify/profile_page.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:jobify/registration.dart';
-import 'company_profile_page.dart';
 import 'login.dart';
 import 'setting_page.dart';
 
@@ -36,7 +34,6 @@ class MainApp extends StatelessWidget {
         '/': (context) => const AnimatedHomePage(),
         '/Login': (context) => const Login(),
         '/ProfilePage': (context) => const ProfilePage(),
-        '/EditProfilePage': (context) => const EditProfilePage(),
         '/Settings': (context) => const SettingPage(),
       },
       debugShowCheckedModeBanner: false,

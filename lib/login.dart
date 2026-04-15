@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:jobify/auth/auth_service.dart';
 import 'package:jobify/home.dart';
 import 'package:jobify/registration.dart';
-import 'package:jobify/user.dart';
+import 'package:jobify/users.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide User;
+import 'data/user_repository.dart';
+
+///import 'package:intl/intl.dart' as intl;
 
 class Login extends StatefulWidget {
   const Login({super.key});
@@ -13,27 +17,43 @@ class Login extends StatefulWidget {
 }
 
 class _LoginState extends State<Login> {
+
+  //get auth service
   final authService = AuthService();
+
+  //controller
   final emailCtrl = TextEditingController();
   final passwordCtrl = TextEditingController();
 
+  // variable for error message
   String? passwordError;
   String? emailError;
+
+  // variable of password visibility
   bool isPasswordVisible = false;
-  bool isLoading = false;
+
+  //set focus
+  final focusNode = FocusNode();
+
+  //form controller
   final _formKey = GlobalKey<FormState>();
 
+  // Login function
   void login() async {
     final email = emailCtrl.text.trim();
     final password = passwordCtrl.text;
 
+    // Reset previous errors
     setState(() {
       emailError = null;
       passwordError = null;
     });
 
     bool isValid = true;
-    final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+
+    // Email validation
+    RegExp emailRegex =
+    RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
 
     if (email.isEmpty) {
       emailError = "Email is required";
@@ -48,43 +68,48 @@ class _LoginState extends State<Login> {
       isValid = false;
     }
 
+    setState(() {});
     if (!isValid) return;
 
-    setState(() => isLoading = true);
 
     try {
       final res = await authService.signInWithEmailAndPassword(email, password);
-      if (res.user == null) throw Exception("Invalid login");
 
-      final supabase = Supabase.instance.client;
-      final userId = res.user!.id;
+      if (res.user == null) {
+        throw Exception("Invalid login");
+      }
 
-      // ✅ Fetch ALL required fields for the User model
-      final userData = await supabase
-          .from('users')
-          .select('user_id, role, fullname, phone, profile_image_url, created_at, updated_at, email')
-          .eq('user_id', userId)
-          .single();
-
-      final user = User.fromJson(userData);
-
-      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Login Successful!")),
+      );
 
       emailCtrl.clear();
       passwordCtrl.clear();
 
-      // ✅ Navigate to HomePage – role‑based UI is handled inside HomePage
+      // Fetch role from 'users' table
+      final supabase = Supabase.instance.client;
+      final userId = res.user!.id;
+      final userData = await supabase
+          .from('users')
+          .select('user_id, role, fullname, profile_image_url, created_at, updated_at, email, phone')
+          .eq('user_id', userId)
+          .single();
+
+      final user = Users.fromJson(userData);
+
+      // Cache the user immediately
+      final userRepo = UserRepository();
+      await userRepo.cacheFullProfileAfterLogin(userId);
+
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => HomePage(user: user)),
       );
+
     } catch (e) {
-      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Login error: $e")),
       );
-    } finally {
-      if (mounted) setState(() => isLoading = false);
     }
   }
 
@@ -102,36 +127,66 @@ class _LoginState extends State<Login> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 30),
+
+                /// Back icon
                 Align(
                   alignment: Alignment.topLeft,
                   child: IconButton(
                     icon: const Icon(Icons.arrow_back, size: 28),
-                    onPressed: () => Navigator.pop(context),
+                    onPressed: () {
+                      Navigator.pop(context);
+                    },
                   ),
                 ),
+
                 const SizedBox(height: 5),
+
+                /// Title
                 const Text(
                   'Login',
+                  textAlign: TextAlign.left,
                   style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
                 ),
+
+                /// Subtitle
                 const Text(
                   "Join us and start connecting with opportunities today",
-                  style: TextStyle(fontSize: 15, color: Colors.blueGrey),
+                  style: TextStyle(
+                    fontSize: 15,
+                    color: Colors.blueGrey,
+                  ),
                 ),
+
                 const SizedBox(height: 40),
-                const Text("Email", style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+
+                /// Email heading
+                const Text(
+                  "Email",
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                ),
                 const SizedBox(height: 8),
                 TextFormField(
                   controller: emailCtrl,
                   decoration: InputDecoration(
                     hintText: "your@email.com",
                     prefixIcon: const Icon(Icons.email_outlined),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                 ),
-                if (emailError != null) Text(emailError!, style: const TextStyle(fontSize: 15, color: Colors.red)),
+                if (emailError != null)
+                  Text(
+                    emailError!,
+                    style: const TextStyle(fontSize: 15, color: Colors.red),
+                  ),
                 const SizedBox(height: 20),
-                const Text("Password", style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+
+                /// Password heading
+                const Text(
+                  "Password",
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                ),
                 const SizedBox(height: 8),
                 TextFormField(
                   controller: passwordCtrl,
@@ -140,15 +195,35 @@ class _LoginState extends State<Login> {
                     hintText: "••••••••",
                     prefixIcon: const Icon(Icons.lock_outline),
                     suffixIcon: IconButton(
-                      icon: Icon(isPasswordVisible ? Icons.visibility : Icons.visibility_off),
-                      onPressed: () => setState(() => isPasswordVisible = !isPasswordVisible),
+                      icon: Icon(
+                        isPasswordVisible
+                            ? Icons.visibility
+                            : Icons.visibility_off,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          isPasswordVisible = !isPasswordVisible;
+                        });
+                      },
                     ),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
-                  onChanged: (_) => setState(() => passwordError = null),
+                  onChanged: (_) {
+                    setState(() {
+                      passwordError = null;
+                    });
+                  },
                 ),
-                if (passwordError != null) Text(passwordError!, style: const TextStyle(fontSize: 15, color: Colors.red)),
+                if (passwordError != null)
+                  Text(
+                    passwordError!,
+                    style: const TextStyle(fontSize: 15, color: Colors.red),
+                  ),
                 const SizedBox(height: 25),
+
+                /// Login button
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
@@ -157,22 +232,42 @@ class _LoginState extends State<Login> {
                       foregroundColor: Colors.white,
                       elevation: 8,
                       padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
-                    onPressed: isLoading ? null : login,
-                    child: isLoading
-                        ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                        : const Text("Login", style: TextStyle(fontSize: 16)),
+                    onPressed: login,
+                    child: const Text(
+                      "Login",
+                      style: TextStyle(fontSize: 16),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 10),
+
+                /// Register row
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Text("Don't have an account?", style: TextStyle(fontSize: 15, color: Colors.blueGrey)),
+                    const Text(
+                      "Don't have an account?",
+                      style: TextStyle(fontSize: 15, color: Colors.blueGrey),
+                    ),
                     TextButton(
-                      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const Registration())),
-                      child: const Text('Register', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.blueAccent)),
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => Registration()),
+                        );
+                      },
+                      child: const Text(
+                        'Register',
+                        style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blueAccent),
+                      ),
                     ),
                   ],
                 ),

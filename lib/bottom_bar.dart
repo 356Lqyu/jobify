@@ -14,17 +14,25 @@ class BottomBarItem {
   });
 }
 
+// ─────────────────────────────────────────────
+//  Main widget
+// ─────────────────────────────────────────────
+
 class CustomBottomBar extends StatefulWidget {
   final int currentIndex;
   final ValueChanged<int> onTap;
   final List<BottomBarItem> items;
 
+  /// Bar surface colour (white in light mode, dark in dark mode by default)
   final Color? barColor;
 
+  /// Accent line + active label colour
   final Color accentColor;
 
+  /// Height of the bar (excluding system bottom padding)
   final double height;
 
+  /// Thickness of the top accent line
   final double accentLineHeight;
 
   const CustomBottomBar({
@@ -33,7 +41,7 @@ class CustomBottomBar extends StatefulWidget {
     required this.onTap,
     required this.items,
     this.barColor,
-    this.accentColor = const Color(0xFFF59E0B),
+    this.accentColor = const Color(0xFFF59E0B), // amber
     this.height = 64.0,
     this.accentLineHeight = 3.0,
   });
@@ -44,7 +52,7 @@ class CustomBottomBar extends StatefulWidget {
 
 class _CustomBottomBarState extends State<CustomBottomBar>
     with TickerProviderStateMixin {
-
+  // One controller per item – drives the accent line slide + icon scale
   late List<AnimationController> _controllers;
   late List<Animation<double>> _lineWidthAnims;
   late List<Animation<double>> _scaleAnims;

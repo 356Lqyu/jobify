@@ -1,15 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:jobify/social_feed.dart';
-import 'package:jobify/user.dart';
-import 'package:jobify/bottom_bar.dart';
-import 'package:jobify/profile_page.dart';
-import 'package:jobify/company_profile_page.dart';
 import 'package:jobify/setting_page.dart';
-import 'package:jobify/job_post_management.dart'; // employer dashboard
-import 'package:jobify/create_job_post.dart';     // create new job/announcement
+import 'package:jobify/social/social_feed.dart';
+import 'package:jobify/users.dart';
+import 'package:jobify/bottom_bar.dart';
+import 'package:jobify/job_post/create_job_post.dart';
+import 'package:jobify/job_post/job_post_management.dart';
+import 'package:jobify/profile_page.dart';
 
 class HomePage extends StatefulWidget {
-  final User user;
+  final Users user;
   const HomePage({super.key, required this.user});
 
   @override
@@ -18,6 +17,9 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   int selectedIndex = 0;
+
+  // Key for the My Jobs page
+  final GlobalKey<JobPostManagementPageState> _jobsPageKey = GlobalKey();
 
   late final List<Widget> _screens;
   late final List<BottomBarItem> _items;
@@ -33,12 +35,11 @@ class _HomePageState extends State<HomePage> {
 
   void _buildScreensAndItems() {
     if (_isJobSeeker) {
-      // ── Job Seeker tabs ──────────────────────────────────────────────
       _screens = [
         SocialFeedPage(user: widget.user),
-        SocialFeedPage(user: widget.user),
-        SocialFeedPage(user: widget.user),
-        SocialFeedPage(user: widget.user),
+        const DiscoverScreen(),
+        const AppliedScreen(),
+        const SettingPage(),
       ];
 
       _items = const [
@@ -56,7 +57,6 @@ class _HomePageState extends State<HomePage> {
           icon: Icons.description_outlined,
           activeIcon: Icons.description,
           label: 'Applied',
-          badgeCount: 2, // TODO: replace with real count from Supabase
         ),
         BottomBarItem(
           icon: Icons.person_outline,
@@ -69,9 +69,17 @@ class _HomePageState extends State<HomePage> {
       // widget.user.userId IS the company's user_id in company_profile table
       _screens = [
         SocialFeedPage(user: widget.user),          // Home tab
-        JobPostManagementPage(),                    // My Jobs tab
-        CreateJobPost(),                            // Post tab (create new)
-        CompanyProfilePage(companyId: widget.user.userId), // Company profile
+        JobPostManagementPage(key: _jobsPageKey),                    // My Jobs tab
+        CreateJobPost(
+          onPostSuccess: (){
+            // Switch to the "My Jobs" tab after posting
+            _jobsPageKey.currentState?.loadJobs();
+            setState(() {
+              selectedIndex = 1;
+            });
+          },
+        ),                            // Post tab (create new)
+        ProfilePage(), // Company profile
       ];
 
       _items = const [
@@ -113,5 +121,53 @@ class _HomePageState extends State<HomePage> {
         accentColor: Colors.blue,
       ),
     );
+  }
+}
+
+class DiscoverScreen extends StatelessWidget {
+  const DiscoverScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(child: Text("Discover Screen"));
+  }
+}
+
+class AppliedScreen extends StatelessWidget {
+  const AppliedScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(child: Text("Applied Screen"));
+  }
+}
+
+class ProfileScreen extends StatelessWidget {
+  final Users user;
+  const ProfileScreen({super.key, required this.user});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Text("Profile: ${user.fullname}"),
+    );
+  }
+}
+
+class TalentScreen extends StatelessWidget {
+  const TalentScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(child: Text("Talent Screen"));
+  }
+}
+
+class PostScreen extends StatelessWidget {
+  const PostScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(child: Text("Post Screen"));
   }
 }

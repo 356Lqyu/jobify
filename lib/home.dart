@@ -3,6 +3,9 @@ import 'package:jobify/setting_page.dart';
 import 'package:jobify/social/social_feed.dart';
 import 'package:jobify/users.dart';
 import 'package:jobify/bottom_bar.dart';
+import 'package:jobify/job_post/create_job_post.dart';
+import 'package:jobify/job_post/job_post_management.dart';
+import 'package:jobify/profile_page.dart';
 
 class HomePage extends StatefulWidget {
   final Users user;
@@ -14,6 +17,9 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   int selectedIndex = 0;
+
+  // Key for the My Jobs page
+  final GlobalKey<JobPostManagementPageState> _jobsPageKey = GlobalKey();
 
   late final List<Widget> _screens;
   late final List<BottomBarItem> _items;
@@ -59,8 +65,21 @@ class _HomePageState extends State<HomePage> {
         ),
       ];
     } else {
+      // ── Company / Poster tabs ────────────────────────────────────────
+      // widget.user.userId IS the company's user_id in company_profile table
       _screens = [
-        SocialFeedPage(user: widget.user),
+        SocialFeedPage(user: widget.user),          // Home tab
+        JobPostManagementPage(key: _jobsPageKey),                    // My Jobs tab
+        CreateJobPost(
+          onPostSuccess: (){
+            // Switch to the "My Jobs" tab after posting
+            _jobsPageKey.currentState?.loadJobs();
+            setState(() {
+              selectedIndex = 1;
+            });
+          },
+        ),                            // Post tab (create new)
+        ProfilePage(),
         const TalentScreen(),
         const PostScreen(),
         const SettingPage(),
@@ -73,6 +92,9 @@ class _HomePageState extends State<HomePage> {
           label: 'Home',
         ),
         BottomBarItem(
+          icon: Icons.work_outline,
+          activeIcon: Icons.work,
+          label: 'My Jobs',
           icon: Icons.people_outline,
           activeIcon: Icons.people,
           label: 'Talent',

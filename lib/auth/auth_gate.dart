@@ -1,0 +1,65 @@
+/*
+ unauthenticated - login page
+ authenticated - home
+*/
+
+import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../login.dart';
+import '../home.dart';
+import '../data/user_repository.dart';
+
+class AuthGate extends StatelessWidget {
+  AuthGate({super.key});
+
+  final UserRepository _userRepo = UserRepository();
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<AuthState>(
+      // listen auth state change
+      stream: Supabase.instance.client.auth.onAuthStateChange,
+      // build page based on the auth state
+      builder: (context,snapshot) {
+        // Loading
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(
+              child: CircularProgressIndicator(),
+            ),
+          );
+        }
+        // Get session
+        final session = snapshot.data?.session;
+
+        // If NOT logged in, then go to Login
+        if (session == null) {
+          return const Login();
+        }
+
+        // If logged in, fetch user data with caching
+        return FutureBuilder(
+          future: _userRepo.getCurrentUser(forceRefresh: true),  // Now uses cache-first strategy!
+          builder: (context, userSnapshot) {
+
+            if (userSnapshot.connectionState == ConnectionState.waiting) {
+              return const Scaffold(
+                body: Center(child: CircularProgressIndicator()),
+              );
+            }
+
+            if (!userSnapshot.hasData || userSnapshot.data == null) {
+              return const Scaffold(
+                body: Center(child: Text("Error loading user")),
+              );
+            }
+
+            final user = userSnapshot.data!;
+            return HomePage(user: user);
+          },
+        );
+      },
+    );
+  }
+}

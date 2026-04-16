@@ -79,7 +79,10 @@ class _HomePageState extends State<HomePage> {
             });
           },
         ),                            // Post tab (create new)
-        ProfilePage(), // Company profile
+        ProfilePage(),
+        const TalentScreen(),
+        const PostScreen(),
+        const SettingPage(),
       ];
 
       _items = const [
@@ -92,6 +95,9 @@ class _HomePageState extends State<HomePage> {
           icon: Icons.work_outline,
           activeIcon: Icons.work,
           label: 'My Jobs',
+          icon: Icons.people_outline,
+          activeIcon: Icons.people,
+          label: 'Talent',
         ),
         BottomBarItem(
           icon: Icons.add_box_outlined,

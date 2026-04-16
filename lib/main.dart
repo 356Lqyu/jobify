@@ -31,7 +31,7 @@ class MainApp extends StatelessWidget {
       title: 'Jobify',
       initialRoute: '/',
       routes: {
-        '/': (context) => const AnimatedHomePage(),
+        '/': (context) => const HomePage(),  // Changed from AnimatedHomePage
         '/Login': (context) => const Login(),
         '/ProfilePage': (context) => const ProfilePage(),
         '/Settings': (context) => const SettingPage(),
@@ -41,41 +41,8 @@ class MainApp extends StatelessWidget {
   }
 }
 
-class AnimatedHomePage extends StatefulWidget {
-  const AnimatedHomePage({super.key});
-
-  @override
-  State<AnimatedHomePage> createState() => _AnimatedHomePageState();
-}
-
-class _AnimatedHomePageState extends State<AnimatedHomePage>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _scaleAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 4),
-
-    );
-
-    _scaleAnimation = Tween<double>(
-      begin: 0.95,
-      end: 1.0,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
-
-    _controller.repeat(reverse: true);
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
+class HomePage extends StatelessWidget {  // Removed StatefulWidget and animation
+  const HomePage({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -86,16 +53,13 @@ class _AnimatedHomePageState extends State<AnimatedHomePage>
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              /// Logo
-              ScaleTransition(
-                scale: _scaleAnimation,
-                child: Container(
-                  width: 260,
-                  height: 130,
-                  child: Image.asset(
-                    'assets/images/logo3.png',
-                    fit: BoxFit.contain,
-                  ),
+              /// Logo - No animation wrapper
+              Container(
+                width: 260,
+                height: 130,
+                child: Image.asset(
+                  'assets/images/logo3.png',
+                  fit: BoxFit.contain,
                 ),
               ),
 

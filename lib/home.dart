@@ -70,6 +70,7 @@ class _HomePageState extends State<HomePage> {
       _screens = [
         SocialFeedPage(user: widget.user),          // Home tab
         JobPostManagementPage(key: _jobsPageKey),                    // My Jobs tab
+        const TalentScreen(),
         CreateJobPost(
           onPostSuccess: (){
             // Switch to the "My Jobs" tab after posting
@@ -80,7 +81,6 @@ class _HomePageState extends State<HomePage> {
           },
         ),                            // Post tab (create new)
         ProfilePage(),
-        const TalentScreen(),
         const PostScreen(),
         const SettingPage(),
       ];
@@ -95,6 +95,8 @@ class _HomePageState extends State<HomePage> {
           icon: Icons.work_outline,
           activeIcon: Icons.work,
           label: 'My Jobs',
+        ),
+        BottomBarItem(
           icon: Icons.people_outline,
           activeIcon: Icons.people,
           label: 'Talent',

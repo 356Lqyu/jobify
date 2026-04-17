@@ -80,7 +80,6 @@ class _HomePageState extends State<HomePage> {
           },
         ),                            // Post tab (create new)
         ProfilePage(),
-        const TalentScreen(),
         const PostScreen(),
         const SettingPage(),
       ];
@@ -95,9 +94,6 @@ class _HomePageState extends State<HomePage> {
           icon: Icons.work_outline,
           activeIcon: Icons.work,
           label: 'My Jobs',
-          icon: Icons.people_outline,
-          activeIcon: Icons.people,
-          label: 'Talent',
         ),
         BottomBarItem(
           icon: Icons.add_box_outlined,
@@ -157,15 +153,6 @@ class ProfileScreen extends StatelessWidget {
     return Center(
       child: Text("Profile: ${user.fullname}"),
     );
-  }
-}
-
-class TalentScreen extends StatelessWidget {
-  const TalentScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const Center(child: Text("Talent Screen"));
   }
 }
 

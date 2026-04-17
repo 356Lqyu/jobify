@@ -25,10 +25,10 @@ class _NavigationMenuState extends State<NavigationMenu> {
 
   // Company Menu
   List<NavigationDestination> get companyItems => const [
-  NavigationDestination(icon: Icon(Icons.home), label: 'Home'),
-  NavigationDestination(icon: Icon(Icons.work), label: 'Jobs'),
-  NavigationDestination(icon: Icon(Icons.add_box), label: 'Post'),
-  NavigationDestination(icon: Icon(Icons.person), label: 'Profile')
+    NavigationDestination(icon: Icon(Icons.home), label: 'Home'),
+    NavigationDestination(icon: Icon(Icons.work), label: 'Jobs'),
+    NavigationDestination(icon: Icon(Icons.add_box), label: 'Post'),
+    NavigationDestination(icon: Icon(Icons.person), label: 'Profile')
   ];
 
   @override
@@ -48,19 +48,19 @@ class _NavigationMenuState extends State<NavigationMenu> {
       Container(),
       Container(),
     ];
-    
+
     return Scaffold(
-      bottomNavigationBar: NavigationBar(
-        height: 80,
-        selectedIndex: selectedIndex,
-        onDestinationSelected: (index){
-          setState(() {
-            selectedIndex = index;
-          });
-        },
-        destinations: isJobSeeker? jobSeekerItems : companyItems,
-      ),
-      body: isJobSeeker? jobSeekerScreens[selectedIndex] : companyScreens[selectedIndex]
+        bottomNavigationBar: NavigationBar(
+          height: 80,
+          selectedIndex: selectedIndex,
+          onDestinationSelected: (index){
+            setState(() {
+              selectedIndex = index;
+            });
+          },
+          destinations: isJobSeeker? jobSeekerItems : companyItems,
+        ),
+        body: isJobSeeker? jobSeekerScreens[selectedIndex] : companyScreens[selectedIndex]
     );
   }
 }

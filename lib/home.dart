@@ -95,6 +95,7 @@ class _HomePageState extends State<HomePage> {
           activeIcon: Icons.work,
           label: 'My Jobs',
         ),
+        
         BottomBarItem(
           icon: Icons.add_box_outlined,
           activeIcon: Icons.add_box,

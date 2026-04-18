@@ -1,33 +1,35 @@
-// user_repository.dart
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:jobify/users.dart';
+import 'package:jobify/users/users.dart';
 import 'package:jobify/data/local_db.dart';
 
+/// handle read and write user data to supabase & manage local SQLite cache
+/// CRUD user profile , skill, education and experience
+/// Try cache first (unless force refresh)
+/// if forceRefresh = false , then will check local cache
+/// else , fetch from supabase , then cache and return
 class UserRepository {
   final SupabaseClient _sb = Supabase.instance.client;
-
-  String? get _uid => _sb.auth.currentUser?.id;
-
-  // User data - read with caching
+  String? get _uid => _sb.auth.currentUser?.id;    // get the current authenticated user id
 
   /// Get current user with cache-first strategy
   Future<Users?> getCurrentUser({bool forceRefresh = false}) async {
     final userId = _uid;
-    if (userId == null) return null;
+    if (userId == null)
+      return null;
 
-    // Try cache first (unless force refresh)
+
     if (!forceRefresh) {
       final cached = await LocalDB.getCachedUser(userId);
       if (cached != null) {
-        debugPrint(' Using cached user data for: $userId');
+        debugPrint('Using cached user data for: $userId');
         return cached;
       }
     }
 
     // Fetch from Supabase
     try {
-      debugPrint(' Fetching user data from Supabase for: $userId');
+      debugPrint('Fetching user data from Supabase for: $userId');
       final data = await _sb
           .from('users')
           .select('user_id, role, profile_image_url, created_at, updated_at, email, fullname, phone')
@@ -36,19 +38,20 @@ class UserRepository {
 
       final user = Users.fromJson(data);
 
-      // Cache for next time
+      // Cache for future request
       await LocalDB.cacheUser(user);
-      debugPrint(' Cached user data for: $userId');
+      debugPrint('Cached user data for: $userId');
 
       return user;
     } catch (e) {
-      debugPrint(' Error fetching user: $e');
-      // Last resort - try expired cache
+      debugPrint('Error fetching user: $e');
+      // if error then will fallback to expired cache (local db)
       return await LocalDB.getCachedUser(userId);
     }
   }
 
   /// Get complete profile (with all related data)
+  /// Fetch user , skills , education , experience
   Future<CompleteUserProfile> getCompleteProfile({bool forceRefresh = false}) async {
     final userId = _uid;
     if (userId == null) throw Exception('User not logged in');
@@ -65,24 +68,23 @@ class UserRepository {
         profile.skills = await LocalDB.getCachedSkills(userId);
         profile.education = await LocalDB.getCachedEducation(userId);
         profile.experience = await LocalDB.getCachedExperience(userId);
-        profile.resumes = await LocalDB.getCachedResumes(userId);
 
-        // If we have cached user, return immediately but refresh in background
+        // If have cached user, then return immediately but refresh in background
         if (profile.user != null) {
           _refreshProfileInBackground(userId, profile);
           return profile;
         }
       }
     }
-
-    // Fetch fresh from Supabase
+    // Fetch fresh from Supabase (force refresh)
     return await _fetchFreshProfile(userId);
   }
 
+  /// Fetch complete user profile directly from supabase (no cache)
   Future<CompleteUserProfile> _fetchFreshProfile(String userId) async {
     final profile = CompleteUserProfile(userId: userId);
 
-    // Fetch user
+    // Fetch basic user info
     final userData = await _sb
         .from('users')
         .select()
@@ -91,7 +93,7 @@ class UserRepository {
     profile.user = Users.fromJson(userData);
     await LocalDB.cacheUser(profile.user!);
 
-    // Fetch role-specific profile
+    // Fetch role-specific profile (job seeker / poster)
     if (profile.user!.role == 'JOB_SEEKER') {
       final jobSeekerData = await _sb
           .from('job_seeker_profile')
@@ -114,7 +116,7 @@ class UserRepository {
       }
     }
 
-    // Fetch related data
+    // Fetch skills, education , work experience
     final skillsData = await _sb
         .from('skills')
         .select()
@@ -136,16 +138,12 @@ class UserRepository {
     profile.experience = List<Map<String, dynamic>>.from(experienceData);
     await LocalDB.cacheExperience(userId, profile.experience);
 
-    final resumesData = await _sb
-        .from('resume')
-        .select()
-        .eq('user_id', userId);
-    profile.resumes = List<Map<String, dynamic>>.from(resumesData);
-    await LocalDB.cacheResumes(userId, profile.resumes);
-
     return profile;
   }
 
+  /// Perform background refresh of user profile data
+  /// this run without awaiting , allow UI to show cached data immediately while fresh data load in background
+  /// When refresh complete, then it will update current profile object
   Future<void> _refreshProfileInBackground(String userId, CompleteUserProfile currentProfile) async {
     try {
       final freshProfile = await _fetchFreshProfile(userId);
@@ -155,8 +153,7 @@ class UserRepository {
     }
   }
 
-  // User data - write with cache invalidation
-
+  /// All write operation will update/insert in supabase , then invalidate local cache by clearUserCache, then next read will fetch fresh data and recache
   Future<void> updateUser(String userId, Map<String, dynamic> updates) async {
     // Update Supabase
     await _sb
@@ -167,10 +164,11 @@ class UserRepository {
     })
         .eq('user_id', userId);
 
-    // Invalidate cache
+    /// Invalidate cache to force fetch on next read
     await LocalDB.clearUserCache(userId);
   }
 
+  /// Update job seeker profile
   Future<void> updateJobSeekerProfile(String userId, Map<String, dynamic> updates) async {
     final existing = await _sb
         .from('job_seeker_profile')
@@ -178,6 +176,7 @@ class UserRepository {
         .eq('user_id', userId)
         .maybeSingle();
 
+    /// if not exist then insert ; else update
     if (existing == null) {
       await _sb.from('job_seeker_profile').insert({
         'user_id': userId,
@@ -197,6 +196,7 @@ class UserRepository {
     await LocalDB.clearUserCache(userId);
   }
 
+  /// Update company profile
   Future<void> updateCompanyProfile(String userId, Map<String, dynamic> updates) async {
     final existing = await _sb
         .from('company_profile')
@@ -220,6 +220,7 @@ class UserRepository {
     await LocalDB.clearUserCache(userId);
   }
 
+  // insert , update , delete for skill , education and work experience
   Future<void> addSkill(String userId, String skillName, String? skillLevel) async {
     await _sb.from('skills').insert({
       'user_id': userId,
@@ -299,28 +300,10 @@ class UserRepository {
     await LocalDB.clearUserCache(userId);
   }
 
-  Future<void> addResume(String userId, String fileUrl, String fileName) async {
-    await _sb.from('resume').insert({
-      'user_id': userId,
-      'file_url': fileUrl,
-      'file_name': fileName,
-      'uploaded_at': DateTime.now().toIso8601String(),
-      'is_default': false,
-    });
-    await LocalDB.clearUserCache(userId);
-  }
-
-  Future<void> deleteResume(String resumeId) async {
-    final userId = _uid;
-    if (userId == null) return;
-    await _sb.from('resume').delete().eq('resume_id', resumeId);
-    await LocalDB.clearUserCache(userId);
-  }
-
+  // pre-cache all user data immediately after login (call after successful authentication)
   Future<void> cacheFullProfileAfterLogin(String userId) async {
     try {
       debugPrint('Caching full profile for user: $userId');
-
       // Fetch complete profile and cache it
       await _fetchFreshProfile(userId);
       debugPrint('Full profile cached successfully');
@@ -328,10 +311,9 @@ class UserRepository {
       debugPrint('Error caching full profile: $e');
     }
   }
-
 }
 
-// Helper class for complete profile
+// Helper class for complete profile (pass complete user data between screen)
 class CompleteUserProfile {
   final String userId;
   Users? user;
@@ -340,7 +322,6 @@ class CompleteUserProfile {
   List<Map<String, dynamic>> skills = [];
   List<Map<String, dynamic>> education = [];
   List<Map<String, dynamic>> experience = [];
-  List<Map<String, dynamic>> resumes = [];
 
   CompleteUserProfile({required this.userId});
 
@@ -351,7 +332,6 @@ class CompleteUserProfile {
     skills = other.skills;
     education = other.education;
     experience = other.experience;
-    resumes = other.resumes;
   }
 
   bool get isLoading => user == null;

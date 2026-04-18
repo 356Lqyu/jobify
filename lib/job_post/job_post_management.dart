@@ -48,6 +48,7 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
       final data = await _service.fetchMyJobPosts(userId: _userId);
       setState(() => _jobs = data);
     } catch (e) {
+      // ignore
     } finally {
       setState(() => _isLoading = false);
     }
@@ -57,15 +58,18 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
     final newStatus = isActive ? 'closed' : 'active';
     try {
       await _service.updateJobPost(jobId, {'status': newStatus});
-      await loadJobs();  // reload after successful update
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Job ${newStatus == 'active' ? 'reopened' : 'closed'}')),
-      );
+      await loadJobs();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Job ${newStatus == 'active' ? 'reopened' : 'closed'}')),
+        );
+      }
     } catch (e) {
-      print("Error updating status: $e");
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to update status: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to update status: $e')),
+        );
+      }
     }
   }
 
@@ -74,7 +78,7 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Delete Job'),
-        content: const Text('Are you sure? This cannot be undone.'),
+        content: const Text('This action cannot be undone. Delete this job?'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
           TextButton(
@@ -87,7 +91,9 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
     if (confirm == true) {
       await _service.deleteJobPost(jobId);
       loadJobs();
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Job deleted')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Job deleted')));
+      }
     }
   }
 
@@ -123,10 +129,13 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
     final activeCount = _jobs.where((j) => j['status'] == 'active').length;
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
         title: const Text('My Jobs'),
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
+        elevation: 0,
+        automaticallyImplyLeading: false,
       ),
       body: RefreshIndicator(
         onRefresh: loadJobs,
@@ -134,12 +143,12 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
           children: [
             // Summary cards
             Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
               child: Row(
                 children: [
-                  _buildSummaryCard('Active Jobs', activeCount, Icons.work, Colors.blue),
+                  _buildSummaryCard('Active Jobs', activeCount, Icons.work_outline, Colors.blue,),
                   const SizedBox(width: 12),
-                  _buildSummaryCard('Total Jobs', _jobs.length, Icons.list, Colors.grey),
+                  _buildSummaryCard('Total Jobs', _jobs.length, Icons.list_alt, Colors.grey.shade700),
                 ],
               ),
             ),
@@ -149,12 +158,26 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Your Job Posts', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const Text(
+                    'Your Job Posts',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+                  ),
                   ElevatedButton.icon(
                     onPressed: () async {
-                      final result = await Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const CreateJobPost()),
+                      final result = await showModalBottomSheet<bool>(
+                        context: context,
+                        isScrollControlled: true,
+                        backgroundColor: Colors.transparent,
+                        builder: (context) => DraggableScrollableSheet(
+                          initialChildSize: 0.88,
+                          maxChildSize: 0.96,
+                          minChildSize: 0.5,
+                          expand: false,
+                          builder: (_, scrollController) => CreateJobPost(
+                            isModal: true,
+                            onPostSuccess: () => Navigator.pop(context, true),
+                          ),
+                        ),
                       );
                       if (result == true) loadJobs();
                     },
@@ -163,6 +186,7 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.blue,
                       foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
                       minimumSize: const Size(0, 40),
                     ),
                   ),
@@ -172,9 +196,9 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
             // Job list
             Expanded(
               child: _jobs.isEmpty
-                  ? const Center(child: Text('No job posts yet. Tap + to create one.'))
+                  ? _buildEmptyState()
                   : ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 itemCount: _jobs.length,
                 itemBuilder: (ctx, i) {
                   final job = _jobs[i];
@@ -182,100 +206,7 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
                   final List<String> imageUrls = List<String>.from(job['image_urls'] ?? []);
                   final thumbnail = imageUrls.isNotEmpty ? imageUrls.first : null;
 
-                  return Card(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              if (thumbnail != null)
-                                Padding(
-                                  padding: const EdgeInsets.only(right: 8),
-                                  child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(6),
-                                    child: Image.network(thumbnail, width: 50, height: 50, fit: BoxFit.cover),
-                                  ),
-                                ),
-                              Expanded(
-                                child: Text(
-                                  job['job_title'] ?? 'Untitled',
-                                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                                ),
-                              ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: isActive ? Colors.green.shade100 : Colors.grey.shade300,
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Text(
-                                  isActive ? 'Active' : 'Closed',
-                                  style: TextStyle(
-                                    color: isActive ? Colors.green.shade800 : Colors.grey.shade700,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Text('${job['location']} • ${job['job_type_id']?['name'] ?? 'Full-time'}'),
-                          const SizedBox(height: 12),
-                          const Divider(),
-                          const SizedBox(height: 8),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                            children: [
-                              _actionButton(
-                                icon: Icons.visibility,
-                                label: 'Details',
-                                onTap: () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute(builder: (_) => JobDetailEmployer(job: job)),
-                                ),
-                              ),
-                              if (isActive)
-                                _actionButton(
-                                  icon: Icons.close,
-                                  label: 'Close',
-                                  onTap: () => _toggleJobStatus(job['job_id'], true),
-                                  color: Colors.orange,
-                                )
-                              else
-                                _actionButton(
-                                  icon: Icons.refresh,
-                                  label: 'Reopen',
-                                  onTap: () => _toggleJobStatus(job['job_id'], false),
-                                  color: Colors.green,
-                                ),
-                              _actionButton(
-                                icon: Icons.edit,
-                                label: 'Edit',
-                                onTap: () async {
-                                  final result = await Navigator.push(
-                                    context,
-                                    MaterialPageRoute(builder: (_) => CreateJobPost(existingJob: job)),
-                                  );
-                                  if (result == true) loadJobs();
-                                },
-                                color: Colors.blue,
-                              ),
-                              _actionButton(
-                                icon: Icons.delete_outline,
-                                label: 'Delete',
-                                onTap: () => _deleteJob(job['job_id']),
-                                color: Colors.red,
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
+                  return _buildJobCard(job, isActive, thumbnail);
                 },
               ),
             ),
@@ -288,19 +219,189 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
   Widget _buildSummaryCard(String title, int count, IconData icon, Color color) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withOpacity(0.3)),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              color.withOpacity(0.05),
+              color.withOpacity(0.02),
+            ],
+          ),
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Icon(icon, color: color, size: 28),
+            ),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$count',
+                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: color),
+                ),
+                Text(
+                  title,
+                  style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildJobCard(Map<String, dynamic> job, bool isActive, String? thumbnail) {
+    final jobType = job['job_type_id']?['name'] ?? 'Full-time';
+    final location = job['location'] ?? 'Unknown location';
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, color: color, size: 28),
-            const SizedBox(height: 8),
-            Text('$count', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: color)),
-            Text(title, style: TextStyle(fontSize: 14, color: Colors.grey[700])),
+            Row(
+              children: [
+                if (thumbnail != null)
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.network(
+                      thumbnail,
+                      width: 60,
+                      height: 60,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                if (thumbnail != null) const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        job['job_title'] ?? 'Untitled',
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Icon(Icons.location_on_outlined, size: 14, color: Colors.grey.shade600),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              location,
+                              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            width: 4,
+                            height: 4,
+                            decoration: const BoxDecoration(color: Colors.grey, shape: BoxShape.circle),
+                          ),
+                          const SizedBox(width: 8),
+                          Icon(Icons.work_outline, size: 14, color: Colors.grey.shade600),
+                          const SizedBox(width: 4),
+                          Text(
+                            jobType,
+                            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: isActive ? Colors.green.shade50 : Colors.grey.shade200,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    isActive ? 'Active' : 'Closed',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: isActive ? Colors.green.shade700 : Colors.grey.shade700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            const Divider(height: 1),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _actionButton(
+                  icon: Icons.visibility_outlined,
+                  label: 'Details',
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => JobDetailEmployer(job: job)),
+                  ),
+                  color: Colors.blueGrey,
+                ),
+                if (isActive)
+                  _actionButton(
+                    icon: Icons.close,
+                    label: 'Close',
+                    onTap: () => _toggleJobStatus(job['job_id'], true),
+                    color: Colors.orange,
+                  )
+                else
+                  _actionButton(
+                    icon: Icons.refresh,
+                    label: 'Reopen',
+                    onTap: () => _toggleJobStatus(job['job_id'], false),
+                    color: Colors.green,
+                  ),
+                _actionButton(
+                  icon: Icons.edit_outlined,
+                  label: 'Edit',
+                  onTap: () async {
+                    final result = await Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => CreateJobPost(existingJob: job)),
+                    );
+                    if (result == true) loadJobs();
+                  },
+                  color: Colors.blue,
+                ),
+                _actionButton(
+                  icon: Icons.delete_outline,
+                  label: 'Delete',
+                  onTap: () => _deleteJob(job['job_id']),
+                  color: Colors.red,
+                ),
+              ],
+            ),
           ],
         ),
       ),
@@ -311,20 +412,45 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
     required IconData icon,
     required String label,
     required VoidCallback onTap,
-    Color color = Colors.blue,
+    required Color color,
   }) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(30),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         child: Column(
           children: [
             Icon(icon, size: 20, color: color),
             const SizedBox(height: 4),
-            Text(label, style: TextStyle(fontSize: 11, color: color)),
+            Text(
+              label,
+              style: TextStyle(fontSize: 12, color: color, fontWeight: FontWeight.w500),
+            ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.work_outline, size: 80, color: Colors.grey.shade300),
+          const SizedBox(height: 16),
+          Text(
+            'No job posts yet',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.grey.shade700),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Tap the “Post a Job” button to create your first listing.',
+            style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
+            textAlign: TextAlign.center,
+          ),
+        ],
       ),
     );
   }

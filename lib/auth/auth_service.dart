@@ -4,28 +4,22 @@ class AuthService {
 
   final SupabaseClient supabase = Supabase.instance.client;
 
-  // Sign in with email & password
+  // Sign in with email & password (authenticate user , return session)
   Future<AuthResponse> signInWithEmailAndPassword(String email, String password) async {
-    return await supabase.auth.signInWithPassword(
-        email: email,
-        password: password
-    );
+    return await supabase.auth.signInWithPassword(email: email, password: password);
   }
 
-  // Sign Up with email & password
+  // Sign Up with email & password (create mew user , send verification email)
   Future<AuthResponse> signUpWithEmailAndPassword(String email, String password) async {
-    return await supabase.auth.signUp(
-        email: email,
-        password: password
-    );
+    return await supabase.auth.signUp(email: email, password: password);
   }
 
-  //Sign Out
+  //Sign Out (end session)
   Future<void> signOut() async {
     await supabase.auth.signOut();
   }
 
-  //Get user email
+  //Get current user email
   String? getCurrentUserEmail() {
     final session = supabase.auth.currentSession;
     final user = session?.user;

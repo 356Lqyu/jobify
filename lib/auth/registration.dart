@@ -166,6 +166,7 @@ class _RegistrationState extends State<Registration> {
           'updated_at': DateTime.now().toIso8601String(),
         });
       } else {
+
         await supabase.from('users').insert({
           'user_id': user.id,
           'role': 'POSTER',
@@ -536,7 +537,7 @@ class _RegistrationState extends State<Registration> {
                               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
                           const SizedBox(height: 8),
                           TextFormField(
-                            controller: phoneCtrl,
+                            controller: companyPhoneCtrl,
                             keyboardType: TextInputType.phone,
                             decoration: InputDecoration(
                               hintText: "e.g., +60 3 1234 5678",
@@ -545,39 +546,11 @@ class _RegistrationState extends State<Registration> {
                                   borderRadius: BorderRadius.circular(12)),
                             ),
                           ),
-                          const Padding(
-                            padding: EdgeInsets.only(top: 4, left: 12),
-                            child: Text(
-                              'Official company phone number (optional)',
-                              style: TextStyle(color: Colors.blueGrey, fontSize: 12),
-                            ),
-                          ),
-                          if (phoneError != null)
+
+                          if (companyPhoneError  != null)
                             Padding(
                               padding: const EdgeInsets.only(top: 4),
                               child: Text(phoneError!,
-                                  style: const TextStyle(color: Colors.red, fontSize: 14)),
-                            ),
-
-                          const SizedBox(height: 16),
-
-                          // Location field
-                          const Text("Location *",
-                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                          const SizedBox(height: 8),
-                          TextFormField(
-                            controller: locationCtrl,
-                            decoration: InputDecoration(
-                              hintText: "e.g., Kuala Lumpur, Malaysia",
-                              prefixIcon: const Icon(Icons.location_on),
-                              border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12)),
-                            ),
-                          ),
-                          if (locationError != null)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 4),
-                              child: Text(locationError!,
                                   style: const TextStyle(color: Colors.red, fontSize: 14)),
                             ),
                         ],

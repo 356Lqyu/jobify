@@ -300,6 +300,110 @@ class UserRepository {
     await LocalDB.clearUserCache(userId);
   }
 
+  Future<void> addBranch(String companyId, Map<String, dynamic> branchData) async {
+    final userId = _uid;
+    if (userId == null) return;
+
+    try {
+      // If this branch is being marked as head office, unset any existing head office
+      if (branchData['is_head_office'] == true) {
+        await _sb
+            .from('company_branch')
+            .update({'is_head_office': false})
+            .eq('company_id', companyId)
+            .eq('is_head_office', true);
+      }
+
+      // Create a copy and remove any null values that should be null in DB
+      final cleanedData = Map<String, dynamic>.from(branchData);
+
+      // Only keep city if it's not null and not empty
+      if (cleanedData['city'] == null || cleanedData['city'].toString().isEmpty) {
+        cleanedData['city'] = null;
+      }
+
+      // Remove any other null values if your table allows them
+      cleanedData.removeWhere((key, value) => value == null);
+
+      debugPrint('Adding branch with cleaned data: $cleanedData');
+
+      await _sb.from('company_branch').insert({
+        'company_id': companyId,
+        ...branchData,
+        'created_at': DateTime.now().toIso8601String(),
+        'updated_at': DateTime.now().toIso8601String(),
+      });
+      await LocalDB.clearUserCache(userId);
+    } catch (e) {
+      debugPrint('Error adding branch: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> updateBranch(String branchId, Map<String, dynamic> updates) async {
+    final userId = _uid;
+    if (userId == null) return;
+
+    try {
+      // First, get the company_id for this branch
+      final branch = await _sb
+          .from('company_branch')
+          .select('company_id')
+          .eq('branch_id', branchId)
+          .maybeSingle();
+
+      // If this branch is being marked as head office, unset any existing head office
+      if (updates['is_head_office'] == true && branch != null) {
+        await _sb
+            .from('company_branch')
+            .update({'is_head_office': false})
+            .eq('company_id', branch['company_id'])
+            .eq('is_head_office', true)
+            .not('branch_id', 'eq', branchId); // Don't unset the current branch if it was already head office
+      }
+
+      await _sb
+          .from('company_branch')
+          .update({
+        ...updates,
+        'updated_at': DateTime.now().toIso8601String(),
+      })
+          .eq('branch_id', branchId);
+      await LocalDB.clearUserCache(userId);
+    } catch (e) {
+      debugPrint('Error updating branch: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> deleteBranch(String branchId) async {
+    final userId = _uid;
+    if (userId == null) return;
+
+    try {
+      await _sb.from('company_branch').delete().eq('branch_id', branchId);
+      await LocalDB.clearUserCache(userId);
+    } catch (e) {
+      debugPrint('Error deleting branch: $e');
+      rethrow;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> fetchBranches(String companyId) async {
+    try {
+      final response = await _sb
+          .from('company_branch')
+          .select()
+          .eq('company_id', companyId)
+          .order('is_head_office', ascending: false)
+          .order('branch_name', ascending: true);
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      debugPrint('Error fetching branches: $e');
+      return [];
+    }
+  }
+
   // pre-cache all user data immediately after login (call after successful authentication)
   Future<void> cacheFullProfileAfterLogin(String userId) async {
     try {

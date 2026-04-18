@@ -11,6 +11,8 @@ import 'package:jobify/data/user_repository.dart';
 import 'package:jobify/data/local_db.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:jobify/job_post/job_post_service.dart';
+import 'package:jobify/data/location_service.dart';
+import '../data/location_service.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -44,10 +46,12 @@ class _ProfilePageState extends State<ProfilePage> {
   String companyDescription = '';
   String industry = '';
   String companySize = '';
-  String location = '';
+  String? _companyId;
   String companyPhone = '';
   String companyEmail = '';
-  String websiteUrl = '';
+
+  /// Branches
+  List<Map<String, dynamic>> branches = [];
 
   /// Skills
   List<Map<String, dynamic>> skills = [];
@@ -64,10 +68,8 @@ class _ProfilePageState extends State<ProfilePage> {
 
   bool isLoading = true;
   bool isRefreshing = false;
-  bool isEditingAbout = false;
-  final TextEditingController _aboutController = TextEditingController();
 
-  // Company size options (still hardcoded as these are standard)
+  // Company size options
   final List<String> companySizeOptions = [
     '1-10 employees',
     '11-50 employees',
@@ -85,7 +87,6 @@ class _ProfilePageState extends State<ProfilePage> {
 
   @override
   void dispose() {
-    _aboutController.dispose();
     super.dispose();
   }
 
@@ -186,7 +187,8 @@ class _ProfilePageState extends State<ProfilePage> {
         final skillData = await supabase
             .from('skills')
             .select()
-            .eq('user_id', userId!);
+            .eq('user_id', userId!)
+            .order('skill_name', ascending: true);
         if (mounted) {
           setState(() {
             skills = List<Map<String, dynamic>>.from(skillData);
@@ -197,7 +199,8 @@ class _ProfilePageState extends State<ProfilePage> {
         final eduData = await supabase
             .from('education')
             .select()
-            .eq('user_id', userId!);
+            .eq('user_id', userId!)
+            .order('start_date', ascending: false);
         if (mounted) {
           setState(() {
             educationList = List<Map<String, dynamic>>.from(eduData);
@@ -208,7 +211,8 @@ class _ProfilePageState extends State<ProfilePage> {
         final workData = await supabase
             .from('experience')
             .select()
-            .eq('user_id', userId!);
+            .eq('user_id', userId!)
+            .order('start_date', ascending: false);
         if (mounted) {
           setState(() {
             workList = List<Map<String, dynamic>>.from(workData);
@@ -229,10 +233,26 @@ class _ProfilePageState extends State<ProfilePage> {
             companyDescription = profile['company_description'] ?? '';
             industry = profile['industry'] ?? '';
             companySize = profile['company_size'] ?? '';
-            location = profile['location'] ?? '';
             profileImageUrl = profile['logo_url'] ?? '';
+            _companyId = profile['company_id'];
           });
           await LocalDB.cacheCompanyProfile(userId!, profile);
+        }
+
+        // Fetch branches
+        if (_companyId != null) {
+          final branchesData = await supabase
+              .from('company_branch')
+              .select()
+              .eq('company_id', _companyId!)
+              .order('is_head_office', ascending: false)
+              .order('branch_name', ascending: true);
+          if (mounted) {
+            setState(() {
+              branches = List<Map<String, dynamic>>.from(branchesData);
+            });
+            await LocalDB.cacheBranches(_companyId!, branches);
+          }
         }
       }
 
@@ -249,17 +269,19 @@ class _ProfilePageState extends State<ProfilePage> {
     try {
       debugPrint('Loading profile from cache...');
 
+      // First, load the user to get the role
       final cachedUser = await LocalDB.getCachedUser(userId!);
       if (cachedUser != null && mounted) {
         setState(() {
           fullname = cachedUser.fullname;
           phone = cachedUser.phone ?? '';
-          role = cachedUser.role;
+          role = cachedUser.role;  // Set role FIRST
           userEmail = cachedUser.email;
           profileImageUrl = cachedUser.profileImageUrl ?? '';
         });
       }
 
+      // Use the role to load role-specific data
       if (role == 'JOB_SEEKER') {
         final cachedSkills = await LocalDB.getCachedSkills(userId!);
         final cachedEducation = await LocalDB.getCachedEducation(userId!);
@@ -290,9 +312,19 @@ class _ProfilePageState extends State<ProfilePage> {
             companyDescription = cachedProfile['company_description'] ?? '';
             industry = cachedProfile['industry'] ?? '';
             companySize = cachedProfile['company_size'] ?? '';
-            location = cachedProfile['location'] ?? '';
             profileImageUrl = cachedProfile['logo_url'] ?? '';
+            _companyId = cachedProfile['company_id'];
           });
+        }
+
+        // Load cached branches
+        if (_companyId != null) {
+          final cachedBranches = await LocalDB.getCachedBranches(_companyId!);
+          if (mounted) {
+            setState(() {
+              branches = List<Map<String, dynamic>>.from(cachedBranches);
+            });
+          }
         }
       }
     } catch (e) {
@@ -355,7 +387,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Profile image updated successfully!")),
+            const SnackBar(content: Text("Profile image updated successfully!"),backgroundColor: Colors.green),
           );
         }
 
@@ -365,7 +397,7 @@ class _ProfilePageState extends State<ProfilePage> {
       debugPrint('Error uploading profile image: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error uploading image: ${e.toString()}")),
+          SnackBar(content: Text("Error uploading image: ${e.toString()}"),backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -418,9 +450,8 @@ class _ProfilePageState extends State<ProfilePage> {
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Company logo updated successfully!")),
+            const SnackBar(content: Text("Company logo updated successfully!"),backgroundColor: Colors.green),
           );
-          Navigator.pop(context, true);
         }
 
         await _refreshProfile();
@@ -429,7 +460,7 @@ class _ProfilePageState extends State<ProfilePage> {
       debugPrint('Error uploading logo: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error uploading logo: ${e.toString()}")),
+          SnackBar(content: Text("Error uploading logo: ${e.toString()}"),backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -439,30 +470,30 @@ class _ProfilePageState extends State<ProfilePage> {
 
   // ==================== COMPANY INFO EDIT ====================
   void _showEditCompanyInfoBottomSheet() {
+    final TextEditingController companyNameCtrl = TextEditingController(text: companyName);
+    String tempIndustry = industry;
+    String tempCompanySize = companySize;
+    bool isSaving = false;
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.85,
-        maxChildSize: 0.96,
-        minChildSize: 0.5,
-        expand: false,
-        builder: (_, scrollController) => StatefulBuilder(
-          builder: (context, setStateBottom) {
-            String selectedIndustry = industry;
-            String selectedCompanySize = companySize;
-            TextEditingController companyNameCtrl = TextEditingController(text: companyName);
-            TextEditingController locationCtrl = TextEditingController(text: location);
-            bool isSaving = false;
-
-            return Container(
+      builder: (context) => StatefulBuilder(
+        builder: (context, setStateBottom) {
+          return DraggableScrollableSheet(
+            initialChildSize: 0.75,
+            maxChildSize: 0.85,
+            minChildSize: 0.5,
+            expand: false,
+            builder: (_, scrollController) => Container(
               decoration: const BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
               ),
               child: Column(
                 children: [
+                  // Handle bar
                   Padding(
                     padding: const EdgeInsets.only(top: 12),
                     child: Center(
@@ -476,26 +507,23 @@ class _ProfilePageState extends State<ProfilePage> {
                       ),
                     ),
                   ),
+                  // Header
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                     child: Row(
                       children: [
-                        const Text(
-                          'Edit Company Information',
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                        ),
+                        const Text('Edit Company Information',
+                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                         const Spacer(),
                         TextButton(
                           onPressed: () => Navigator.pop(context),
-                          child: const Text(
-                            'Cancel',
-                            style: TextStyle(color: Colors.grey),
-                          ),
+                          child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
                         ),
                       ],
                     ),
                   ),
                   const Divider(height: 16),
+                  // Form
                   Expanded(
                     child: SingleChildScrollView(
                       controller: scrollController,
@@ -509,15 +537,10 @@ class _ProfilePageState extends State<ProfilePage> {
                           ),
                           const SizedBox(height: 16),
 
-                          // Industry dropdown - Using job categories
-                          if (_jobCategories.isEmpty && _isLoadingCategories)
-                            const Padding(
-                              padding: EdgeInsets.symmetric(vertical: 8),
-                              child: Center(child: CircularProgressIndicator()),
-                            )
-                          else
+                          // Industry Dropdown
+                          if (_jobCategories.isNotEmpty)
                             DropdownButtonFormField<String>(
-                              value: selectedIndustry.isNotEmpty ? selectedIndustry : null,
+                              value: tempIndustry.isNotEmpty ? tempIndustry : null,
                               decoration: _inputDecoration('Industry', icon: Icons.category_outlined),
                               items: _jobCategories.map<DropdownMenuItem<String>>((category) {
                                 return DropdownMenuItem<String>(
@@ -527,81 +550,64 @@ class _ProfilePageState extends State<ProfilePage> {
                               }).toList(),
                               onChanged: (value) {
                                 setStateBottom(() {
-                                  selectedIndustry = value!;
+                                  tempIndustry = value!;
                                 });
                               },
                             ),
-
                           const SizedBox(height: 16),
 
-                          // Company Size dropdown
+                          // Company Size Dropdown
                           DropdownButtonFormField<String>(
-                            value: selectedCompanySize.isNotEmpty ? selectedCompanySize : null,
+                            value: tempCompanySize.isNotEmpty ? tempCompanySize : null,
                             decoration: _inputDecoration('Company Size', icon: Icons.people_outline),
                             items: companySizeOptions.map((size) {
-                              return DropdownMenuItem(
-                                value: size,
-                                child: Text(size),
-                              );
+                              return DropdownMenuItem(value: size, child: Text(size));
                             }).toList(),
                             onChanged: (value) {
                               setStateBottom(() {
-                                selectedCompanySize = value!;
+                                tempCompanySize = value!;
                               });
                             },
                           ),
-
-                          const SizedBox(height: 16),
-
-                          _buildFormField(
-                            label: 'Location',
-                            controller: locationCtrl,
-                            icon: Icons.location_on_outlined,
-                          ),
-
                           const SizedBox(height: 24),
 
+                          // Save Button
                           SizedBox(
                             width: double.infinity,
                             height: 48,
                             child: ElevatedButton(
                               onPressed: isSaving ? null : () async {
                                 setStateBottom(() => isSaving = true);
+                                try {
+                                  final updates = <String, dynamic>{};
 
-                                // Update company name
-                                if (companyNameCtrl.text.trim() != companyName) {
-                                  await _userRepo.updateCompanyProfile(userId!, {
-                                    'company_name': companyNameCtrl.text.trim(),
-                                  });
-                                }
+                                  if (companyNameCtrl.text.trim() != companyName) {
+                                    updates['company_name'] = companyNameCtrl.text.trim();
+                                  }
+                                  if (tempIndustry != industry) {
+                                    updates['industry'] = tempIndustry;
+                                  }
+                                  if (tempCompanySize != companySize) {
+                                    updates['company_size'] = tempCompanySize;
+                                  }
 
-                                // Update industry
-                                if (selectedIndustry != industry) {
-                                  await _userRepo.updateCompanyProfile(userId!, {
-                                    'industry': selectedIndustry,
-                                  });
-                                }
+                                  if (updates.isNotEmpty) {
+                                    await _userRepo.updateCompanyProfile(userId!, updates);
+                                  }
 
-                                // Update company size
-                                if (selectedCompanySize != companySize) {
-                                  await _userRepo.updateCompanyProfile(userId!, {
-                                    'company_size': selectedCompanySize,
-                                  });
-                                }
-
-                                // Update location
-                                if (locationCtrl.text.trim() != location) {
-                                  await _userRepo.updateCompanyProfile(userId!, {
-                                    'location': locationCtrl.text.trim(),
-                                  });
-                                }
-
-                                await _refreshProfile();
-                                if (mounted) {
+                                  await _refreshProfile();
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text("Company information updated!"),backgroundColor: Colors.green),
+                                    );
+                                    Navigator.pop(context);
+                                  }
+                                } catch (e) {
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text("Company information updated!")),
+                                    SnackBar(content: Text("Error: ${e.toString()}"),backgroundColor: Colors.red),
                                   );
-                                  Navigator.pop(context);
+                                } finally {
+                                  setStateBottom(() => isSaving = false);
                                 }
                               },
                               style: ElevatedButton.styleFrom(
@@ -615,27 +621,20 @@ class _ProfilePageState extends State<ProfilePage> {
                                   ? const SizedBox(
                                 width: 20,
                                 height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                               )
-                                  : const Text(
-                                'Save Changes',
-                                style: TextStyle(fontWeight: FontWeight.bold),
-                              ),
+                                  : const Text('Save Changes', style: TextStyle(fontWeight: FontWeight.bold)),
                             ),
                           ),
-                          const SizedBox(height: 20),
                         ],
                       ),
                     ),
                   ),
                 ],
               ),
-            );
-          },
-        ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -719,7 +718,7 @@ class _ProfilePageState extends State<ProfilePage> {
                                 await _refreshProfile();
                                 if (mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text("Company description updated!")),
+                                    const SnackBar(content: Text("Company description updated!"),backgroundColor: Colors.green),
                                   );
                                   Navigator.pop(context);
                                 }
@@ -887,7 +886,7 @@ class _ProfilePageState extends State<ProfilePage> {
                                 await _refreshProfile();
                                 if (mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text("Profile updated successfully!")),
+                                    const SnackBar(content: Text("Profile updated successfully!"),backgroundColor: Colors.green),
                                   );
                                   Navigator.pop(context);
                                 }
@@ -924,6 +923,548 @@ class _ProfilePageState extends State<ProfilePage> {
             );
           },
         ),
+      ),
+    );
+  }
+
+  // ==================== BRANCH METHODS ====================
+  void _showAddBranchBottomSheet() {
+    final TextEditingController branchNameCtrl = TextEditingController();
+    final TextEditingController addressCtrl = TextEditingController();
+    final TextEditingController phoneCtrl = TextEditingController();
+    final TextEditingController emailCtrl = TextEditingController();
+    bool isHeadOffice = false;
+    bool isSaving = false;
+
+    String selectedCountry = 'Malaysia';
+    String selectedState = '';
+    String? selectedCity;
+    String selectedPostalCode = '';
+
+    // Check if there's already a head office
+    bool hasExistingHeadOffice = branches.any((b) => b['is_head_office'] == true);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setStateBottom) {
+          List<String> availableCities = [];
+          bool hasCities = false;
+          if (selectedState.isNotEmpty) {
+            availableCities = LocationService.getCitiesForState(selectedState);
+            hasCities = availableCities.isNotEmpty;
+          }
+
+          return DraggableScrollableSheet(
+            initialChildSize: 0.9,
+            maxChildSize: 0.96,
+            minChildSize: 0.5,
+            expand: false,
+            builder: (_, scrollController) => Container(
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              ),
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade300,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                    child: Row(
+                      children: [
+                        const Text('Add Branch', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                        const Spacer(),
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 16),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      controller: scrollController,
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        children: [
+                          _buildFormField(
+                            label: 'Branch Name *',
+                            controller: branchNameCtrl,
+                            icon: Icons.business_outlined,
+                          ),
+                          const SizedBox(height: 16),
+                          _buildFormField(
+                            label: 'Street Address *',
+                            controller: addressCtrl,
+                            icon: Icons.location_on_outlined,
+                            maxLines: 2,
+                          ),
+                          const SizedBox(height: 16),
+                          StateCitySelector(
+                            initialCountry: selectedCountry,
+                            initialState: selectedState,
+                            initialCity: selectedCity,
+                            onSelected: (country, state, city, postalCode) {
+                              setStateBottom(() {
+                                selectedCountry = country;
+                                selectedState = state;
+                                selectedCity = city;
+                                selectedPostalCode = postalCode;
+                              });
+                            },
+                          ),
+                          const SizedBox(height: 16),
+                          _buildFormField(
+                            label: 'Phone',
+                            controller: phoneCtrl,
+                            icon: Icons.phone_outlined,
+                            keyboardType: TextInputType.phone,
+                          ),
+                          const SizedBox(height: 16),
+                          _buildFormField(
+                            label: 'Email',
+                            controller: emailCtrl,
+                            icon: Icons.email_outlined,
+                            keyboardType: TextInputType.emailAddress,
+                          ),
+                          const SizedBox(height: 16),
+                          // Head Office Checkbox with warning
+                          Row(
+                            children: [
+                              Checkbox(
+                                value: isHeadOffice,
+                                onChanged: (value) {
+                                  // If trying to set as head office and there's already one, show warning
+                                  if (value == true && hasExistingHeadOffice) {
+                                    showDialog(
+                                      context: context,
+                                      builder: (ctx) => AlertDialog(
+                                        title: const Text('Head Office Exists'),
+                                        content: const Text(
+                                          'You already have a head office branch. '
+                                              'Setting this branch as head office will unmark the existing one.',
+                                        ),
+                                        actions: [
+                                          TextButton(
+                                            onPressed: () => Navigator.pop(ctx),
+                                            child: const Text('Cancel'),
+                                          ),
+                                          TextButton(
+                                            onPressed: () {
+                                              Navigator.pop(ctx);
+                                              setStateBottom(() {
+                                                isHeadOffice = true;
+                                              });
+                                            },
+                                            child: const Text('Proceed'),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  } else {
+                                    setStateBottom(() {
+                                      isHeadOffice = value ?? false;
+                                    });
+                                  }
+                                },
+                              ),
+                              const Text('This is the head office'),
+                            ],
+                          ),
+                          const SizedBox(height: 24),
+                          SizedBox(
+                            width: double.infinity,
+                            height: 48,
+                            child: ElevatedButton(
+                              onPressed: isSaving ? null : () async {
+                                if (branchNameCtrl.text.trim().isEmpty) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text("Please enter branch name"),backgroundColor: Colors.red),
+                                  );
+                                  return;
+                                }
+
+                                if (addressCtrl.text.trim().isEmpty) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text("Please enter street address"),backgroundColor: Colors.red),
+                                  );
+                                  return;
+                                }
+
+                                if (selectedState.isEmpty) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text("Please select a state"),backgroundColor: Colors.red),
+                                  );
+                                  return;
+                                }
+
+                                if (hasCities && (selectedCity == null || selectedCity!.isEmpty)) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text("Please select a city from the list"),backgroundColor: Colors.red),
+                                  );
+                                  return;
+                                }
+
+                                setStateBottom(() => isSaving = true);
+                                try {
+                                  final branchData = {
+                                    'branch_name': branchNameCtrl.text.trim(),
+                                    'address': addressCtrl.text.trim(),
+                                    'city': selectedCity ?? (hasCities ? null : 'N/A'),
+                                    'state': selectedState,
+                                    'postal_code': selectedPostalCode.isNotEmpty ? selectedPostalCode : null,
+                                    'country': selectedCountry,
+                                    'phone': phoneCtrl.text.trim().isEmpty ? null : phoneCtrl.text.trim(),
+                                    'email': emailCtrl.text.trim().isEmpty ? null : emailCtrl.text.trim(),
+                                    'is_head_office': isHeadOffice,
+                                  };
+
+                                  debugPrint('Saving branch with data: $branchData');
+
+                                  await _userRepo.addBranch(_companyId!, branchData);
+                                  await _refreshProfile();
+
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text("Branch added successfully!"),backgroundColor: Colors.green),
+                                    );
+                                    Navigator.pop(context);
+                                  }
+                                } catch (e) {
+                                  debugPrint('Error adding branch: $e');
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text("Error: ${e.toString()}"),backgroundColor: Colors.red),
+                                  );
+                                } finally {
+                                  setStateBottom(() => isSaving = false);
+                                }
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.blue,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              child: isSaving
+                                  ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              )
+                                  : const Text('Add Branch', style: TextStyle(fontWeight: FontWeight.bold)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showEditBranchBottomSheet(Map<String, dynamic> branch) {
+    final TextEditingController branchNameCtrl = TextEditingController(text: branch['branch_name']);
+    final TextEditingController addressCtrl = TextEditingController(text: branch['address']);
+    final TextEditingController phoneCtrl = TextEditingController(text: branch['phone'] ?? '');
+    final TextEditingController emailCtrl = TextEditingController(text: branch['email'] ?? '');
+    bool isHeadOffice = branch['is_head_office'] == true;
+    bool isSaving = false;
+
+    String selectedCountry = branch['country'] ?? 'Malaysia';
+    String selectedState = branch['state'] ?? '';
+    String? selectedCity = branch['city'];
+    String selectedPostalCode = branch['postal_code'] ?? '';
+
+    if (selectedCity == '') selectedCity = null;
+
+    // Check if there's another head office (excluding this branch)
+    bool hasExistingHeadOffice = branches.any((b) =>
+    b['branch_id'] != branch['branch_id'] && b['is_head_office'] == true
+    );
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setStateBottom) {
+          List<String> availableCities = [];
+          bool hasCities = false;
+          if (selectedState.isNotEmpty) {
+            availableCities = LocationService.getCitiesForState(selectedState);
+            hasCities = availableCities.isNotEmpty;
+          }
+
+          return DraggableScrollableSheet(
+            initialChildSize: 0.9,
+            maxChildSize: 0.96,
+            minChildSize: 0.5,
+            expand: false,
+            builder: (_, scrollController) => Container(
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              ),
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade300,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                    child: Row(
+                      children: [
+                        const Text('Edit Branch', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                        const Spacer(),
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 16),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      controller: scrollController,
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        children: [
+                          _buildFormField(
+                            label: 'Branch Name *',
+                            controller: branchNameCtrl,
+                            icon: Icons.business_outlined,
+                          ),
+                          const SizedBox(height: 16),
+                          _buildFormField(
+                            label: 'Street Address *',
+                            controller: addressCtrl,
+                            icon: Icons.location_on_outlined,
+                            maxLines: 2,
+                          ),
+                          const SizedBox(height: 16),
+                          StateCitySelector(
+                            initialCountry: selectedCountry,
+                            initialState: selectedState,
+                            initialCity: selectedCity,
+                            onSelected: (country, state, city, postalCode) {
+                              setStateBottom(() {
+                                selectedCountry = country;
+                                selectedState = state;
+                                selectedCity = city;
+                                selectedPostalCode = postalCode;
+                              });
+                            },
+                          ),
+                          const SizedBox(height: 16),
+                          _buildFormField(
+                            label: 'Phone',
+                            controller: phoneCtrl,
+                            icon: Icons.phone_outlined,
+                            keyboardType: TextInputType.phone,
+                          ),
+                          const SizedBox(height: 16),
+                          _buildFormField(
+                            label: 'Email',
+                            controller: emailCtrl,
+                            icon: Icons.email_outlined,
+                            keyboardType: TextInputType.emailAddress,
+                          ),
+                          const SizedBox(height: 16),
+                          Row(
+                            children: [
+                              Checkbox(
+                                value: isHeadOffice,
+                                onChanged: (value) {
+                                  if (value == true && hasExistingHeadOffice) {
+                                    showDialog(
+                                      context: context,
+                                      builder: (ctx) => AlertDialog(
+                                        title: const Text('Head Office Exists'),
+                                        content: const Text(
+                                          'You already have another branch marked as head office. '
+                                              'Setting this branch as head office will unmark the existing one.',
+                                        ),
+                                        actions: [
+                                          TextButton(
+                                            onPressed: () => Navigator.pop(ctx),
+                                            child: const Text('Cancel'),
+                                          ),
+                                          TextButton(
+                                            onPressed: () {
+                                              Navigator.pop(ctx);
+                                              setStateBottom(() {
+                                                isHeadOffice = true;
+                                              });
+                                            },
+                                            child: const Text('Proceed'),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  } else {
+                                    setStateBottom(() {
+                                      isHeadOffice = value ?? false;
+                                    });
+                                  }
+                                },
+                              ),
+                              const Text('This is the head office'),
+                            ],
+                          ),
+                          const SizedBox(height: 24),
+                          SizedBox(
+                            width: double.infinity,
+                            height: 48,
+                            child: ElevatedButton(
+                              onPressed: isSaving ? null : () async {
+                                if (branchNameCtrl.text.trim().isEmpty) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text("Please enter branch name"),backgroundColor: Colors.red),
+                                  );
+                                  return;
+                                }
+
+                                if (addressCtrl.text.trim().isEmpty) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text("Please enter street address"),backgroundColor: Colors.red),
+                                  );
+                                  return;
+                                }
+
+                                if (selectedState.isEmpty) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text("Please select a state"),backgroundColor: Colors.red),
+                                  );
+                                  return;
+                                }
+
+                                if (hasCities && (selectedCity == null || selectedCity!.isEmpty)) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text("Please select a city from the list"),backgroundColor: Colors.red),
+                                  );
+                                  return;
+                                }
+
+                                setStateBottom(() => isSaving = true);
+                                try {
+                                  final branchData = {
+                                    'branch_name': branchNameCtrl.text.trim(),
+                                    'address': addressCtrl.text.trim(),
+                                    'city': selectedCity ?? (hasCities ? null : 'N/A'),
+                                    'state': selectedState,
+                                    'postal_code': selectedPostalCode,
+                                    'country': selectedCountry,
+                                    'phone': phoneCtrl.text.trim().isEmpty ? null : phoneCtrl.text.trim(),
+                                    'email': emailCtrl.text.trim().isEmpty ? null : emailCtrl.text.trim(),
+                                    'is_head_office': isHeadOffice,
+                                  };
+
+                                  debugPrint('Updating branch with data: $branchData');
+
+                                  await _userRepo.updateBranch(branch['branch_id'], branchData);
+                                  await _refreshProfile();
+
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text("Branch updated successfully!"),backgroundColor: Colors.green),
+                                    );
+                                    Navigator.pop(context);
+                                  }
+                                } catch (e) {
+                                  debugPrint('Error updating branch: $e');
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text("Error: ${e.toString()}"),backgroundColor: Colors.red),
+                                  );
+                                } finally {
+                                  setStateBottom(() => isSaving = false);
+                                }
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.blue,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              child: isSaving
+                                  ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              )
+                                  : const Text('Update Branch', style: TextStyle(fontWeight: FontWeight.bold)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _deleteBranch(Map<String, dynamic> branch) async {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Delete Branch"),
+        content: Text("Are you sure you want to delete '${branch['branch_name']}'?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await _userRepo.deleteBranch(branch['branch_id']);
+              await _refreshProfile();
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Branch deleted successfully!"),backgroundColor: Colors.green),
+                );
+              }
+            },
+            child: const Text("Delete", style: TextStyle(color: Colors.red)),
+          ),
+        ],
       ),
     );
   }
@@ -1016,7 +1557,7 @@ class _ProfilePageState extends State<ProfilePage> {
                               onPressed: isSaving ? null : () async {
                                 if (skillNameCtrl.text.trim().isEmpty) {
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text("Please enter skill name")),
+                                    const SnackBar(content: Text("Please enter skill name"),backgroundColor: Colors.red),
                                   );
                                   return;
                                 }
@@ -1025,7 +1566,7 @@ class _ProfilePageState extends State<ProfilePage> {
                                 await _refreshProfile();
                                 if (mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text("Skill added")),
+                                    const SnackBar(content: Text("Skill added"),backgroundColor: Colors.green),
                                   );
                                   Navigator.pop(context);
                                 }
@@ -1156,7 +1697,7 @@ class _ProfilePageState extends State<ProfilePage> {
                                 await _refreshProfile();
                                 if (mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text("Skill updated")),
+                                    const SnackBar(content: Text("Skill updated"),backgroundColor: Colors.green),
                                   );
                                   Navigator.pop(context);
                                 }
@@ -1215,7 +1756,7 @@ class _ProfilePageState extends State<ProfilePage> {
               await _refreshProfile();
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("Skill deleted")),
+                  const SnackBar(content: Text("Skill deleted"),backgroundColor: Colors.green),
                 );
               }
             },
@@ -1349,7 +1890,7 @@ class _ProfilePageState extends State<ProfilePage> {
                                 await _refreshProfile();
                                 if (mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text("Education added")),
+                                    const SnackBar(content: Text("Education added"),backgroundColor: Colors.green),
                                   );
                                   Navigator.pop(context);
                                 }
@@ -1512,7 +2053,7 @@ class _ProfilePageState extends State<ProfilePage> {
                                 await _refreshProfile();
                                 if (mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text("Education updated")),
+                                    const SnackBar(content: Text("Education updated"),backgroundColor: Colors.green),
                                   );
                                   Navigator.pop(context);
                                 }
@@ -1571,7 +2112,7 @@ class _ProfilePageState extends State<ProfilePage> {
               await _refreshProfile();
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("Education deleted")),
+                  const SnackBar(content: Text("Education deleted"),backgroundColor: Colors.green),
                 );
               }
             },
@@ -1697,7 +2238,7 @@ class _ProfilePageState extends State<ProfilePage> {
                                 await _refreshProfile();
                                 if (mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text("Work experience added")),
+                                    const SnackBar(content: Text("Work experience added"),backgroundColor: Colors.green),
                                   );
                                   Navigator.pop(context);
                                 }
@@ -1852,7 +2393,7 @@ class _ProfilePageState extends State<ProfilePage> {
                                 await _refreshProfile();
                                 if (mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text("Work experience updated")),
+                                    const SnackBar(content: Text("Work experience updated"),backgroundColor: Colors.green),
                                   );
                                   Navigator.pop(context);
                                 }
@@ -1911,7 +2452,7 @@ class _ProfilePageState extends State<ProfilePage> {
               await _refreshProfile();
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("Work experience deleted")),
+                  const SnackBar(content: Text("Work experience deleted"),backgroundColor: Colors.green),
                 );
               }
             },
@@ -2047,6 +2588,8 @@ class _ProfilePageState extends State<ProfilePage> {
               if (!isJobSeeker) ...[
                 const SizedBox(height: 20),
                 _buildCompanyInfoCard(),
+                const SizedBox(height: 15),
+                _buildBranchesCard(),
                 const SizedBox(height: 15),
                 _buildCompanyDescriptionCard(),
                 const SizedBox(height: 15),
@@ -2199,14 +2742,13 @@ class _ProfilePageState extends State<ProfilePage> {
   Widget _buildCompanyInfoCard() {
     return buildCardWithEditButton(
       title: "Company Information",
+      icon: Icons.business_outlined,
       onEdit: _showEditCompanyInfoBottomSheet,
       child: Column(
         children: [
           buildInfoRow("Company Name", companyName.isNotEmpty ? companyName : "Not set"),
           buildInfoRow("Industry", industry.isNotEmpty ? industry : "Not set"),
           buildInfoRow("Company Size", companySize.isNotEmpty ? companySize : "Not set"),
-          buildInfoRow("Location", location.isNotEmpty ? location : "Not set"),
-          buildInfoRow("Phone Number", phone.isNotEmpty ? phone : "Not set"),
         ],
       ),
     );
@@ -2216,6 +2758,7 @@ class _ProfilePageState extends State<ProfilePage> {
   Widget _buildCompanyDescriptionCard() {
     return buildCardWithEditButton(
       title: "About Company",
+      icon: Icons.description_outlined,
       onEdit: _showEditCompanyDescriptionBottomSheet,
       child: Padding(
         padding: const EdgeInsets.all(8.0),
@@ -2231,12 +2774,39 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  // ==================== BRANCHES CARD ====================
+  Widget _buildBranchesCard() {
+    return buildCardWithAddButton(
+      title: "Company Branches",
+      icon: Icons.location_city_outlined,
+      onAdd: _showAddBranchBottomSheet,
+      child: branches.isEmpty
+          ? const Padding(
+        padding: EdgeInsets.all(16.0),
+        child: Text(
+          "No branches added yet. Tap + to add branches.",
+          style: TextStyle(color: Colors.grey),
+        ),
+      )
+          : Column(
+        children: branches.map((branch) {
+          return BranchItem(
+            branch: branch,
+            onEdit: () => _showEditBranchBottomSheet(branch),
+            onDelete: () => _deleteBranch(branch),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
   // ==================== PERSONAL INFO CARD ====================
   Widget _buildPersonalInfoCard() {
     final bool isJobSeeker = role == 'JOB_SEEKER';
 
     return buildCardWithEditButton(
       title: isJobSeeker ? "Personal Information" : "Contact Person",
+      icon: Icons.person_outline,
       onEdit: _showEditPersonalInfoBottomSheet,
       child: isJobSeeker
           ? Column(
@@ -2302,6 +2872,7 @@ class _ProfilePageState extends State<ProfilePage> {
   Widget _buildSkillsCard() {
     return buildCardWithAddButton(
       title: "Skills",
+      icon: Icons.code_outlined,
       onAdd: _showAddSkillBottomSheet,
       child: skills.isEmpty
           ? const Padding(
@@ -2311,11 +2882,9 @@ class _ProfilePageState extends State<ProfilePage> {
           style: TextStyle(color: Colors.grey),
         ),
       )
-          : Wrap(
-        spacing: 8,
-        runSpacing: 8,
+          : Column(
         children: skills.map((skill) {
-          return SkillChip(
+          return SkillItem(
             skill: skill,
             onEdit: () => _showEditSkillBottomSheet(skill),
             onDelete: () => _deleteSkill(skill),
@@ -2329,6 +2898,7 @@ class _ProfilePageState extends State<ProfilePage> {
   Widget _buildEducationCard() {
     return buildCardWithAddButton(
       title: "Education",
+      icon: Icons.school_outlined,
       onAdd: _showAddEducationBottomSheet,
       child: educationList.isEmpty
           ? const Padding(
@@ -2354,6 +2924,7 @@ class _ProfilePageState extends State<ProfilePage> {
   Widget _buildWorkCard() {
     return buildCardWithAddButton(
       title: "Work Experience",
+      icon: Icons.work_outline,
       onAdd: _showAddWorkBottomSheet,
       child: workList.isEmpty
           ? const Padding(
@@ -2406,6 +2977,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Widget buildCardWithEditButton({
     required String title,
+    required IconData icon,
     required VoidCallback onEdit,
     required Widget child,
   }) {
@@ -2429,12 +3001,18 @@ class _ProfilePageState extends State<ProfilePage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 19,
-                ),
+              Row(
+                children: [
+                  Icon(icon, color: Colors.blue, size: 22),  // Add icon here
+                  const SizedBox(width: 8),
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 19,
+                    ),
+                  ),
+                ],
               ),
               IconButton(
                 icon: const Icon(Icons.edit, color: Colors.blue),
@@ -2452,6 +3030,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Widget buildCardWithAddButton({
     required String title,
+    required IconData icon,
     required VoidCallback onAdd,
     required Widget child,
   }) {
@@ -2475,12 +3054,18 @@ class _ProfilePageState extends State<ProfilePage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 19,
-                ),
+              Row(
+                children: [
+                  Icon(icon, color: Colors.blue, size: 22),  // Add icon here
+                  const SizedBox(width: 8),
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 19,
+                    ),
+                  ),
+                ],
               ),
               IconButton(
                 icon: const Icon(Icons.add_circle, color: Colors.blue),
@@ -2500,66 +3085,121 @@ class _ProfilePageState extends State<ProfilePage> {
 // ============================================================================
 // SKILL CHIP WIDGET
 // ============================================================================
-
-class SkillChip extends StatelessWidget {
+class SkillItem extends StatelessWidget {
   final Map<String, dynamic> skill;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
-  const SkillChip({
+  const SkillItem({
     super.key,
     required this.skill,
     required this.onEdit,
     required this.onDelete,
   });
 
+  Color getSkillLevelColor(String? level) {
+    switch (level?.toLowerCase()) {
+      case 'beginner':
+        return Colors.green;
+      case 'intermediate':
+        return Colors.orange;
+      case 'advanced':
+        return Colors.red;
+      default:
+        return Colors.blue;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Chip(
-      label: Column(
-        mainAxisSize: MainAxisSize.min,
+    final skillLevel = skill['skill_level'];
+    final hasLevel = skillLevel != null && skillLevel.toString().isNotEmpty;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Row(
         children: [
-          Text(skill['skill_name']),
-          if (skill['skill_level'] != null && skill['skill_level'].toString().isNotEmpty)
-            Text(
-              skill['skill_level'],
-              style: const TextStyle(fontSize: 10),
-            ),
-        ],
-      ),
-      backgroundColor: Colors.blue.shade50,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-      ),
-      deleteIcon: const Icon(Icons.more_vert, size: 18),
-      onDeleted: () {
-        showMenu(
-          context: context,
-          position: const RelativeRect.fromLTRB(100, 100, 0, 0),
-          items: [
-            PopupMenuItem(
-              onTap: onEdit,
-              child: const Row(
-                children: [
-                  Icon(Icons.edit, size: 18),
-                  SizedBox(width: 8),
-                  Text("Edit"),
-                ],
+
+          // Skill details
+          Expanded(
+            child: Text(
+              skill['skill_name'] ?? 'Unknown Skill',
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
               ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
-            PopupMenuItem(
-              onTap: onDelete,
-              child: const Row(
-                children: [
-                  Icon(Icons.delete, size: 18, color: Colors.red),
-                  SizedBox(width: 8),
-                  Text("Delete", style: TextStyle(color: Colors.red)),
-                ],
+          ),
+
+          // Skill level badge - fixed width container
+          if (hasLevel) ...[
+            const SizedBox(width: 12),
+            SizedBox(
+              width: 100, // Fixed width for all badges
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: getSkillLevelColor(skillLevel).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  skillLevel,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: getSkillLevelColor(skillLevel),
+                  ),
+                ),
               ),
             ),
           ],
-        );
-      },
+
+          const SizedBox(width: 8),
+
+          // Action menu
+          PopupMenuButton(
+            icon: const Icon(Icons.more_vert),
+            onSelected: (value) {
+              if (value == 'edit') onEdit();
+              if (value == 'delete') onDelete();
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'edit',
+                child: Row(
+                  children: [
+                    Icon(Icons.edit, size: 18),
+                    SizedBox(width: 8),
+                    Text("Edit"),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'delete',
+                child: Row(
+                  children: [
+                    Icon(Icons.delete, size: 18, color: Colors.red),
+                    SizedBox(width: 8),
+                    Text("Delete", style: TextStyle(color: Colors.red)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
@@ -2742,6 +3382,168 @@ class WorkItem extends StatelessWidget {
                       fontSize: 12,
                     ),
                   ),
+              ],
+            ),
+          ),
+          PopupMenuButton(
+            icon: const Icon(Icons.more_vert),
+            onSelected: (value) {
+              if (value == 'edit') onEdit();
+              if (value == 'delete') onDelete();
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'edit',
+                child: Row(
+                  children: [
+                    Icon(Icons.edit, size: 18),
+                    SizedBox(width: 8),
+                    Text("Edit"),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'delete',
+                child: Row(
+                  children: [
+                    Icon(Icons.delete, size: 18, color: Colors.red),
+                    SizedBox(width: 8),
+                    Text("Delete", style: TextStyle(color: Colors.red)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// BRANCH ITEM WIDGET
+// ============================================================================
+
+class BranchItem extends StatelessWidget {
+  final Map<String, dynamic> branch;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  const BranchItem({
+    super.key,
+    required this.branch,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: branch['is_head_office'] == true
+            ? Colors.blue.shade50
+            : Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: branch['is_head_office'] == true
+              ? Colors.blue.shade200
+              : Colors.grey.shade200,
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      branch['branch_name'],
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    if (branch['is_head_office'] == true) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.blue,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Text(
+                          'Head Office',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  branch['address'],
+                  style: TextStyle(
+                    color: Colors.grey.shade700,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${branch['city']}, ${branch['state']}',
+                  style: TextStyle(
+                    color: Colors.grey.shade600,
+                    fontSize: 12,
+                  ),
+                ),
+                if (branch['country'] != null && branch['country'].toString().isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      branch['country'],
+                      style: TextStyle(
+                        color: Colors.grey.shade500,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                if (branch['postal_code'] != null && branch['postal_code'].toString().isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      'Postal Code: ${branch['postal_code']}',
+                      style: TextStyle(
+                        color: Colors.grey.shade500,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                if (branch['phone'] != null && branch['phone'].toString().isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Icon(Icons.phone, size: 12, color: Colors.grey.shade500),
+                      const SizedBox(width: 4),
+                      Text(
+                        branch['phone'],
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),

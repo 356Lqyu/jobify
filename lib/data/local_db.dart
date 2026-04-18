@@ -19,10 +19,10 @@ class LocalDB {
   // ── Init ──────────────────────────────────────────────────────────────────
 
   static Future<Database> _init() async {
-    final dbPath = join(await getDatabasesPath(), 'jobify_v1.db');
+    final dbPath = join(await getDatabasesPath(), 'jobify_v3.db');
     return openDatabase(
       dbPath,
-      version: 1,
+      version: 3,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -223,6 +223,26 @@ class LocalDB {
       is_default    INTEGER NOT NULL DEFAULT 0,
       cached_at     TEXT NOT NULL,
       FOREIGN KEY (user_id) REFERENCES users (user_id) ON DELETE CASCADE
+    )
+  ''');
+
+    await db.execute('''
+    CREATE TABLE IF NOT EXISTS company_branches (
+      branch_id     TEXT PRIMARY KEY,
+      company_id    TEXT NOT NULL,
+      branch_name   TEXT NOT NULL,
+      address       TEXT NOT NULL,
+      city          TEXT NOT NULL,
+      state         TEXT NOT NULL,
+      postal_code   TEXT,
+      country       TEXT NOT NULL DEFAULT 'Malaysia',
+      phone         TEXT,
+      email         TEXT,
+      is_head_office INTEGER NOT NULL DEFAULT 0,
+      created_at    TEXT NOT NULL,
+      updated_at    TEXT NOT NULL,
+      cached_at     TEXT NOT NULL,
+      FOREIGN KEY (company_id) REFERENCES company_profiles (company_id) ON DELETE CASCADE
     )
   ''');
   }
@@ -497,7 +517,6 @@ class LocalDB {
     final db = await LocalDB.db;
     await db.insert('job_seeker_profiles', {
       'user_id': userId,
-      'fullname': profile['fullname'] ?? '',
       'date_of_birth': profile['date_of_birth'],
       'gender': profile['gender'],
       'address': profile['address'],
@@ -662,6 +681,44 @@ class LocalDB {
       'resumes',
       where: 'user_id = ?',
       whereArgs: [userId],
+    );
+    return result;
+  }
+
+  static Future<void> cacheBranches(String companyId, List<Map<String, dynamic>> branches) async {
+    final db = await LocalDB.db;
+    await db.delete('company_branches', where: 'company_id = ?', whereArgs: [companyId]);
+
+    final batch = db.batch();
+    final now = DateTime.now().toIso8601String();
+    for (final branch in branches) {
+      batch.insert('company_branches', {
+        'branch_id': branch['branch_id'] as String,
+        'company_id': companyId,
+        'branch_name': branch['branch_name'] as String,
+        'address': branch['address'] as String,
+        'city': branch['city'] as String,
+        'state': branch['state'] as String,
+        'postal_code': branch['postal_code'],
+        'country': branch['country'] ?? 'Malaysia',
+        'phone': branch['phone'],
+        'email': branch['email'],
+        'is_head_office': (branch['is_head_office'] == true) ? 1 : 0,
+        'created_at': branch['created_at']?.toString() ?? now,
+        'updated_at': branch['updated_at']?.toString() ?? now,
+        'cached_at': now,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+    }
+    await batch.commit(noResult: true);
+  }
+
+  static Future<List<Map<String, dynamic>>> getCachedBranches(String companyId) async {
+    final db = await LocalDB.db;
+    final result = await db.query(
+      'company_branches',
+      where: 'company_id = ?',
+      whereArgs: [companyId],
+      orderBy: 'is_head_office DESC, branch_name ASC',
     );
     return result;
   }

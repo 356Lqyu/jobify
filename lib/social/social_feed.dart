@@ -6,7 +6,7 @@ import 'package:jobify/social/post_feed_setting.dart';
 import 'package:jobify/social/social_feed_provider.dart';
 import 'package:jobify/social/social_post_bottom_sheet.dart';
 import 'package:jobify/data/feed_repository.dart';
-import 'package:jobify/users.dart';
+import 'package:jobify/users/users.dart';
 
 class SocialFeedPage extends StatefulWidget {
   final Users user;

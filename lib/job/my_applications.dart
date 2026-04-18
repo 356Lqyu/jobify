@@ -1,5 +1,9 @@
 // lib/job/my_applications.dart
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:open_file/open_file.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:http/http.dart' as http;
 import 'package:jobify/job/application_repository.dart';
 import 'package:jobify/job/application_status.dart';
 
@@ -11,13 +15,16 @@ class MyApplicationsPage extends StatefulWidget {
 }
 
 class _MyApplicationsPageState extends State<MyApplicationsPage>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin {
   final ApplicationRepository _appRepo = ApplicationRepository();
   late TabController _tabController;
 
   List<Map<String, dynamic>> _applications = [];
   bool _isLoading = true;
   String? _error;
+
+  @override
+  bool get wantKeepAlive => true; // Keep state when switching tabs
 
   @override
   void initState() {
@@ -39,7 +46,7 @@ class _MyApplicationsPageState extends State<MyApplicationsPage>
     });
 
     try {
-      final apps = await _appRepo.getMyApplications();
+      final apps = await _appRepo.getMyApplications(forceRefresh: true); // Force refresh
       setState(() {
         _applications = apps;
         _isLoading = false;
@@ -58,7 +65,7 @@ class _MyApplicationsPageState extends State<MyApplicationsPage>
       builder: (context) => AlertDialog(
         title: const Text('Withdraw Application'),
         content: const Text(
-          'Are you sure you want to withdraw this application? This action cannot be undone.',
+          'Are you sure you want to withdraw this application? You can apply again later.',
         ),
         actions: [
           TextButton(
@@ -84,7 +91,7 @@ class _MyApplicationsPageState extends State<MyApplicationsPage>
             backgroundColor: Colors.green,
           ),
         );
-        await _loadApplications();
+        await _loadApplications(); // Refresh the list
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -107,6 +114,7 @@ class _MyApplicationsPageState extends State<MyApplicationsPage>
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // Required for AutomaticKeepAliveClientMixin
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
@@ -114,6 +122,7 @@ class _MyApplicationsPageState extends State<MyApplicationsPage>
         backgroundColor: Colors.white,
         elevation: 0,
         foregroundColor: Colors.black87,
+        automaticallyImplyLeading: false, // Remove back button
         bottom: TabBar(
           controller: _tabController,
           labelColor: const Color(0xFF2563EB),
@@ -205,6 +214,7 @@ class _MyApplicationsPageState extends State<MyApplicationsPage>
             onWithdraw: app['status'] == 'pending'
                 ? () => _withdrawApplication(app['application_id'])
                 : null,
+            onRefresh: _loadApplications,
           );
         },
       ),
@@ -215,10 +225,12 @@ class _MyApplicationsPageState extends State<MyApplicationsPage>
 class _ApplicationCard extends StatefulWidget {
   final Map<String, dynamic> application;
   final VoidCallback? onWithdraw;
+  final VoidCallback onRefresh;
 
   const _ApplicationCard({
     required this.application,
     this.onWithdraw,
+    required this.onRefresh,
   });
 
   @override
@@ -227,6 +239,39 @@ class _ApplicationCard extends StatefulWidget {
 
 class _ApplicationCardState extends State<_ApplicationCard> {
   bool _isExpanded = false;
+  bool _isDescriptionExpanded = false;
+
+  Future<void> _viewResume(String url, String fileName) async {
+    try {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(child: CircularProgressIndicator()),
+      );
+
+      final cleanUrl = url.trim();
+      final response = await http.get(Uri.parse(cleanUrl));
+
+      if (response.statusCode == 200) {
+        final tempDir = await getTemporaryDirectory();
+        final file = File('${tempDir.path}/$fileName');
+        await file.writeAsBytes(response.bodyBytes);
+
+        if (mounted) Navigator.pop(context);
+        await OpenFile.open(file.path);
+      } else {
+        if (mounted) Navigator.pop(context);
+        throw Exception('Failed to download resume');
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error opening resume: $e')),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -235,6 +280,8 @@ class _ApplicationCardState extends State<_ApplicationCard> {
     final appliedDate = appliedAt != null
         ? '${appliedAt.day}/${appliedAt.month}/${appliedAt.year}'
         : 'Unknown';
+    final description = widget.application['description'] ?? '';
+    final hasLongDescription = description.length > 100;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -328,24 +375,64 @@ class _ApplicationCardState extends State<_ApplicationCard> {
                       widget.application['job_type'] ?? 'Full-time'),
                   const SizedBox(height: 8),
                   _buildDetailRow(Icons.calendar_today, 'Applied Date', appliedDate),
+
+                  // Resume Link with Preview
+                  if (widget.application['resume_url'] != null &&
+                      widget.application['resume_url'].toString().isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: _buildDetailRow(
+                        Icons.picture_as_pdf,
+                        'Resume',
+                        widget.application['resume_file_name'] ?? 'Resume.pdf',
+                        isLink: true,
+                        onTap: () => _viewResume(
+                          widget.application['resume_url'],
+                          widget.application['resume_file_name'] ?? 'Resume.pdf',
+                        ),
+                      ),
+                    ),
+
                   const SizedBox(height: 12),
 
-                  // Job Description (if available)
-                  if (widget.application['description'] != null &&
-                      widget.application['description'].toString().isNotEmpty)
+                  // Job Description (Collapsible)
+                  if (description.isNotEmpty)
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'Job Description',
-                          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                        Row(
+                          children: [
+                            const Text(
+                              'Job Description',
+                              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                            ),
+                            const Spacer(),
+                            if (hasLongDescription)
+                              TextButton(
+                                onPressed: () => setState(() => _isDescriptionExpanded = !_isDescriptionExpanded),
+                                child: Text(
+                                  _isDescriptionExpanded ? 'Show Less' : 'Show More',
+                                  style: const TextStyle(fontSize: 11, color: Color(0xFF2563EB)),
+                                ),
+                              ),
+                          ],
                         ),
                         const SizedBox(height: 4),
-                        Text(
-                          widget.application['description'],
-                          style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
+                        AnimatedCrossFade(
+                          firstChild: Text(
+                            description,
+                            style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          secondChild: Text(
+                            description,
+                            style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                          ),
+                          crossFadeState: _isDescriptionExpanded
+                              ? CrossFadeState.showSecond
+                              : CrossFadeState.showFirst,
+                          duration: const Duration(milliseconds: 200),
                         ),
                       ],
                     ),
@@ -376,25 +463,37 @@ class _ApplicationCardState extends State<_ApplicationCard> {
     );
   }
 
-  Widget _buildDetailRow(IconData icon, String label, String value) {
-    return Row(
-      children: [
-        Icon(icon, size: 14, color: Colors.grey[500]),
-        const SizedBox(width: 8),
-        SizedBox(
-          width: 85,
-          child: Text(
-            label,
-            style: TextStyle(color: Colors.grey[600], fontSize: 12),
+  Widget _buildDetailRow(IconData icon, String label, String value,
+      {bool isLink = false, VoidCallback? onTap}) {
+    return GestureDetector(
+      onTap: isLink ? onTap : null,
+      child: Row(
+        children: [
+          Icon(icon, size: 14, color: Colors.grey[500]),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 85,
+            child: Text(
+              label,
+              style: TextStyle(color: Colors.grey[600], fontSize: 12),
+            ),
           ),
-        ),
-        Expanded(
-          child: Text(
-            value,
-            style: TextStyle(color: Colors.grey[700], fontSize: 12),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(
+                color: isLink ? const Color(0xFF2563EB) : Colors.grey[700],
+                fontSize: 12,
+                decoration: isLink ? TextDecoration.underline : null,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
-        ),
-      ],
+          if (isLink)
+            Icon(Icons.open_in_new, size: 14, color: const Color(0xFF2563EB)),
+        ],
+      ),
     );
   }
 

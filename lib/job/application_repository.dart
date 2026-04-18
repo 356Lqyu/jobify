@@ -9,7 +9,7 @@ class ApplicationRepository {
   String? get _uid => _sb.auth.currentUser?.id;
 
   // ============================================================================
-  // CHECK EXISTING APPLICATION
+  // CHECK EXISTING APPLICATION (excluding withdrawn)
   // ============================================================================
 
   Future<bool> checkExistingApplication(String jobId, String userId) async {
@@ -19,6 +19,7 @@ class ApplicationRepository {
           .select()
           .eq('job_id', jobId)
           .eq('user_id', userId)
+          .neq('status', 'withdrawn')  // Exclude withdrawn applications
           .maybeSingle();
       return existing != null;
     } catch (e) {
@@ -112,6 +113,7 @@ class ApplicationRepository {
             )
           ''')
           .eq('user_id', userId)
+          .neq('status', 'withdrawn')  // Don't show withdrawn applications
           .order('applied_at', ascending: false);
 
       final applications = List<Map<String, dynamic>>.from(response);
@@ -141,6 +143,7 @@ class ApplicationRepository {
       'job_id': app['job_id'],
       'user_id': app['user_id'],
       'resume_url': app['resume_url'],
+      'resume_file_name': app['resume_file_name'],
       'cover_letter': app['cover_letter'],
       'status': app['status'],
       'applied_at': app['applied_at'],
@@ -157,7 +160,7 @@ class ApplicationRepository {
   }
 
   // ============================================================================
-  // WITHDRAW APPLICATION
+  // WITHDRAW APPLICATION (soft delete - set status to withdrawn)
   // ============================================================================
 
   Future<bool> withdrawApplication(String applicationId) async {
@@ -172,13 +175,18 @@ class ApplicationRepository {
         throw Exception('Cannot withdraw application that is already ${current['status']}');
       }
 
+      // Soft delete - update status to withdrawn instead of deleting
       await _sb
           .from('job_application')
-          .delete()
+          .update({
+        'status': 'withdrawn',
+        'updated_at': DateTime.now().toIso8601String(),
+      })
           .eq('application_id', applicationId);
 
       final userId = _uid;
       if (userId != null) {
+        // Remove from cache so it doesn't show in list
         await LocalDB.deleteCachedJobApplication(applicationId, userId);
       }
 
@@ -215,6 +223,7 @@ class ApplicationRepository {
             )
           ''')
           .eq('job_id', jobId)
+          .neq('status', 'withdrawn')
           .order('applied_at', ascending: false);
 
       final applicants = List<Map<String, dynamic>>.from(response);
@@ -236,6 +245,7 @@ class ApplicationRepository {
       'applied_at': app['applied_at'],
       'updated_at': app['updated_at'],
       'resume_url': app['resume_url'],
+      'resume_file_name': app['resume_file_name'],
       'cover_letter': app['cover_letter'],
       'user': {
         'user_id': userData?['user_id'],
@@ -297,7 +307,8 @@ class ApplicationRepository {
       final response = await _sb
           .from('job_application')
           .select('status')
-          .eq('job_id', jobId);
+          .eq('job_id', jobId)
+          .neq('status', 'withdrawn');
 
       final apps = List<Map<String, dynamic>>.from(response);
 

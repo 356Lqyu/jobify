@@ -144,6 +144,8 @@ class _LoginState extends State<Login> {
           String expectedRole = widget.selectedRole == 'JOB_SEEKER' ? 'Job Seeker' : 'Employer';
           String actualRole = userRole == 'JOB_SEEKER' ? 'Job Seeker' : 'Employer';
 
+          await authService.signOut();
+
           setState(() {
             roleError = "This account is registered as a $actualRole.\n"
                 "Please use the \"I'm ${expectedRole == 'Job Seeker' ? 'Looking for a job' : 'Hiring'}\" button to login.";

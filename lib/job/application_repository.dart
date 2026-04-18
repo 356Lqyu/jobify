@@ -35,7 +35,6 @@ class ApplicationRepository {
     required String jobId,
     required String userId,
     required String resumeUrl,
-    required String resumeFileName,
     String? coverLetter,
   }) async {
     try {
@@ -49,7 +48,6 @@ class ApplicationRepository {
         'job_id': jobId,
         'user_id': userId,
         'resume_url': resumeUrl,
-        'resume_file_name': resumeFileName,
         'status': 'pending',
         'applied_at': now,
         'updated_at': now,
@@ -143,7 +141,6 @@ class ApplicationRepository {
       'job_id': app['job_id'],
       'user_id': app['user_id'],
       'resume_url': app['resume_url'],
-      'resume_file_name': app['resume_file_name'],
       'cover_letter': app['cover_letter'],
       'status': app['status'],
       'applied_at': app['applied_at'],
@@ -239,7 +236,6 @@ class ApplicationRepository {
       'applied_at': app['applied_at'],
       'updated_at': app['updated_at'],
       'resume_url': app['resume_url'],
-      'resume_file_name': app['resume_file_name'],
       'cover_letter': app['cover_letter'],
       'user': {
         'user_id': userData?['user_id'],
@@ -290,14 +286,6 @@ class ApplicationRepository {
       debugPrint('Error updating application status: $e');
       return false;
     }
-  }
-
-  Future<bool> acceptApplication(String applicationId) async {
-    return updateApplicationStatus(applicationId: applicationId, newStatus: 'accepted');
-  }
-
-  Future<bool> rejectApplication(String applicationId) async {
-    return updateApplicationStatus(applicationId: applicationId, newStatus: 'rejected');
   }
 
   // ============================================================================

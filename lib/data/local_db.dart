@@ -1,7 +1,3 @@
-// ═══════════════════════════════════════════════════════════════════════════
-// local_db.dart  –  SQLite local cache  (sqflite ^2.3.2 + path ^1.9.0)
-// ═══════════════════════════════════════════════════════════════════════════
-
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:jobify/social/post_feed_setting.dart';
@@ -19,10 +15,10 @@ class LocalDB {
   // ── Init ──────────────────────────────────────────────────────────────────
 
   static Future<Database> _init() async {
-    final dbPath = join(await getDatabasesPath(), 'jobify_v7.db');
+    final dbPath = join(await getDatabasesPath(), 'jobify_v8.db');
     return openDatabase(
       dbPath,
-      version: 7,
+      version: 8,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -226,37 +222,65 @@ class LocalDB {
     )
   ''');
 
-  //14. Cached job applications
+    // 14. Cached job applications
     await db.execute('''
-  CREATE TABLE IF NOT EXISTS cached_job_applications (
-    application_id    TEXT PRIMARY KEY,
-    user_id           TEXT NOT NULL,
-    job_id            TEXT NOT NULL,
-    job_title         TEXT NOT NULL,
-    company_name      TEXT NOT NULL,
-    company_logo      TEXT,
-    location          TEXT,
-    salary_min        REAL,
-    salary_max        REAL,
-    job_type          TEXT,
-    description       TEXT,
-    resume_url        TEXT NOT NULL,
-    status            TEXT NOT NULL DEFAULT 'pending',
-    applied_at        TEXT NOT NULL,
-    updated_at        TEXT NOT NULL,
-    cached_at         TEXT NOT NULL,
-    FOREIGN KEY (user_id) REFERENCES cached_users (user_id) ON DELETE CASCADE
-  )
-  ''');
+      CREATE TABLE IF NOT EXISTS cached_job_applications (
+        application_id    TEXT PRIMARY KEY,
+        user_id           TEXT NOT NULL,
+        job_id            TEXT NOT NULL,
+        job_title         TEXT NOT NULL,
+        company_name      TEXT NOT NULL,
+        company_logo      TEXT,
+        location          TEXT,
+        salary_min        REAL,
+        salary_max        REAL,
+        job_type          TEXT,
+        description       TEXT,
+        resume_url        TEXT NOT NULL,
+        status            TEXT NOT NULL DEFAULT 'pending',
+        applied_at        TEXT NOT NULL,
+        updated_at        TEXT NOT NULL,
+        cached_at         TEXT NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES cached_users (user_id) ON DELETE CASCADE
+      )
+    ''');
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // UPGRADE HANDLER - ONLY ONE METHOD (NO DROPPING TABLES)
+  // ═══════════════════════════════════════════════════════════════════════════
+
   static Future<void> _onUpgrade(Database db, int oldV, int newV) async {
-    for (final t in ['posts','comments','liked_posts','saved_posts','job_posts','saved_jobs',
-      'cached_users','cached_job_seeker_profiles','cached_company_profiles',
-      'cached_skills','cached_education','cached_experience','cached_resumes']) {
-      await db.execute('DROP TABLE IF EXISTS $t');
+    // Handle version upgrades gracefully without dropping existing data
+    if (oldV < 8) {
+      // Add the missing cached_job_applications table when upgrading from version 7 to 8
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS cached_job_applications (
+          application_id    TEXT PRIMARY KEY,
+          user_id           TEXT NOT NULL,
+          job_id            TEXT NOT NULL,
+          job_title         TEXT NOT NULL,
+          company_name      TEXT NOT NULL,
+          company_logo      TEXT,
+          location          TEXT,
+          salary_min        REAL,
+          salary_max        REAL,
+          job_type          TEXT,
+          description       TEXT,
+          resume_url        TEXT NOT NULL,
+          status            TEXT NOT NULL DEFAULT 'pending',
+          applied_at        TEXT NOT NULL,
+          updated_at        TEXT NOT NULL,
+          cached_at         TEXT NOT NULL,
+          FOREIGN KEY (user_id) REFERENCES cached_users (user_id) ON DELETE CASCADE
+        )
+      ''');
     }
-    await _onCreate(db, newV);
+
+    // Add more upgrade cases here in the future
+    // if (oldV < 9) {
+    //   // Add new tables or alter existing ones
+    // }
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -466,8 +490,9 @@ class LocalDB {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // JOBS APPLICATION
+  // JOB APPLICATIONS CACHE
   // ══════════════════════════════════════════════════════════════════════════
+
   static Future<void> cacheJobApplications(
       List<Map<String, dynamic>> applications, String userId) async {
     final db = await LocalDB.db;
@@ -557,9 +582,11 @@ class LocalDB {
       whereArgs: [applicationId],
     );
   }
+
   // ══════════════════════════════════════════════════════════════════════════
-  // Users
+  // USERS CACHE
   // ══════════════════════════════════════════════════════════════════════════
+
   static const int _userCacheTTLMinutes = 5; // Cache valid for 5 minutes
 
   static Future<void> cacheUser(Users user) async {
@@ -567,6 +594,7 @@ class LocalDB {
     await db.insert('cached_users', {
       'user_id': user.userId,
       'role': user.role,
+      'fullname': user.fullname,
       'phone': user.phone,
       'profile_image_url': user.profileImageUrl,
       'email': user.email,
@@ -597,7 +625,7 @@ class LocalDB {
     return Users(
       userId: row['user_id'] as String,
       role: row['role'] as String,
-      fullname: '',
+      fullname: row['fullname'] as String,
       phone: row['phone'] as String?,
       profileImageUrl: row['profile_image_url'] as String?,
       createdAt: DateTime.parse(row['created_at'] as String),
@@ -610,7 +638,6 @@ class LocalDB {
     final db = await LocalDB.db;
     await db.insert('cached_job_seeker_profiles', {
       'user_id': userId,
-      'fullname': profile['fullname'] ?? '',
       'date_of_birth': profile['date_of_birth'],
       'gender': profile['gender'],
       'address': profile['address'],
@@ -657,7 +684,7 @@ class LocalDB {
 
   static Future<void> cacheSkills(String userId, List<Map<String, dynamic>> skills) async {
     final db = await LocalDB.db;
-    // Delete old skills for this user first
+
     await db.delete('cached_skills', where: 'user_id = ?', whereArgs: [userId]);
 
     final batch = db.batch();
@@ -788,13 +815,14 @@ class LocalDB {
     await db.delete('cached_education', where: 'user_id = ?', whereArgs: [userId]);
     await db.delete('cached_experience', where: 'user_id = ?', whereArgs: [userId]);
     await db.delete('cached_resumes', where: 'user_id = ?', whereArgs: [userId]);
+    await db.delete('cached_job_applications', where: 'user_id = ?', whereArgs: [userId]);
   }
 
   // ── Utilities ─────────────────────────────────────────────────────────────
 
   static Future<void> clearAllCaches() async {
     final d = await db;
-    for (final t in ['posts','comments','liked_posts','saved_posts','job_posts','saved_jobs']) {
+    for (final t in ['posts','comments','liked_posts','saved_posts','job_posts','saved_jobs', 'cached_job_applications']) {
       await d.delete(t);
     }
   }

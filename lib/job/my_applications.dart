@@ -134,8 +134,7 @@ class _MyApplicationsPageState extends State<MyApplicationsPage>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.error_outline,
-                size: 64, color: Colors.red),
+            const Icon(Icons.error_outline, size: 64, color: Colors.red),
             const SizedBox(height: 16),
             Text(_error!),
             const SizedBox(height: 16),
@@ -151,15 +150,11 @@ class _MyApplicationsPageState extends State<MyApplicationsPage>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.work_outline,
-                size: 64, color: Colors.grey.shade400),
+            Icon(Icons.work_outline, size: 64, color: Colors.grey.shade400),
             const SizedBox(height: 16),
             Text(
               'No applications yet',
-              style: TextStyle(
-                fontSize: 18,
-                color: Colors.grey.shade600,
-              ),
+              style: TextStyle(fontSize: 18, color: Colors.grey.shade600),
             ),
             const SizedBox(height: 8),
             Text(
@@ -217,7 +212,7 @@ class _MyApplicationsPageState extends State<MyApplicationsPage>
   }
 }
 
-class _ApplicationCard extends StatelessWidget {
+class _ApplicationCard extends StatefulWidget {
   final Map<String, dynamic> application;
   final VoidCallback? onWithdraw;
 
@@ -227,16 +222,22 @@ class _ApplicationCard extends StatelessWidget {
   });
 
   @override
+  State<_ApplicationCard> createState() => _ApplicationCardState();
+}
+
+class _ApplicationCardState extends State<_ApplicationCard> {
+  bool _isExpanded = false;
+
+  @override
   Widget build(BuildContext context) {
-    final status = application['status'] as String;
-    final appliedAt = DateTime.tryParse(application['applied_at'] ?? '');
+    final status = widget.application['status'] as String;
+    final appliedAt = DateTime.tryParse(widget.application['applied_at'] ?? '');
     final appliedDate = appliedAt != null
         ? '${appliedAt.day}/${appliedAt.month}/${appliedAt.year}'
         : 'Unknown';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -250,109 +251,155 @@ class _ApplicationCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                width: 50,
-                height: 50,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF2563EB).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Center(
-                  child: Icon(Icons.business, color: Color(0xFF2563EB)),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      application['job_title'] ?? 'Position',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      application['company_name'] ?? 'Company',
-                      style: TextStyle(color: Colors.grey[600], fontSize: 13),
-                    ),
-                  ],
-                ),
-              ),
-              ApplicationStatusChip(status: status),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Icon(Icons.location_on, size: 14, color: Colors.grey[500]),
-              const SizedBox(width: 4),
-              Expanded(
-                child: Text(
-                  application['location'] ?? 'Location',
-                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Row(
-            children: [
-              Icon(Icons.access_time, size: 14, color: Colors.grey[500]),
-              const SizedBox(width: 4),
-              Text(
-                'Applied: $appliedDate',
-                style: TextStyle(color: Colors.grey[600], fontSize: 12),
-              ),
-            ],
-          ),
-          if (application['salary_min'] != null ||
-              application['salary_max'] != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
+          // Header - Always visible
+          InkWell(
+            onTap: () => setState(() => _isExpanded = !_isExpanded),
+            borderRadius: BorderRadius.circular(16),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
-                  Icon(Icons.attach_money, size: 14, color: Colors.grey[500]),
-                  const SizedBox(width: 4),
-                  Text(
-                    _formatSalary(
-                      application['salary_min'],
-                      application['salary_max'],
+                  Container(
+                    width: 50,
+                    height: 50,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF2563EB).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                    child: const Center(
+                      child: Icon(Icons.business, color: Color(0xFF2563EB)),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.application['job_title'] ?? 'Position',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          widget.application['company_name'] ?? 'Company',
+                          style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      ApplicationStatusChip(status: status),
+                      const SizedBox(height: 4),
+                      Icon(
+                        _isExpanded ? Icons.expand_less : Icons.expand_more,
+                        color: Colors.grey[400],
+                        size: 20,
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
-          if (onWithdraw != null) ...[
-            const SizedBox(height: 12),
-            Divider(color: Colors.grey.shade200),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton.icon(
-                  onPressed: onWithdraw,
-                  icon: const Icon(Icons.delete_outline, size: 18),
-                  label: const Text('Withdraw'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: Colors.red,
-                  ),
-                ),
-              ],
+          ),
+
+          // Expanded Details
+          if (_isExpanded)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Divider(),
+                  const SizedBox(height: 12),
+
+                  // Job Details
+                  _buildDetailRow(Icons.location_on, 'Location',
+                      widget.application['location'] ?? 'Not specified'),
+                  const SizedBox(height: 8),
+                  _buildDetailRow(Icons.attach_money, 'Salary',
+                      _formatSalary(widget.application['salary_min'], widget.application['salary_max'])),
+                  const SizedBox(height: 8),
+                  _buildDetailRow(Icons.access_time, 'Job Type',
+                      widget.application['job_type'] ?? 'Full-time'),
+                  const SizedBox(height: 8),
+                  _buildDetailRow(Icons.calendar_today, 'Applied Date', appliedDate),
+                  const SizedBox(height: 12),
+
+                  // Job Description (if available)
+                  if (widget.application['description'] != null &&
+                      widget.application['description'].toString().isNotEmpty)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Job Description',
+                          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          widget.application['description'],
+                          style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+
+                  if (widget.onWithdraw != null) ...[
+                    const SizedBox(height: 12),
+                    const Divider(),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton.icon(
+                          onPressed: widget.onWithdraw,
+                          icon: const Icon(Icons.delete_outline, size: 18),
+                          label: const Text('Withdraw Application'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: Colors.red,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
             ),
-          ],
         ],
       ),
     );
   }
 
+  Widget _buildDetailRow(IconData icon, String label, String value) {
+    return Row(
+      children: [
+        Icon(icon, size: 14, color: Colors.grey[500]),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: 85,
+          child: Text(
+            label,
+            style: TextStyle(color: Colors.grey[600], fontSize: 12),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: TextStyle(color: Colors.grey[700], fontSize: 12),
+          ),
+        ),
+      ],
+    );
+  }
+
   String _formatSalary(dynamic min, dynamic max) {
-    if (min == null && max == null) return 'Salary not disclosed';
+    if (min == null && max == null) return 'Not disclosed';
     if (min != null && max != null) {
       return 'RM ${_formatNumber(min)} - ${_formatNumber(max)}';
     }

@@ -264,6 +264,7 @@ class _ProfilePageState extends State<ProfilePage> {
         });
       }
 
+
       if (role == 'JOB_SEEKER') {
         final cachedSkills = await LocalDB.getCachedSkills(userId!);
         final cachedEducation = await LocalDB.getCachedEducation(userId!);
@@ -511,14 +512,16 @@ class _ProfilePageState extends State<ProfilePage> {
 
       if (result != null && mounted) {
         final file = result.files.first;
-        final bytes = file.bytes;
+        final bytes = file.bytes; // This is Uint8List
         final fileName = file.name;
 
         if (bytes != null) {
-          final storagePath = 'resumes/$userId/$fileName';
+          final storagePath = 'resumes/$userId/${DateTime.now().millisecondsSinceEpoch}_$fileName';
+
+          // Upload to storage - bytes is Uint8List which implements List<int>
           await supabase.storage.from('resumes').uploadBinary(
             storagePath,
-            bytes,
+            bytes,  // This works - Uint8List is a List<int>
             fileOptions: const FileOptions(
               cacheControl: '3600',
               upsert: false,

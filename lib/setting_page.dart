@@ -73,6 +73,7 @@ class _SettingPageState extends State<SettingPage> {
 
     // Fetch company name if employer (from cache)
     if (role?.toUpperCase() == 'POSTER') {
+      await _fetchJobPostCount();
       final userId = supabase.auth.currentUser?.id;
       if (userId != null) {
         final companyProfile = await LocalDB.getCachedCompanyProfile(userId);
@@ -83,6 +84,8 @@ class _SettingPageState extends State<SettingPage> {
               profileImageUrl = companyProfile['logo_url'];
             }
           });
+          // Update cache
+          await LocalDB.cacheCompanyProfile(userId, companyData);
         }
       }
     }

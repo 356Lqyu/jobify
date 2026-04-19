@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:jobify/job_post/job_post_service.dart';
+import 'package:jobify/data/job_repository.dart';
 import 'package:jobify/job_post/create_job_post.dart';
 import 'package:jobify/job_post/job_detail_employer.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:jobify/data/local_db.dart';
 
 class JobPostManagementPage extends StatefulWidget {
   const JobPostManagementPage({super.key});
@@ -12,7 +13,7 @@ class JobPostManagementPage extends StatefulWidget {
 }
 
 class JobPostManagementPageState extends State<JobPostManagementPage> {
-  final JobPostService _service = JobPostService();
+  final JobRepository _jobRepo = JobRepository();
   List<Map<String, dynamic>> _jobs = [];
   bool _isLoading = true;
   String? _userId;
@@ -32,32 +33,94 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
       return;
     }
     _userId = session.user.id;
+    print('Logged in user ID: $_userId');
+
     final userData = await supabase
         .from('users')
         .select('role')
         .eq('user_id', _userId!)
         .maybeSingle();
     if (userData != null) _userRole = userData['role'];
+    print('User role: $_userRole');
+
     await loadJobs();
   }
 
   Future<void> loadJobs() async {
     if (_userId == null) return;
+
+    // Show cached data immediately
+    try {
+      final cached = await LocalDB.getCachedJobMapsByUser(_userId!);
+      if (cached.isNotEmpty) {
+        print('Loaded ${cached.length} jobs from cache');
+        setState(() => _jobs = cached);
+      } else {
+        print('No cached jobs found for user $_userId');
+      }
+    } catch (e) {
+      print('Cache error: $e');
+    }
+
+    // Fetch fresh from Supabase and update cache
     setState(() => _isLoading = true);
     try {
-      final data = await _service.fetchMyJobPosts(userId: _userId);
-      setState(() => _jobs = data);
+      final fresh = await _jobRepo.fetchMyJobPosts(userId: _userId);
+      print('Fetched ${fresh.length} jobs from Supabase');
+      final flatJobs = fresh.map((job) => _flattenJobMap(job)).toList();
+      setState(() => _jobs = flatJobs);
+      // Update cache with flattened data
+      await LocalDB.insertJobMaps(flatJobs);
     } catch (e) {
-      // ignore
+      print('Network error: $e');
     } finally {
       setState(() => _isLoading = false);
     }
   }
 
+  /// Convert nested Supabase map (with job_type_id: {name: ...}) to flat map
+  Map<String, dynamic> _flattenJobMap(Map<String, dynamic> job) {
+    // Helper to safely get the 'name' from a nested object
+    String getName(dynamic field) {
+      if (field == null) return '';
+      if (field is Map) return field['name']?.toString() ?? '';
+      // If it's a String (just the ID), we can't get the name
+      return '';
+    }
+
+    return {
+      'job_id': job['job_id'],
+      'company_id': job['company_id'],
+      'created_by': job['created_by'],
+      'job_title': job['job_title'],
+      'description': job['description'],
+      'location': job['location'],
+      'remote_option': job['remote_option'] == true,
+      'salary_min': job['salary_min'],
+      'salary_max': job['salary_max'],
+      'job_type': getName(job['job_type_id']),
+      'job_category': getName(job['job_category_id']),
+      'experience_level': getName(job['experience_level_id']),
+      'vacancy_count': job['vacancy_count'],
+      'application_deadline': job['application_deadline'],
+      'status': job['status'],
+      'view_count': job['view_count'],
+      'application_count': job['application_count'],
+      'created_at': job['created_at'],
+      'image_urls': job['image_urls'] is String
+          ? (job['image_urls'] as String).split(',')
+          : (job['image_urls'] as List?) ?? [],
+      'video_url': job['video_url'],
+      'company_name': job['company_name'] ?? '',
+      'company_logo_url': job['company_logo_url'],
+      'company_industry': job['company_industry'],
+      'is_saved': job['is_saved'] == true,
+    };
+  }
   Future<void> _toggleJobStatus(String jobId, bool isActive) async {
     final newStatus = isActive ? 'closed' : 'active';
     try {
-      await _service.updateJobPost(jobId, {'status': newStatus});
+      await _jobRepo.updateJobPost(jobId, {'status': newStatus});
       await loadJobs();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -89,7 +152,7 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
       ),
     );
     if (confirm == true) {
-      await _service.deleteJobPost(jobId);
+      await _jobRepo.deleteJobPost(jobId);
       loadJobs();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Job deleted')));
@@ -99,7 +162,7 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
+    if (_isLoading && _jobs.isEmpty) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
@@ -141,18 +204,16 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
         onRefresh: loadJobs,
         child: Column(
           children: [
-            // Summary cards
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
               child: Row(
                 children: [
-                  _buildSummaryCard('Active Jobs', activeCount, Icons.work_outline, Colors.blue,),
+                  _buildSummaryCard('Active Jobs', activeCount, Icons.work_outline, Colors.blue),
                   const SizedBox(width: 12),
                   _buildSummaryCard('Total Jobs', _jobs.length, Icons.list_alt, Colors.grey.shade700),
                 ],
               ),
             ),
-            // Header with Post button
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Row(
@@ -193,7 +254,6 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
                 ],
               ),
             ),
-            // Job list
             Expanded(
               child: _jobs.isEmpty
                   ? _buildEmptyState()
@@ -205,7 +265,6 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
                   final isActive = job['status'] == 'active';
                   final List<String> imageUrls = List<String>.from(job['image_urls'] ?? []);
                   final thumbnail = imageUrls.isNotEmpty ? imageUrls.first : null;
-
                   return _buildJobCard(job, isActive, thumbnail);
                 },
               ),
@@ -270,7 +329,7 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
   }
 
   Widget _buildJobCard(Map<String, dynamic> job, bool isActive, String? thumbnail) {
-    final jobType = job['job_type_id']?['name'] ?? 'Full-time';
+    final jobType = job['job_type'] ?? 'Full-time';
     final location = job['location'] ?? 'Unknown location';
 
     return Card(
@@ -283,18 +342,15 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (thumbnail != null)
+                if (thumbnail != null) ...[
                   ClipRRect(
                     borderRadius: BorderRadius.circular(12),
-                    child: Image.network(
-                      thumbnail,
-                      width: 60,
-                      height: 60,
-                      fit: BoxFit.cover,
-                    ),
+                    child: Image.network(thumbnail, width: 60, height: 60, fit: BoxFit.cover),
                   ),
-                if (thumbnail != null) const SizedBox(width: 12),
+                  const SizedBox(width: 12),
+                ],
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -330,6 +386,24 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
                           Text(
                             jobType,
                             style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Icon(Icons.visibility, size: 14, color: Colors.grey.shade600),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${job['view_count'] ?? 0} views',
+                            style: const TextStyle(fontSize: 12, color: Colors.grey),
+                          ),
+                          const SizedBox(width: 16),
+                          Icon(Icons.description, size: 14, color: Colors.grey.shade600),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${job['application_count'] ?? 0} applications',
+                            style: const TextStyle(fontSize: 12, color: Colors.grey),
                           ),
                         ],
                       ),

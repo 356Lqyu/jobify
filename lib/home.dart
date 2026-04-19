@@ -81,6 +81,8 @@ class _HomePageState extends State<HomePage> {
           },
         ),
         JobPostManagementPage(key: _jobsPageKey),
+
+
         const SettingPage(),
       ];
 
@@ -104,6 +106,11 @@ class _HomePageState extends State<HomePage> {
           icon: Icons.work_outline,
           activeIcon: Icons.work,
           label: 'My Jobs',
+        ),
+        BottomBarItem(
+          icon: Icons.work_outline,
+          activeIcon: Icons.work,
+          label: 'My Post',
         ),
         BottomBarItem(
           icon: Icons.business_outlined,

@@ -1,4 +1,3 @@
-// lib/job/job_discovery.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -7,8 +6,7 @@ import 'package:jobify/social/social_feed_provider.dart';
 import 'package:jobify/data/job_repository.dart';
 import 'package:jobify/users/users.dart';
 import 'package:jobify/discovery/job_details.dart';
-import 'dart:async';
-import '/data/event_bus.dart';
+
 
 class DiscoveryJob extends StatefulWidget {
   final Users user;
@@ -18,8 +16,7 @@ class DiscoveryJob extends StatefulWidget {
   State<DiscoveryJob> createState() => _DiscoveryJobState();
 }
 
-class _DiscoveryJobState extends State<DiscoveryJob>{
-  StreamSubscription<String>? _jobSavedSub;
+class _DiscoveryJobState extends State<DiscoveryJob> {
   late final JobProvider _provider;
   final _searchCtrl = TextEditingController();
 
@@ -29,19 +26,12 @@ class _DiscoveryJobState extends State<DiscoveryJob>{
     _provider = JobProvider(
       repository: JobRepository(),
       userId: widget.user.userId,
-
     );
     WidgetsBinding.instance.addPostFrameCallback((_) => _provider.init());
-    _jobSavedSub = EventBus().onJobSavedChanged.listen((jobId) {
-      _provider.refresh();
-    });
   }
-
-
 
   @override
   void dispose() {
-    _jobSavedSub?.cancel();
     _searchCtrl.dispose();
     _provider.dispose();
     super.dispose();
@@ -59,6 +49,20 @@ class _DiscoveryJobState extends State<DiscoveryJob>{
     );
   }
 
+  // Helper to navigate to job details and refresh on return
+  Future<void> _navigateToJobDetail(BuildContext context, JobPost job) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => JobDetailPage(
+          job: job,
+          currentUser: widget.user,
+        ),
+      ),
+    );
+    // Refresh the job list when returning (e.g., after save/unsave)
+    _provider.refresh();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -182,7 +186,7 @@ class _DiscoveryJobState extends State<DiscoveryJob>{
                           return false;
                         },
                         child: ListView.builder(
-                          padding: const EdgeInsets.only(top: 10, bottom: 100),
+                          padding: const EdgeInsets.only(top: 20, bottom: 100),
                           itemCount: prov.jobs.length + (prov.isLoading ? 1 : 0),
                           itemBuilder: (ctx, i) {
                             if (i >= prov.jobs.length) {
@@ -195,15 +199,7 @@ class _DiscoveryJobState extends State<DiscoveryJob>{
                             return _JobCard(
                               job: job,
                               onSaveTap: () => prov.toggleSaveJob(job),
-                              onTap: () => Navigator.push(
-                                ctx,
-                                MaterialPageRoute(
-                                  builder: (_) => JobDetailPage(
-                                    job: job,
-                                    currentUser: widget.user,
-                                  ),
-                                ),
-                              ),
+                              onTap: () => _navigateToJobDetail(ctx, job),  // <-- use new method
                             );
                           },
                         ),
@@ -220,9 +216,7 @@ class _DiscoveryJobState extends State<DiscoveryJob>{
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// JOB CARD (unchanged)
-// ─────────────────────────────────────────────────────────────────────────────
+// JOB CARD
 class _JobCard extends StatelessWidget {
   final JobPost job;
   final VoidCallback onSaveTap;
@@ -339,9 +333,7 @@ class _JobCard extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// FILTER SHEET (unchanged)
-// ─────────────────────────────────────────────────────────────────────────────
+// FILTER SHEET
 class _FilterSheet extends StatefulWidget {
   const _FilterSheet();
   @override
@@ -500,9 +492,7 @@ class _FilterSheetState extends State<_FilterSheet> {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SMALL REUSABLE WIDGETS (unchanged)
-// ─────────────────────────────────────────────────────────────────────────────
+// SMALL REUSABLE WIDGETS
 class _JobTag extends StatelessWidget {
   final String label;
   final Color color;

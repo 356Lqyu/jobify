@@ -9,7 +9,6 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:jobify/social/post_feed_setting.dart';
-import 'event_bus.dart';
 import 'local_db.dart';
 import 'job_repository.dart';
 
@@ -226,7 +225,71 @@ class FeedRepository {
     }
   }
 
-  // POSTS  –  CREATE / UPDATE / DELETE
+  // POSTS  –  FETCH / CREATE / UPDATE / DELETE
+  Future<List<FeedPost>> fetchUserPosts(String userId) async {
+    try {
+      final rows = await _sb
+          .from('post')
+          .select('''
+          post_id, user_id, company_id, job_id,
+          content, post_type, hashtags, media_urls,
+          created_at, updated_at,
+          users!post_user_id_fkey ( fullname, profile_image_url ),
+          company_profile!post_company_id_fkey ( company_name, logo_url, industry )
+        ''')
+          .eq('user_id', userId)
+          .order('created_at', ascending: false) as List<dynamic>;
+
+      final likedIds = _uid != null ? await _getLikedPostIds() : <String>{};
+      final savedIds = _uid != null ? await LocalDB.getSavedPostIds(_uid!) : <String>{};
+      final followedUserIds = _uid != null ? await _getFollowedUserIds() : <String>{};
+      final postIds = rows.map((r) => (r as Map)['post_id'] as String).toList();
+
+      final likeCountMap = await _batchCountMap('post_like', 'post_id', postIds);
+      final commentCountMap = await _batchCountMap('post_comment', 'post_id', postIds);
+
+      final posts = <FeedPost>[];
+      for (final row in rows) {
+        final r = row as Map<String, dynamic>;
+        final userRow = r['users'] as Map<String, dynamic>?;
+        final compRow = r['company_profile'] as Map<String, dynamic>?;
+        final pid = r['post_id'] as String;
+
+        JobPost? linkedJob;
+        if (r['job_id'] != null && r['post_type'] == 'job') {
+          linkedJob = await _jobRepo.fetchJobById(r['job_id'] as String);
+        }
+
+        posts.add(FeedPost(
+          postId: pid,
+          userId: r['user_id'] as String,
+          companyId: r['company_id'] as String?,
+          jobId: r['job_id'] as String?,
+          content: r['content'] as String? ?? '',
+          postType: postTypeFromString(r['post_type'] as String?),
+          hashtags: List<String>.from(r['hashtags'] as List? ?? []),
+          mediaUrls: List<String>.from(r['media_urls'] as List? ?? []),
+          createdAt: DateTime.parse(r['created_at'] as String),
+          updatedAt: DateTime.parse(r['updated_at'] as String? ?? r['created_at'] as String),
+          authorName: compRow?['company_name'] as String? ?? userRow?['fullname'] as String? ?? 'Unknown',
+          authorAvatar: compRow?['logo_url'] as String? ?? userRow?['profile_image_url'] as String? ?? '',
+          authorSubtitle: compRow?['industry'] as String? ?? '',
+          isVerified: compRow != null,
+          likeCount: likeCountMap[pid] ?? 0,
+          commentCount: commentCountMap[pid] ?? 0,
+          isLiked: likedIds.contains(pid),
+          isSaved: savedIds.contains(pid),
+          isFollowing: followedUserIds.contains(r['user_id'] as String),
+          linkedJob: linkedJob,
+        ));
+      }
+      return posts;
+    } catch (e) {
+      debugPrint('fetchUserPosts error: $e');
+      return [];
+    }
+  }
+
   Future<FeedPost?> createPost({
     required String userId,
     String? companyId,
@@ -324,27 +387,6 @@ class FeedRepository {
     }
   }
 
-  Future<bool> updatePost({
-    required String postId,
-    String? content,
-    List<String>? hashtags,
-    List<String>? mediaUrls,
-  }) async {
-    try {
-      final data = <String, dynamic>{
-        'updated_at': DateTime.now().toIso8601String(),
-        if (content != null) 'content': content,
-        if (hashtags != null) 'hashtags': hashtags,
-        if (mediaUrls != null) 'media_urls': mediaUrls,
-      };
-      await _sb.from('post').update(data).eq('post_id', postId);
-      return true;
-    } catch (e) {
-      debugPrint('updatePost error: $e');
-      return false;
-    }
-  }
-
   Future<bool> deletePost(String postId) async {
     try {
       await _sb.from('post').delete().eq('post_id', postId);
@@ -407,7 +449,6 @@ class FeedRepository {
       final jobId = postData?['job_id'] as String?;
       if (jobId != null) {
         await LocalDB.setJobSaved(jobId, newSaved, _uid!);
-        EventBus().notifyJobSavedChanged(jobId);
       }
 
       await LocalDB.setPostSaved(postId, newSaved, _uid!);
@@ -516,27 +557,32 @@ class FeedRepository {
   // COMMENTS
   Future<List<PostComment>> fetchComments(String postId) async {
     try {
-      final rows =
-      await _sb
+      final rows = await _sb
           .from('post_comment')
           .select('''
-        comment_id, post_id, user_id, comment_text, created_at,
-        users!post_comment_user_id_fkey ( fullname, profile_image_url )
-      ''')
+          comment_id, post_id, user_id, comment_text, created_at,
+          users!post_comment_user_id_fkey ( fullname, profile_image_url, email )
+        ''')
           .eq('post_id', postId)
-          .order('created_at', ascending: false)
-      as List<dynamic>;
+          .order('created_at', ascending: false) as List<dynamic>;
 
       return rows.map((row) {
         final r = row as Map<String, dynamic>;
         final userRow = r['users'] as Map<String, dynamic>?;
+        String authorName = 'User';
+        if (userRow != null) {
+          authorName = (userRow['fullname'] as String?)?.trim() ?? '';
+          if (authorName.isEmpty) {
+            authorName = (userRow['email'] as String?)?.split('@').first ?? 'User';
+          }
+        }
         return PostComment(
           commentId: r['comment_id'] as String,
           postId: r['post_id'] as String,
           userId: r['user_id'] as String,
           commentText: r['comment_text'] as String,
           createdAt: DateTime.parse(r['created_at'] as String),
-          authorName: userRow?['fullname'] as String? ?? 'Unknown',
+          authorName: authorName,
           authorAvatar: userRow?['profile_image_url'] as String? ?? '',
         );
       }).toList();
@@ -573,16 +619,6 @@ class FeedRepository {
     } catch (e) {
       debugPrint('addComment error: $e');
       return null;
-    }
-  }
-
-  Future<bool> deleteComment(String commentId) async {
-    try {
-      await _sb.from('post_comment').delete().eq('comment_id', commentId);
-      return true;
-    } catch (e) {
-      debugPrint('deleteComment error: $e');
-      return false;
     }
   }
 

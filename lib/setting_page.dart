@@ -6,6 +6,7 @@ import 'package:jobify/users/user_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'auth/change_password.dart';
+import 'package:jobify/job/resume_management_page.dart';
 
 class SettingPage extends StatefulWidget {
   const SettingPage({super.key});
@@ -34,6 +35,7 @@ class _SettingPageState extends State<SettingPage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    // Refresh when coming back from ProfilePage
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _refreshProfileData();
@@ -42,6 +44,7 @@ class _SettingPageState extends State<SettingPage> {
   }
 
   Future<void> fetchUserInfo() async {
+    // Get current user from provider or cache
     final userProvider = Provider.of<UserProvider>(context, listen: false);
     final user = userProvider.currentUser ?? await _userRepo.getCurrentUser();
 
@@ -53,6 +56,7 @@ class _SettingPageState extends State<SettingPage> {
       });
     }
 
+    // Fetch company name if employer (from cache)
     if (role?.toUpperCase() == 'POSTER') {
       final userId = supabase.auth.currentUser?.id;
       if (userId != null) {
@@ -69,13 +73,18 @@ class _SettingPageState extends State<SettingPage> {
     }
   }
 
+  // Method to refresh profile data when returning from ProfilePage
   Future<void> _refreshProfileData() async {
     final userId = supabase.auth.currentUser?.id;
     if (userId != null) {
+      // Force clear cache to get fresh data
       await LocalDB.clearUserCache(userId);
+
+      // Force refresh from server
       final userProvider = Provider.of<UserProvider>(context, listen: false);
       await userProvider.refreshUser();
 
+      // Update local state
       final updatedUser = userProvider.currentUser;
       if (updatedUser != null && mounted) {
         setState(() {
@@ -85,7 +94,9 @@ class _SettingPageState extends State<SettingPage> {
         });
       }
 
+      // Also refresh company profile if employer
       if (role?.toUpperCase() == 'POSTER') {
+        // Fetch fresh company profile from Supabase
         final companyData = await supabase
             .from('company_profile')
             .select()
@@ -99,13 +110,15 @@ class _SettingPageState extends State<SettingPage> {
               profileImageUrl = companyData['logo_url'];
             }
           });
+          // Update cache
           await LocalDB.cacheCompanyProfile(userId, companyData);
         }
       }
     }
   }
 
-  Future<void>  handleLogout() async {
+  Future<void> handleLogout() async {
+    // Clear user cache on logout
     final userId = supabase.auth.currentUser?.id;
     if (userId != null) {
       await LocalDB.clearUserCache(userId);
@@ -128,11 +141,16 @@ class _SettingPageState extends State<SettingPage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
       decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: Color(0xFFE5E7EB))),
+        border: Border(
+          bottom: BorderSide(color: Color(0xFFE5E7EB)),
+        ),
       ),
       child: Text(
         title,
-        style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 16),
+        style: const TextStyle(
+          fontWeight: FontWeight.w500,
+          fontSize: 16,
+        ),
       ),
     );
   }
@@ -143,7 +161,9 @@ class _SettingPageState extends State<SettingPage> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         decoration: const BoxDecoration(
-          border: Border(bottom: BorderSide(color: Color(0xFFE5E7EB))),
+          border: Border(
+            bottom: BorderSide(color: Color(0xFFE5E7EB)),
+          ),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -183,7 +203,11 @@ class _SettingPageState extends State<SettingPage> {
                 ? NetworkImage(profileImageUrl!)
                 : null,
             child: profileImageUrl == null || profileImageUrl!.isEmpty
-                ? Icon(isJobSeeker ? Icons.person : Icons.business, size: 32, color: Colors.grey[400])
+                ? Icon(
+              isJobSeeker ? Icons.person : Icons.business,
+              size: 32,
+              color: Colors.grey[400],
+            )
                 : null,
           ),
           const SizedBox(width: 16),
@@ -193,18 +217,116 @@ class _SettingPageState extends State<SettingPage> {
               children: [
                 Text(
                   isJobSeeker ? userName ?? '' : companyName ?? userName ?? '',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 17),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   isJobSeeker ? 'Job Seeker' : 'Employer Account',
                   style: const TextStyle(color: Colors.grey, fontSize: 14),
                 ),
+                if (isJobSeeker)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 6,
+                          height: 6,
+                          decoration: const BoxDecoration(
+                            color: Colors.blue,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        const Text(
+                          'Profile 60% complete',
+                          style: TextStyle(
+                              color: Colors.blue,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500),
+                        ),
+                      ],
+                    ),
+                  ),
               ],
             ),
           )
         ],
       ),
+    );
+  }
+
+  Widget buildJobSeekerStats() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 6),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Your Activity',
+              style: TextStyle(fontWeight: FontWeight.w500, fontSize: 15)),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              buildStatItem('0', 'Applications'),
+              buildStatItem('0', 'Saved Jobs'),
+              buildStatItem('0', 'Following'),
+              buildStatItem('0', 'Posts'),
+            ],
+          )
+        ],
+      ),
+    );
+  }
+
+  Widget buildEmployerStats() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 6),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Company Activity',
+              style: TextStyle(fontWeight: FontWeight.w500, fontSize: 15)),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              buildStatItem('0', 'Job Posts'),
+              buildStatItem('0', 'Followers'),
+              buildStatItem('0', 'Applications'),
+            ],
+          )
+        ],
+      ),
+    );
+  }
+
+  Widget buildStatItem(String value, String label) {
+    return Column(
+      children: [
+        Text(value,
+            style: const TextStyle(
+                fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blue)),
+        const SizedBox(height: 4),
+        Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+      ],
     );
   }
 
@@ -223,6 +345,7 @@ class _SettingPageState extends State<SettingPage> {
       ),
       body: Stack(
         children: [
+          // Main content
           RefreshIndicator(
             onRefresh: _refreshProfileData,
             child: SingleChildScrollView(
@@ -237,20 +360,32 @@ class _SettingPageState extends State<SettingPage> {
                   Container(
                     margin: const EdgeInsets.only(top: 8),
                     decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 6)],
-                    ),
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                              color: Colors.black.withOpacity(0.05),
+                              blurRadius: 6)
+                        ]),
                     child: Column(
                       children: [
                         buildSectionHeader('Profile'),
-                        buildListItem(Icons.person_outline, 'My Profile', () async {
-                          await Navigator.push(
+                        buildListItem(Icons.person_outline, 'My Profile', () {
+                          Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (_) => const ProfilePage()),
-                          );
-                          await _refreshProfileData();
+                            MaterialPageRoute(
+                                builder: (_) => const ProfilePage()),
+                          ).then((_) => _refreshProfileData());
                         }),
+                        if (isJobSeeker)
+                          buildListItem(Icons.work, 'My Resume', () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const ResumeManagementPage()),
+                            );
+                          }),
+                        if (role == 'poster')
+                          buildListItem(Icons.dashboard, 'My Dashboard', () {}),
                       ],
                     ),
                   ),
@@ -259,13 +394,17 @@ class _SettingPageState extends State<SettingPage> {
                   Container(
                     margin: const EdgeInsets.only(top: 8),
                     decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 6)],
-                    ),
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                              color: Colors.black.withOpacity(0.05),
+                              blurRadius: 6)
+                        ]),
                     child: Column(
                       children: [
                         buildSectionHeader('Account'),
+                        buildListItem(Icons.person, 'Account Settings', () {}),
                         buildListItem(Icons.lock, 'Change Password', () {
                           Navigator.push(
                             context,
@@ -276,10 +415,19 @@ class _SettingPageState extends State<SettingPage> {
                     ),
                   ),
 
+                  if (isJobSeeker)
+                    buildJobSeekerStats()
+                  else if (role == 'poster')
+                    buildEmployerStats(),
+
                   // Logout Button
                   const SizedBox(height: 16),
                   InkWell(
-                    onTap: () => setState(() => showLogoutDialog = true),
+                    onTap: () {
+                      setState(() {
+                        showLogoutDialog = true;
+                      });
+                    },
                     child: Container(
                       height: 48,
                       decoration: BoxDecoration(
@@ -293,13 +441,17 @@ class _SettingPageState extends State<SettingPage> {
                           children: const [
                             Icon(Icons.logout, color: Colors.red),
                             SizedBox(width: 8),
-                            Text('Logout', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                            Text('Logout',
+                                style: TextStyle(
+                                    color: Colors.red,
+                                    fontWeight: FontWeight.bold)),
                           ],
                         ),
                       ),
                     ),
                   ),
 
+                  // App Info
                   const SizedBox(height: 24),
                   const Center(
                     child: Text(
@@ -313,6 +465,7 @@ class _SettingPageState extends State<SettingPage> {
             ),
           ),
 
+          // Full-screen overlay dialog
           if (showLogoutDialog)
             Container(
               color: Colors.black54,
@@ -329,7 +482,13 @@ class _SettingPageState extends State<SettingPage> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Text('Logout', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                        const Text(
+                          'Logout',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
                         const SizedBox(height: 12),
                         const Text(
                           "Are you sure you want to logout? You'll need to login again to access your account.",
@@ -341,7 +500,11 @@ class _SettingPageState extends State<SettingPage> {
                           children: [
                             Expanded(
                               child: OutlinedButton(
-                                onPressed: () => setState(() => showLogoutDialog = false),
+                                onPressed: () {
+                                  setState(() {
+                                    showLogoutDialog = false;
+                                  });
+                                },
                                 child: const Text('Cancel'),
                               ),
                             ),

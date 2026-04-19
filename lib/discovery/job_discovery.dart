@@ -55,6 +55,13 @@ class _DiscoveryJobState extends State<DiscoveryJob> {
       value: _provider,
       child: Scaffold(
         backgroundColor: const Color(0xFFF1F5F9),
+        appBar: AppBar(
+          title: const Text('Jobs Discovery'),
+          backgroundColor: Colors.blue,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          automaticallyImplyLeading: false,
+        ),
         body: SafeArea(
           bottom: false,
           child: Column(

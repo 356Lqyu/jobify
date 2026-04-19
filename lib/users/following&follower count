@@ -1,0 +1,74 @@
+// Inside _ProfilePageState class, add variables:
+  int _postsCount = 0;
+  int _followersCount = 0;
+  int _followingCount = 0;
+
+Future<void> _loadProfile() async {
+    if (!mounted) return;
+    setState(() => isLoading = true);
+
+    try {
+      final user = supabase.auth.currentUser;
+      if (user == null) {
+        if (mounted) setState(() => isLoading = false);
+        return;
+      }
+
+      userId = user.id;
+      userEmail = user.email;
+
+      debugPrint('Loading profile for user: $userId');
+
+      await _loadFromCacheOnly();
+      await _fetchFreshData();
+
+      // Load job categories for industry dropdown
+      await _loadJobCategories();
+
+    } catch (e) {
+      debugPrint('Error loading profile: $e');
+      await _loadFromCacheOnly();
+    } finally {
+      if (mounted) {
+        setState(() => isLoading = false);
+      }
+    }
+  }
+
+  // UPDATED: Fetch follower/following counts
+  Future<void> _fetchFollowCounts(String uid) async {
+    try {
+      // Count followers (people following this user)
+      final followersResp = await supabase
+          .from('follows')
+          .select('follow_id')
+          .eq('following_id', uid);
+      final followers = (followersResp as List).length;
+
+      // Count following (people this user follows)
+      final followingResp = await supabase
+          .from('follows')
+          .select('follow_id')
+          .eq('follower_id', uid);
+      final following = (followingResp as List).length;
+
+      // Count user's own posts
+      final postsResp = await supabase
+          .from('post')
+          .select('post_id')
+          .eq('user_id', uid);
+      final posts = (postsResp as List).length;
+
+      if (mounted) {
+        setState(() {
+          _followersCount = followers;
+          _followingCount = following;
+          _postsCount = posts;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching follow counts: $e');
+    }
+  }
+  .....
+

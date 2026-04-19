@@ -433,6 +433,21 @@ class _SettingPageState extends State<SettingPage> {
   }
 
   Widget buildEmployerStats() {
+    if (_isLoadingStats) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        margin: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 6),
+          ],
+        ),
+        child: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return Container(
       padding: const EdgeInsets.all(16),
       margin: const EdgeInsets.symmetric(vertical: 8),
@@ -452,6 +467,9 @@ class _SettingPageState extends State<SettingPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
+              buildStatItem(_jobPostsCount.toString(), 'Job Posts'),
+              buildStatItem(_companyFollowersCount.toString(), 'Followers'),
+              buildStatItem(_applicationsReceivedCount.toString(), 'Applications'),
             ],
           )
         ],
@@ -602,6 +620,7 @@ class _SettingPageState extends State<SettingPage> {
           // Full-screen overlay dialog
           if (showLogoutDialog)
             Container(
+              color: Colors.black54,
               child: Center(
                 child: GestureDetector(
                   onTap: () => setState(() => showLogoutDialog = false),

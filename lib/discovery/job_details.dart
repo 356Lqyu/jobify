@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:jobify/social/post_feed_setting.dart';
 import 'package:jobify/data/job_repository.dart';
-import 'package:jobify/job//applicantion_respository.dart';
+import 'package:jobify/data/applicantion_respository.dart';
 import 'package:jobify/users/users.dart';
 import 'package:jobify/job/apply_for_job.dart';
 import 'package:intl/intl.dart';

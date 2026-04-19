@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:jobify/social/post_feed_setting.dart';
 import 'package:jobify/data/feed_repository.dart';
+import 'package:jobify/data/job_repository.dart';
 import 'package:jobify/data/local_db.dart';
 
 class SocialFeedProvider extends ChangeNotifier {
@@ -240,10 +241,10 @@ class SocialFeedProvider extends ChangeNotifier {
 
 //job provider
 class JobProvider extends ChangeNotifier {
-  final FeedRepository _repository;
+  final JobRepository _repository;
   final String userId;
 
-  JobProvider({required FeedRepository repository, required this.userId})
+  JobProvider({required JobRepository repository, required this.userId})
       : _repository = repository;
 
   List<JobPost> _jobs        = [];
@@ -350,8 +351,6 @@ class JobProvider extends ChangeNotifier {
     }
   }
 
-  // ── Filter setters (each triggers refresh) ────────────────────────────────
-
   void search(String q)       { _keyword        = q; refresh(); }
   void setJobType(String t)   { _jobTypeFilter  = t; refresh(); }
   void setExpLevel(String l)  { _expLevelFilter = l; refresh(); }
@@ -368,7 +367,6 @@ class JobProvider extends ChangeNotifier {
     refresh();
   }
 
-  //save
   Future<void> toggleSaveJob(JobPost job) async {
     final wasSaved = job.isSaved;
     job.isSaved = !job.isSaved;
@@ -376,7 +374,6 @@ class JobProvider extends ChangeNotifier {
 
     final result = await _repository.toggleSaveJob(job.jobId, wasSaved);
     if (result == wasSaved) {
-      // Revert
       job.isSaved = wasSaved;
       notifyListeners();
     }

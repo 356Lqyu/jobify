@@ -1,14 +1,12 @@
-/*
- unauthenticated - login page
- authenticated - home
-*/
-
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-
-import '../login.dart';
+import 'login.dart';
 import '../home.dart';
 import '../data/user_repository.dart';
+import '../main.dart';
+import '../users/user_provider.dart';
+import '../users/users.dart';
 
 class AuthGate extends StatelessWidget {
   AuthGate({super.key});
@@ -30,36 +28,45 @@ class AuthGate extends StatelessWidget {
             ),
           );
         }
+
+        // Check for errors
+        if (snapshot.hasError) {
+          debugPrint('Auth error: ${snapshot.error}');
+          return const WelcomePage();
+        }
+
         // Get session
         final session = snapshot.data?.session;
 
-        // If NOT logged in, then go to Login
-        if (session == null) {
-          return const Login();
+        if (session != null) {
+          return FutureBuilder(
+            future: _loadUserData(context),
+            builder: (context, userSnapshot) {
+              if (userSnapshot.connectionState == ConnectionState.waiting) {
+                return const Scaffold(
+                  body: Center(child: CircularProgressIndicator()),
+                );
+              }
+
+              final user = userSnapshot.data;
+              if (user == null) {
+                return const Login();
+              }
+
+              return HomePage(user: user);
+            },
+          );
         }
 
-        // If logged in, fetch user data with caching
-        return FutureBuilder(
-          future: _userRepo.getCurrentUser(forceRefresh: true),  // Now uses cache-first strategy!
-          builder: (context, userSnapshot) {
-
-            if (userSnapshot.connectionState == ConnectionState.waiting) {
-              return const Scaffold(
-                body: Center(child: CircularProgressIndicator()),
-              );
-            }
-
-            if (!userSnapshot.hasData || userSnapshot.data == null) {
-              return const Scaffold(
-                body: Center(child: Text("Error loading user")),
-              );
-            }
-
-            final user = userSnapshot.data!;
-            return HomePage(user: user);
-          },
-        );
+        // Not logged in - show welcome page
+        return const WelcomePage();
       },
     );
+  }
+
+  Future<Users?> _loadUserData(BuildContext context) async {
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    await userProvider.loadUser();
+    return userProvider.currentUser;
   }
 }

@@ -1,21 +1,39 @@
 import 'package:flutter/material.dart';
-import 'package:jobify/profile_page.dart';
+import 'package:jobify/users/profile_page.dart';
+import 'package:jobify/auth/reset_password.dart';
+import 'package:jobify/users/user_provider.dart';
+import 'package:jobify/users/users.dart';
+import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:jobify/registration.dart';
-import 'login.dart';
+import 'package:jobify/auth/registration.dart';
+import 'auth/forgot_password.dart';
+import 'auth/login.dart';
 import 'setting_page.dart';
+import 'home.dart';
+import 'data/user_repository.dart';
 
 const String supabaseUrl = 'https://nejlppdligklddlwvzub.supabase.co';
-const String supabaseKey = 'sb_secret_518COekCnlz8R_OAgQVCIw_2E9LVs8_'; //Secret key
+const String supabaseKey = 'sb_secret_518COekCnlz8R_OAgQVCIw_2E9LVs8_';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // supabase setup
   await Supabase.initialize(
     url: supabaseUrl,
     anonKey: supabaseKey,
   );
+
+  // Clear any stale recovery session flags
+  final session = Supabase.instance.client.auth.currentSession;
+  if (session != null) {
+    // Check if this is a stale recovery session
+    final userMetadata = session.user?.userMetadata;
+    if (userMetadata != null && userMetadata['reset_password'] == true) {
+      // Sign out to clear the stale recovery session
+      await Supabase.instance.client.auth.signOut();
+      print('Cleared stale password recovery session');
+    }
+  }
 
   runApp(const MainApp());
 }
@@ -27,55 +45,94 @@ class MainApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Jobify',
-      initialRoute: '/',
-      routes: {
-        '/': (context) => const AnimatedHomePage(),
-        '/Login': (context) => const Login(),
-        '/ProfilePage': (context) => const ProfilePage(),
-        '/Settings': (context) => const SettingPage(),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => UserProvider()),
+      ],
+      child: MaterialApp(
+        title: 'Jobify',
+        debugShowCheckedModeBanner: false,
+        initialRoute: '/',
+        routes: {
+          '/': (context) => const AuthGate(),
+          '/login': (context) => const Login(),
+          '/forgot-password': (context) => const ForgotPasswordPage(),
+          '/reset-password': (context) => const ResetPasswordPage(),
+          '/profile': (context) => const ProfilePage(),
+          '/settings': (context) => const SettingPage(),
+        },
+      ),
+    );
+  }
+}
+
+class AuthGate extends StatelessWidget {
+  const AuthGate({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<AuthState>(
+      stream: Supabase.instance.client.auth.onAuthStateChange,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        final session = snapshot.data?.session;
+
+        // Only show reset password page if explicitly requested via deep link
+        // Check if we're in password recovery mode via the current page route
+        final isRecoveryFlow = _isPasswordRecoveryFlow();
+
+        if (session != null && isRecoveryFlow) {
+          return const ResetPasswordPage();
+        }
+
+        if (session != null) {
+          // User is logged in, load user data
+          return FutureBuilder(
+            future: _loadUserData(context),
+            builder: (context, userSnapshot) {
+              if (userSnapshot.connectionState == ConnectionState.waiting) {
+                return const Scaffold(
+                  body: Center(child: CircularProgressIndicator()),
+                );
+              }
+
+              final user = userSnapshot.data;
+              if (user == null) {
+                return const WelcomePage();
+              }
+
+              return HomePage(user: user);
+            },
+          );
+        }
+
+        return const WelcomePage();
       },
-      debugShowCheckedModeBanner: false,
     );
+  }
+
+  bool _isPasswordRecoveryFlow() {
+    // Check if we're in a password recovery flow by looking at the current route
+    // This is a simple implementation - you might want to use a more sophisticated approach
+    // like passing a flag through navigation
+    return false; // Default to false, only true when coming from forgot password
+  }
+
+  Future<Users?> _loadUserData(BuildContext context) async {
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    await userProvider.loadUser();
+    return userProvider.currentUser;
   }
 }
 
-class AnimatedHomePage extends StatefulWidget {
-  const AnimatedHomePage({super.key});
-
-  @override
-  State<AnimatedHomePage> createState() => _AnimatedHomePageState();
-}
-
-class _AnimatedHomePageState extends State<AnimatedHomePage>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _scaleAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 4),
-
-    );
-
-    _scaleAnimation = Tween<double>(
-      begin: 0.95,
-      end: 1.0,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
-
-    _controller.repeat(reverse: true);
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
+// Welcome Page (the original home page with login/hiring buttons)
+class WelcomePage extends StatelessWidget {
+  const WelcomePage({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -87,15 +144,12 @@ class _AnimatedHomePageState extends State<AnimatedHomePage>
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               /// Logo
-              ScaleTransition(
-                scale: _scaleAnimation,
-                child: Container(
-                  width: 260,
-                  height: 130,
-                  child: Image.asset(
-                    'assets/images/logo3.png',
-                    fit: BoxFit.contain,
-                  ),
+              Container(
+                width: 260,
+                height: 130,
+                child: Image.asset(
+                  'assets/images/logo3.png',
+                  fit: BoxFit.contain,
                 ),
               ),
 
@@ -131,7 +185,7 @@ class _AnimatedHomePageState extends State<AnimatedHomePage>
                   onPressed: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (_) => const Login()),
+                      MaterialPageRoute(builder: (_) => const Login(selectedRole: 'JOB_SEEKER')),
                     );
                   },
                   child: Row(
@@ -164,7 +218,7 @@ class _AnimatedHomePageState extends State<AnimatedHomePage>
                   onPressed: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (_) => const Login()),
+                      MaterialPageRoute(builder: (_) => const Login(selectedRole: 'POSTER')),
                     );
                   },
                   child: Row(

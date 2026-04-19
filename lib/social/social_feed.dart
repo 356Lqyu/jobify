@@ -6,7 +6,9 @@ import 'package:jobify/social/post_feed_setting.dart';
 import 'package:jobify/social/social_feed_provider.dart';
 import 'package:jobify/social/social_post_bottom_sheet.dart';
 import 'package:jobify/data/feed_repository.dart';
-import 'package:jobify/users.dart';
+import 'package:jobify/users/users.dart';
+//import 'package:jobify/job_post/job_detail.dart'; // job seeker detail page
+import 'package:jobify/job_post/job_detail_employer.dart';
 
 class SocialFeedPage extends StatefulWidget {
   final Users user;
@@ -438,7 +440,7 @@ class _FollowingTab extends StatelessWidget {
 
 class _FeedCard extends StatelessWidget {
   final FeedPost post;
-  final Users     currentUser;
+  final Users currentUser;
   const _FeedCard({required this.post, required this.currentUser});
 
   @override
@@ -460,7 +462,7 @@ class _FeedCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Header ──────────────────────────────────────────────────
+          // ── Header (avatar, name, follow button, menu) ─────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 14, 6, 0),
             child: Row(
@@ -531,47 +533,54 @@ class _FeedCard extends StatelessWidget {
             ),
           ),
 
-          // ── Content ─────────────────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.symmetric(
-                horizontal: 14, vertical: 10),
-            child: _RichContent(content: post.content),
+          // ── Content (clickable area) ───────────────────────────────────
+          GestureDetector(
+            onTap: () => _navigateToDetail(context),
+            behavior: HitTestBehavior.opaque,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Rich content (text with hashtags)
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 10),
+                  child: _RichContent(content: post.content),
+                ),
+                // Hashtags
+                if (post.hashtags.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+                    child: Wrap(
+                      spacing: 8, runSpacing: 4,
+                      children: post.hashtags
+                          .map((tag) => GestureDetector(
+                        onTap: () =>
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                  content: Text('Search: #$tag'),
+                                  duration:
+                                  const Duration(seconds: 1)),
+                            ),
+                        child: Text('#$tag',
+                            style: const TextStyle(
+                                color: Color(0xFF2563EB),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500)),
+                      ))
+                          .toList(),
+                    ),
+                  ),
+                // Media (images)
+                if (post.mediaUrls.isNotEmpty)
+                  _MediaGrid(urls: post.mediaUrls),
+                // Linked job card (if job post)
+                if (post.postType == PostType.job && post.linkedJob != null)
+                  _LinkedJobCard(job: post.linkedJob!),
+              ],
+            ),
           ),
 
-          // ── Hashtags ─────────────────────────────────────────────────
-          if (post.hashtags.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
-              child: Wrap(
-                spacing: 8, runSpacing: 4,
-                children: post.hashtags
-                    .map((tag) => GestureDetector(
-                  onTap: () =>
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                            content: Text('Search: #$tag'),
-                            duration:
-                            const Duration(seconds: 1)),
-                      ),
-                  child: Text('#$tag',
-                      style: const TextStyle(
-                          color: Color(0xFF2563EB),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500)),
-                ))
-                    .toList(),
-              ),
-            ),
-
-          // ── Media ────────────────────────────────────────────────────
-          if (post.mediaUrls.isNotEmpty)
-            _MediaGrid(urls: post.mediaUrls),
-
-          // ── Linked job ───────────────────────────────────────────────
-          if (post.postType == PostType.job && post.linkedJob != null)
-            _LinkedJobCard(job: post.linkedJob!),
-
-          // ── Action row ───────────────────────────────────────────────
+          // ── Action row (like, comment, share, save) ────────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(6, 4, 6, 6),
             child: Row(
@@ -619,6 +628,45 @@ class _FeedCard extends StatelessWidget {
     );
   }
 
+  // Navigation helper
+  void _navigateToDetail(BuildContext context) async {  // note: async
+    if (post.postType == PostType.job && post.linkedJob != null) {
+      final jobId = post.linkedJob!.jobId;
+
+      // Try to get the latest job map from cache
+      Map<String, dynamic>? jobMap = await LocalDB.getCachedJobMapById(jobId);
+
+      // Fallback: build a minimal map from the linkedJob if cache miss
+      jobMap ??= {
+        'job_id': jobId,
+        'job_title': post.linkedJob!.jobTitle,
+        'company_name': post.linkedJob!.companyName,
+        'location': post.linkedJob!.location,
+        'description': post.linkedJob!.description,
+        'job_type': post.linkedJob!.jobType,
+        'job_category': post.linkedJob!.jobCategory,
+        'experience_level': post.linkedJob!.experienceLevel,
+        'remote_option': post.linkedJob!.remoteOption,
+        'salary_min': post.linkedJob!.salaryMin,
+        'salary_max': post.linkedJob!.salaryMax,
+        'view_count': post.linkedJob!.viewCount,
+        'application_count': post.linkedJob!.applicationCount,
+        'image_urls': post.linkedJob!.imageUrls,
+        'video_url': post.linkedJob!.videoUrl,
+        'status': post.linkedJob!.status,
+      };
+
+      if (post.userId == currentUser.userId) {
+        Navigator.push(context, MaterialPageRoute(builder: (_) => JobDetailEmployer(job: jobMap!)));
+      } else {
+        Navigator.push(context, MaterialPageRoute(builder: (_) => JobDetailPage(job: jobMap!)));
+      }
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Post details coming soon')));
+    }
+  }
+
+  // Keep the existing _showComments method unchanged
   void _showComments(
       BuildContext ctx, FeedPost post, SocialFeedProvider prov) {
     showModalBottomSheet(

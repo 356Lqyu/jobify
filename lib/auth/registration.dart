@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:jobify/login.dart';
-import 'package:jobify/users.dart';
-import 'package:provider/provider.dart';
+import 'package:jobify/auth/login.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-
-import 'auth/auth_service.dart';
+import 'auth_service.dart';
 
 class Registration extends StatefulWidget {
-  const Registration({super.key});
+  final String? selectedRole;
+  const Registration({super.key, this.selectedRole});
 
   @override
   State<Registration> createState() => _RegistrationState();
@@ -16,7 +14,6 @@ class Registration extends StatefulWidget {
 class _RegistrationState extends State<Registration> {
 
   final authService = AuthService();
-
   String selectedRole = "jobseeker";
 
   String? passwordError;
@@ -34,8 +31,6 @@ class _RegistrationState extends State<Registration> {
   final emailCtrl = TextEditingController();
   final passwordCtrl = TextEditingController();
   final confirmPasswordCtrl = TextEditingController();
-
-  // Additional fields for Employer registration
   final companyNameCtrl = TextEditingController();
   final locationCtrl = TextEditingController();
   final fullnameCtrl = TextEditingController();
@@ -44,6 +39,14 @@ class _RegistrationState extends State<Registration> {
 
   final _formKey = GlobalKey<FormState>();
 
+  @override
+  void initState() {
+    super.initState();
+    // Set the role based on passed parameter
+    if (widget.selectedRole != null) {
+      selectedRole = widget.selectedRole!;
+    }
+  }
 
   Future<void> register() async {
     setState(() {
@@ -145,6 +148,12 @@ class _RegistrationState extends State<Registration> {
       final user = res.user;
       if (user == null) throw Exception("Signup failed");
 
+      // Check if email confirmation is required
+      if (res.user?.identities?.isEmpty ?? true) {
+        // User already exists
+        throw Exception("User already exists");
+      }
+
       // Insert into users table
       if (selectedRole == "jobseeker") {
         await supabase.from('users').insert({
@@ -153,13 +162,19 @@ class _RegistrationState extends State<Registration> {
           'email': email,
           'fullname': fullname,
           'phone': phone,
+          'created_at': DateTime.now().toIso8601String(),
+          'updated_at': DateTime.now().toIso8601String(),
         });
       } else {
+
         await supabase.from('users').insert({
           'user_id': user.id,
           'role': 'POSTER',
           'email': email,
-          'phone': phone,
+          'fullname': null,
+          'phone': companyPhoneCtrl.text.trim().isEmpty ? null : companyPhoneCtrl.text.trim(),
+          'created_at': DateTime.now().toIso8601String(),
+          'updated_at': DateTime.now().toIso8601String(),
         });
       }
 
@@ -173,33 +188,45 @@ class _RegistrationState extends State<Registration> {
           'bio': null,
         });
       } else {
-        // For employer, company_name and location are required (NOT NULL in schema)
+        // For employer, company_name and location are required
         await supabase.from('company_profile').insert({
           'user_id': user.id,
           'company_name': companyName,
           'location': location,
-          'company_description': '',  // Optional, can be empty
-          'industry': '',              // Optional, can be empty
-          'company_size': '',          // Optional, can be empty
+          'company_description': '',
+          'industry': '',
+          'company_size': '',
         });
       }
 
+      //Please check your email to confirm your account before logging in.
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Registration successful! Please login.")),
+        const SnackBar(
+          content: Text("Registration successful! Please log in to continue.",),
+          duration: Duration(seconds: 5),
+          backgroundColor: Colors.green,
+        )
       );
 
-      await Future.delayed(const Duration(seconds: 1));
+      // Navigate to login page after showing message with selected role
+      await Future.delayed(const Duration(seconds: 3));
 
-      // Navigate to login page
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (context) => const Login()),
-            (route) => false,
-      );
+      if (mounted) {
+        // Convert role format for login page
+        String loginRole = selectedRole == "jobseeker" ? 'JOB_SEEKER' : 'POSTER';
+
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(
+            builder: (context) => Login(selectedRole: loginRole),
+          ),
+              (route) => false,
+        );
+      }
 
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Register error: $e")),
+        SnackBar(content: Text("Register error: $e"), backgroundColor: Colors.red),
       );
     }
   }
@@ -250,21 +277,14 @@ class _RegistrationState extends State<Registration> {
                           style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
                         ),
 
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 5),
 
                         const Text(
                           "Join us and start connecting with opportunities today",
                           style: TextStyle(fontSize: 15, color: Colors.blueGrey),
                         ),
 
-                        const SizedBox(height: 30),
-
-                        const Text(
-                          "Role",
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                        ),
-
-                        const SizedBox(height: 10),
+                        const SizedBox(height: 20),
 
                         Row(
                           children: [
@@ -312,9 +332,7 @@ class _RegistrationState extends State<Registration> {
 
                         const SizedBox(height: 25),
 
-                        // ================================================
-                        // ACCOUNT INFORMATION SECTION
-                        // ================================================
+                        // Account Info section
                         const Text(
                           "Account Information",
                           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -412,9 +430,7 @@ class _RegistrationState extends State<Registration> {
                                 style: const TextStyle(color: Colors.red, fontSize: 14)),
                           ),
 
-                        // ================================================
-                        // JOB SEEKER SPECIFIC FIELDS
-                        // ================================================
+                        // Job seeker info section
                         if (selectedRole == "jobseeker") ...[
                           const SizedBox(height: 20),
                           const Divider(),
@@ -483,11 +499,7 @@ class _RegistrationState extends State<Registration> {
                           ),
                         ],
 
-                        // ================================================
-                        // EMPLOYER SPECIFIC FIELDS
-                        // ================================================
-
-                        // Employer-specific fields
+                        // Poster info section
                         if (selectedRole == "employer") ...[
                           const SizedBox(height: 20),
                           const Divider(),
@@ -521,13 +533,11 @@ class _RegistrationState extends State<Registration> {
 
                           const SizedBox(height: 16),
 
-
-
                           const Text("Company Phone",
                               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
                           const SizedBox(height: 8),
                           TextFormField(
-                            controller: phoneCtrl,
+                            controller: companyPhoneCtrl,
                             keyboardType: TextInputType.phone,
                             decoration: InputDecoration(
                               hintText: "e.g., +60 3 1234 5678",
@@ -536,41 +546,11 @@ class _RegistrationState extends State<Registration> {
                                   borderRadius: BorderRadius.circular(12)),
                             ),
                           ),
-                          const Padding(
-                            padding: EdgeInsets.only(top: 4, left: 12),
-                            child: Text(
-                              'Official company phone number (optional)',
-                              style: TextStyle(color: Colors.blueGrey, fontSize: 12),
-                            ),
-                          ),
-                          if (phoneError != null)
+
+                          if (companyPhoneError  != null)
                             Padding(
                               padding: const EdgeInsets.only(top: 4),
                               child: Text(phoneError!,
-                                  style: const TextStyle(color: Colors.red, fontSize: 14)),
-                            ),
-
-                          const SizedBox(height: 16),
-
-
-
-                          // Location field
-                          const Text("Location *",
-                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                          const SizedBox(height: 8),
-                          TextFormField(
-                            controller: locationCtrl,
-                            decoration: InputDecoration(
-                              hintText: "e.g., Kuala Lumpur, Malaysia",
-                              prefixIcon: const Icon(Icons.location_on),
-                              border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12)),
-                            ),
-                          ),
-                          if (locationError != null)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 4),
-                              child: Text(locationError!,
                                   style: const TextStyle(color: Colors.red, fontSize: 14)),
                             ),
                         ],
@@ -626,10 +606,12 @@ class _RegistrationState extends State<Registration> {
                             const Text("Already have an account?"),
                             TextButton(
                               onPressed: () {
-                                Navigator.push(
+                                String loginRole = selectedRole == "jobseeker" ? 'JOB_SEEKER' : 'POSTER';
+                                Navigator.pushReplacement(
                                   context,
                                   MaterialPageRoute(
-                                      builder: (context) => const Login()),
+                                    builder: (context) => Login(selectedRole: loginRole),
+                                  ),
                                 );
                               },
                               child: const Text("Login"),

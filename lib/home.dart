@@ -5,7 +5,6 @@ import 'package:jobify/users/users.dart';
 import 'package:jobify/bottom_bar.dart';
 import 'package:jobify/job_post/create_job_post.dart';
 import 'package:jobify/job_post/job_post_management.dart';
-import 'package:jobify/users/profile_page.dart';
 import 'package:provider/provider.dart';
 import 'users/user_provider.dart';
 
@@ -38,7 +37,6 @@ class _HomePageState extends State<HomePage> {
 
   void _buildScreensAndItems() {
     if (_isJobSeeker) {
-      // JOB SEEKER - 4 screens
       _screens = [
         SocialFeedPage(user: widget.user),
         const DiscoverScreen(),
@@ -69,7 +67,6 @@ class _HomePageState extends State<HomePage> {
         ),
       ];
     } else {
-      // POSTER (EMPLOYER) - 5 screens
       _screens = [
         SocialFeedPage(user: widget.user),
         const DiscoverScreen(),
@@ -82,7 +79,7 @@ class _HomePageState extends State<HomePage> {
             });
           },
         ),
-        const SettingPage(),  // ← ADDED: Account/Settings page
+        const SettingPage(),
       ];
 
       _items = const [
@@ -107,8 +104,8 @@ class _HomePageState extends State<HomePage> {
           label: 'Post',
         ),
         BottomBarItem(
-          icon: Icons.person_outline,
-          activeIcon: Icons.person,
+          icon: Icons.business_outlined,
+          activeIcon: Icons.business,
           label: 'Account',
         ),
       ];
@@ -117,20 +114,14 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    return PopScope(
-      canPop: false,
-      onPopInvoked: (didPop) async {
-        if (didPop) return;
-
-        // Prevent going back to login screen
+    return WillPopScope(
+      onWillPop: () async {
         if (selectedIndex != 0) {
           setState(() {
             selectedIndex = 0;
           });
-          return;
+          return false;
         }
-
-        // Show exit dialog if on home screen
         final shouldExit = await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
@@ -148,10 +139,7 @@ class _HomePageState extends State<HomePage> {
             ],
           ),
         );
-
-        if (shouldExit == true && context.mounted) {
-          Navigator.of(context).pop();
-        }
+        return shouldExit ?? false;
       },
       child: Scaffold(
         body: IndexedStack(

@@ -2,7 +2,7 @@
 // lib/job/my_applications.dart
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:open_file/open_file.dart';
+import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
 import 'applicantion_respository.dart';
@@ -259,7 +259,7 @@ class _ApplicationCardState extends State<_ApplicationCard> {
         await file.writeAsBytes(response.bodyBytes);
 
         if (mounted) Navigator.pop(context);
-        await OpenFile.open(file.path);
+        await OpenFilex.open(file.path);
       } else {
         if (mounted) Navigator.pop(context);
         throw Exception('Failed to download resume');

@@ -126,7 +126,7 @@ class LocalDB {
       )
     ''');
 
-    // 7. Cached users
+    // 7. Cached users (with fullname field from version 8)
     await db.execute('''
     CREATE TABLE IF NOT EXISTS cached_users (
       user_id           TEXT PRIMARY KEY,
@@ -226,7 +226,7 @@ class LocalDB {
     )
   ''');
 
-    // 14. Cached job applications
+    // 14. Cached job applications (from version 8)
     await db.execute('''
       CREATE TABLE IF NOT EXISTS cached_job_applications (
         application_id    TEXT PRIMARY KEY,
@@ -249,7 +249,7 @@ class LocalDB {
       )
     ''');
 
-    // 15. Company branches (from first version)
+    // 15. Company branches (from version 8)
     await db.execute('''
     CREATE TABLE IF NOT EXISTS company_branches (
       branch_id     TEXT PRIMARY KEY,
@@ -272,13 +272,20 @@ class LocalDB {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // UPGRADE HANDLER - ONLY ONE METHOD (NO DROPPING TABLES)
+  // UPGRADE HANDLER - Preserves data when upgrading
   // ═══════════════════════════════════════════════════════════════════════════
 
   static Future<void> _onUpgrade(Database db, int oldV, int newV) async {
     // Handle version upgrades gracefully without dropping existing data
     if (oldV < 8) {
-      // Add the missing cached_job_applications table when upgrading from version 7 to 8
+      // Add missing fullname column to cached_users if it doesn't exist
+      try {
+        await db.execute('ALTER TABLE cached_users ADD COLUMN fullname TEXT NOT NULL DEFAULT ""');
+      } catch (e) {
+        // Column might already exist
+      }
+
+      // Add missing tables when upgrading from version 7 to 8
       await db.execute('''
         CREATE TABLE IF NOT EXISTS cached_job_applications (
           application_id    TEXT PRIMARY KEY,
@@ -300,10 +307,7 @@ class LocalDB {
           FOREIGN KEY (user_id) REFERENCES cached_users (user_id) ON DELETE CASCADE
         )
       ''');
-    }
 
-    // Add company_branches table if upgrading from version < 8
-    if (oldV < 8) {
       await db.execute('''
       CREATE TABLE IF NOT EXISTS company_branches (
         branch_id     TEXT PRIMARY KEY,
@@ -324,11 +328,6 @@ class LocalDB {
       )
     ''');
     }
-
-    // Add more upgrade cases here in the future
-    // if (oldV < 9) {
-    //   // Add new tables or alter existing ones
-    // }
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -544,7 +543,6 @@ class LocalDB {
   static Future<void> cacheJobApplications(
       List<Map<String, dynamic>> applications, String userId) async {
     final db = await LocalDB.db;
-    // Delete old applications for this user
     await db.delete('cached_job_applications', where: 'user_id = ?', whereArgs: [userId]);
 
     final batch = db.batch();
@@ -635,7 +633,7 @@ class LocalDB {
   // USERS CACHE
   // ══════════════════════════════════════════════════════════════════════════
 
-  static const int _userCacheTTLMinutes = 5; // Cache valid for 5 minutes
+  static const int _userCacheTTLMinutes = 5;
 
   static Future<void> cacheUser(Users user) async {
     final db = await LocalDB.db;
@@ -665,9 +663,8 @@ class LocalDB {
     final row = result.first;
     final cachedAt = DateTime.parse(row['cached_at'] as String);
 
-    // Check if cache is still valid (5 minutes TTL)
     if (DateTime.now().difference(cachedAt).inMinutes > _userCacheTTLMinutes) {
-      return null; // Cache expired
+      return null;
     }
 
     return Users(
@@ -732,7 +729,6 @@ class LocalDB {
 
   static Future<void> cacheSkills(String userId, List<Map<String, dynamic>> skills) async {
     final db = await LocalDB.db;
-    // Delete old skills for this user first
     await db.delete('cached_skills', where: 'user_id = ?', whereArgs: [userId]);
 
     final batch = db.batch();

@@ -3,7 +3,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:open_file/open_file.dart';
+import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
 
@@ -69,7 +69,7 @@ class _ResumeManagementPageState extends State<ResumeManagementPage> {
         await file.writeAsBytes(response.bodyBytes);
 
         if (mounted) Navigator.pop(context);
-        await OpenFile.open(file.path);
+        await OpenFilex.open(file.path);
       } else {
         if (mounted) Navigator.pop(context);
         throw Exception('Failed to download resume');
@@ -388,6 +388,6 @@ class ResumePreviewDialog extends StatelessWidget {
   }
 
   Future<void> _openFullScreen(BuildContext context, File file) async {
-    await OpenFile.open(file.path);
+    await OpenFilex.open(file.path);
   }
 }

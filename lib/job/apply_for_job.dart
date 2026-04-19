@@ -1,9 +1,7 @@
-
-// lib/job/apply_for_job.dart - Fixed URL and Collapsible Description
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:open_file/open_file.dart';
+import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
 import 'applicantion_respository.dart';
@@ -715,7 +713,7 @@ class _ResumePreviewDialogState extends State<ResumePreviewDialog> {
 
   Future<void> _openFullScreen() async {
     if (_pdfFile != null) {
-      await OpenFile.open(_pdfFile!.path);
+      await OpenFilex.open(_pdfFile!.path);
     }
   }
 

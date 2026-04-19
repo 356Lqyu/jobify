@@ -10,7 +10,7 @@ import 'package:jobify/main.dart';
 import 'package:jobify/data/user_repository.dart';
 import 'package:jobify/data/local_db.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:jobify/job_post/job_post_service.dart';
+import 'package:jobify/data/job_repository.dart';
 import 'package:jobify/data/location_service.dart';
 import '../data/location_service.dart';
 
@@ -95,7 +95,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
     setState(() => _isLoadingCategories = true);
     try {
-      final jobPostService = JobPostService();
+      final jobPostService = JobRepository();
       final categories = await jobPostService.fetchJobCategories();
       if (mounted) {
         setState(() {

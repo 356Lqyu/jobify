@@ -1,9 +1,10 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:jobify/job_post/job_post_service.dart';
-import 'package:jobify/social/social_post_bottom_sheet.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:jobify/data/job_repository.dart';
+import 'package:jobify/data/feed_repository.dart';
+import 'package:jobify/social/social_post_bottom_sheet.dart';
 
 class CreateJobPost extends StatefulWidget {
   final Map<String, dynamic>? existingJob;
@@ -22,16 +23,16 @@ class CreateJobPost extends StatefulWidget {
 }
 
 class _CreateJobPostState extends State<CreateJobPost> {
-  final JobPostService _service = JobPostService();
+  final JobRepository _jobRepo = JobRepository();
+  final FeedRepository _feedRepo = FeedRepository();
   final _formKey = GlobalKey<FormState>();
 
-  // Controllers for all text fields
+  // Controllers
   final _videoUrlController = TextEditingController();
   final _jobTitleController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _minSalaryController = TextEditingController();
   final _maxSalaryController = TextEditingController();
-  final _locationController = TextEditingController();
   final _vacancyController = TextEditingController();
 
   int _selectedPostType = 1; // 1 = Job Post
@@ -53,6 +54,11 @@ class _CreateJobPostState extends State<CreateJobPost> {
   String? _userId;
   Map<String, dynamic>? _companyProfile;
 
+  // Branch selection
+  String? _selectedBranchId;
+  String? _customLocationValue; // "Remote" or "Hybrid"
+  List<Map<String, dynamic>> _branches = [];
+
   @override
   void initState() {
     super.initState();
@@ -67,7 +73,6 @@ class _CreateJobPostState extends State<CreateJobPost> {
     _descriptionController.dispose();
     _minSalaryController.dispose();
     _maxSalaryController.dispose();
-    _locationController.dispose();
     _vacancyController.dispose();
     super.dispose();
   }
@@ -86,13 +91,12 @@ class _CreateJobPostState extends State<CreateJobPost> {
       'job_category_id': null,
       'job_type_id': null,
       'experience_level_id': null,
+      'branch_id': null,
     };
 
     if (widget.existingJob != null) {
-      // Populate controllers from existing job
       _jobTitleController.text = widget.existingJob!['job_title'] ?? '';
       _descriptionController.text = widget.existingJob!['description'] ?? '';
-      _locationController.text = widget.existingJob!['location'] ?? '';
       _formData['remote_option'] = widget.existingJob!['remote_option'] ?? false;
       _minSalaryController.text = widget.existingJob!['salary_min']?.toString() ?? '';
       _maxSalaryController.text = widget.existingJob!['salary_max']?.toString() ?? '';
@@ -115,29 +119,40 @@ class _CreateJobPostState extends State<CreateJobPost> {
           ? level['experience_level_id'].toString()
           : level?.toString();
 
+      // Pre‑select branch if present
+      if (widget.existingJob!.containsKey('branch_id') && widget.existingJob!['branch_id'] != null) {
+        _selectedBranchId = widget.existingJob!['branch_id'].toString();
+      }
+
+      // Pre‑select Remote/Hybrid if location matches
+      final existingLocation = widget.existingJob!['location'] ?? '';
+      if (existingLocation == 'Remote' || existingLocation == 'Hybrid') {
+        _customLocationValue = existingLocation;
+        _selectedBranchId = null;
+      }
+
       _existingImageUrls = List<String>.from(widget.existingJob!['image_urls'] ?? []);
       _videoUrlController.text = widget.existingJob!['video_url'] ?? '';
     }
   }
 
   void _resetForm() {
-    // Clear all text controllers
     _videoUrlController.clear();
     _jobTitleController.clear();
     _descriptionController.clear();
     _minSalaryController.clear();
     _maxSalaryController.clear();
-    _locationController.clear();
     _vacancyController.text = '1';
 
-    // Reset dropdown selections to first item
     _selectedCategory = _categories.isNotEmpty ? _categories.first : null;
     _selectedJobType = _jobTypes.isNotEmpty ? _jobTypes.first : null;
     _selectedExpLevel = _expLevels.isNotEmpty ? _expLevels.first : null;
 
-    // Clear images
     _imageFiles.clear();
     _existingImageUrls.clear();
+
+    _selectedBranchId = null;
+    _customLocationValue = null;
 
     _formData = {
       'job_title': '',
@@ -152,11 +167,11 @@ class _CreateJobPostState extends State<CreateJobPost> {
       'job_category_id': _selectedCategory?['job_category_id'],
       'job_type_id': _selectedJobType?['job_type_id'],
       'experience_level_id': _selectedExpLevel?['experience_level_id'],
+      'branch_id': null,
     };
-
   }
 
-  // ─── Validators ────────────────────────────────────────────────────────────
+  // Validators
   String? _validateSalaryMin(String? value) {
     if (value == null || value.isEmpty) return null;
     final num = int.tryParse(value);
@@ -186,7 +201,7 @@ class _CreateJobPostState extends State<CreateJobPost> {
     return null;
   }
 
-  // ─── Load references ───────────────────────────────────────────────────────
+  // Load references and branches
   Future<void> _loadUserAndReferences() async {
     try {
       final supabase = Supabase.instance.client;
@@ -200,10 +215,10 @@ class _CreateJobPostState extends State<CreateJobPost> {
       }
 
       _userId = session.user.id;
-      final company = await _service.fetchMyCompanyProfile(userId: _userId);
-      final categories = await _service.fetchJobCategories();
-      final types = await _service.fetchJobTypes();
-      final levels = await _service.fetchExperienceLevels();
+      final company = await _jobRepo.fetchMyCompanyProfile(userId: _userId);
+      final categories = await _jobRepo.fetchJobCategories();
+      final types = await _jobRepo.fetchJobTypes();
+      final levels = await _jobRepo.fetchExperienceLevels();
 
       if (categories.isEmpty || types.isEmpty || levels.isEmpty) {
         setState(() {
@@ -213,11 +228,18 @@ class _CreateJobPostState extends State<CreateJobPost> {
         return;
       }
 
+      // Load branches using the repository (cached)
+      List<Map<String, dynamic>> branches = [];
+      if (company != null) {
+        branches = await _jobRepo.fetchCompanyBranches(company['company_id']);
+      }
+
       setState(() {
         _companyProfile = company;
         _categories = categories;
         _jobTypes = types;
         _expLevels = levels;
+        _branches = branches;
 
         if (widget.existingJob != null) {
           final targetCatId = _formData['job_category_id'];
@@ -269,35 +291,62 @@ class _CreateJobPostState extends State<CreateJobPost> {
     }
   }
 
-  // ─── Image upload ─────────────────────────────────────────────────────────
+  // Image upload using FeedRepository
   Future<List<String>> _uploadImages() async {
     final List<String> uploadedUrls = [];
-    final supabase = Supabase.instance.client;
     for (final file in _imageFiles) {
-      final fileName = 'job_img_${DateTime.now().millisecondsSinceEpoch}_${file.path.hashCode}.jpg';
-      final path = 'job_images/$fileName';
-      await supabase.storage.from('job_gallery').upload(path, file);
-      final url = supabase.storage.from('job_gallery').getPublicUrl(path);
+      final bytes = await file.readAsBytes();
+      final ext = file.path.split('.').last.toLowerCase();
+      final fileName = 'job_images/${DateTime.now().millisecondsSinceEpoch}_${file.path.hashCode}.$ext';
+      final url = await _feedRepo.uploadImage(
+        bucket: 'job_gallery',
+        fileName: fileName,
+        fileBytes: bytes,
+      );
       uploadedUrls.add(url);
     }
     return uploadedUrls;
   }
 
-  // ─── Submit ───────────────────────────────────────────────────────────────
+  // Submit
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     _formKey.currentState!.save();
 
-    // Gather data from controllers
+    // Gather basic data
     _formData['job_title'] = _jobTitleController.text.trim();
     _formData['description'] = _descriptionController.text.trim();
-    _formData['location'] = _locationController.text.trim();
     _formData['salary_min'] = int.tryParse(_minSalaryController.text);
     _formData['salary_max'] = int.tryParse(_maxSalaryController.text);
     _formData['vacancy_count'] = int.tryParse(_vacancyController.text) ?? 1;
     _formData['job_category_id'] = _selectedCategory?['job_category_id'];
     _formData['job_type_id'] = _selectedJobType?['job_type_id'];
     _formData['experience_level_id'] = _selectedExpLevel?['experience_level_id'];
+
+    // Handle location (branch, Remote, or Hybrid)
+    String? finalLocation;
+    String? finalBranchId;
+
+    if (_selectedBranchId != null) {
+      finalBranchId = _selectedBranchId;
+      final selectedBranch = _branches.firstWhere((b) => b['branch_id'] == _selectedBranchId);
+      final city = selectedBranch['city'] ?? '';
+      final state = selectedBranch['state'] ?? '';
+      finalLocation = [city, state].where((s) => s.isNotEmpty).join(', ');
+      if (finalLocation.isEmpty) {
+        finalLocation = selectedBranch['branch_name'] ?? 'Branch location';
+      }
+    } else if (_customLocationValue == 'Remote' || _customLocationValue == 'Hybrid') {
+      finalLocation = _customLocationValue;
+      finalBranchId = null;
+    } else {
+      // fallback (should not happen)
+      finalLocation = '';
+      finalBranchId = null;
+    }
+
+    _formData['location'] = finalLocation;
+    _formData['branch_id'] = finalBranchId;
 
     setState(() => _isLoading = true);
 
@@ -333,7 +382,7 @@ class _CreateJobPostState extends State<CreateJobPost> {
     try {
       if (widget.existingJob != null) {
         final jobId = widget.existingJob!['job_id'].toString();
-        final updatedCount = await _service.updateJobPost(jobId, data);
+        final updatedCount = await _jobRepo.updateJobPost(jobId, data);
         if (updatedCount == 0) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Update failed: job not found.')),
@@ -344,11 +393,17 @@ class _CreateJobPostState extends State<CreateJobPost> {
           );
         }
       } else {
-        await _service.createJobPost(data);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Job published')),
-        );
-        _resetForm();
+        final jobId = await _jobRepo.createJobPost(data, autoCreateSocialPost: true);
+        if (jobId != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Job published and shared to feed')),
+          );
+          _resetForm();
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Failed to publish job')),
+          );
+        }
       }
 
       if (widget.onPostSuccess != null) {
@@ -365,7 +420,9 @@ class _CreateJobPostState extends State<CreateJobPost> {
     }
   }
 
-  // ─── Build ────────────────────────────────────────────────────────────────
+  // ------------------------------------------------------------
+  // UI Build
+  // ------------------------------------------------------------
   @override
   Widget build(BuildContext context) {
     if (_isReferenceLoading) {
@@ -378,7 +435,7 @@ class _CreateJobPostState extends State<CreateJobPost> {
     final totalImages = _imageFiles.length + _existingImageUrls.length;
     final canAddMore = totalImages < 5;
 
-    // Modal mode (no AppBar, with handle & header)
+    // Modal mode
     if (widget.isModal) {
       return Container(
         decoration: const BoxDecoration(
@@ -410,7 +467,7 @@ class _CreateJobPostState extends State<CreateJobPost> {
                   ElevatedButton(
                     onPressed: _isLoading ? null : _submit,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF2563EB),
+                      backgroundColor: Colors.blue,
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
@@ -436,7 +493,7 @@ class _CreateJobPostState extends State<CreateJobPost> {
       );
     }
 
-    // Full screen mode (with toggle buttons)
+    // Full screen mode
     return Scaffold(
       appBar: AppBar(
         title: const Text('Create Post'),
@@ -557,7 +614,9 @@ class _CreateJobPostState extends State<CreateJobPost> {
     );
   }
 
-  // ─── Job Post Form (core) ────────────────────────────────────────────────
+  // ------------------------------------------------------------
+  // Job Post Form (core)
+  // ------------------------------------------------------------
   Widget _buildJobPostForm(int totalImages, bool canAddMore) {
     return Card(
       elevation: 4,
@@ -570,7 +629,7 @@ class _CreateJobPostState extends State<CreateJobPost> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Images (unchanged)
+              // Images
               const Text('Images (max 5, first is cover)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
               const SizedBox(height: 8),
               Wrap(
@@ -678,12 +737,57 @@ class _CreateJobPostState extends State<CreateJobPost> {
               ),
               const SizedBox(height: 16),
 
-              // Location
-              _buildTextField(
-                controller: _locationController,
-                label: 'Location *',
-                hintText: 'e.g. Kuala Lumpur, Remote, Hybrid',
-                validator: (v) => v?.trim().isEmpty == true ? 'Required' : null,
+              // Location selection dropdown (branches + Remote/Hybrid)
+              const Text('Location *', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                decoration: _inputDecoration('Select location', hintText: 'Choose a location'),
+                value: _selectedBranchId ?? _customLocationValue,
+                isExpanded: true,
+                items: [
+                  const DropdownMenuItem<String>(
+                    value: 'Remote',
+                    child: Text('Remote'),
+                  ),
+                  const DropdownMenuItem<String>(
+                    value: 'Hybrid',
+                    child: Text('Hybrid'),
+                  ),
+                  const DropdownMenuItem<String>(
+                    value: '---',
+                    enabled: false,
+                    child: Divider(),
+                  ),
+                  ..._branches.map((branch) {
+                    final city = branch['city'] as String? ?? '';
+                    final state = branch['state'] as String? ?? '';
+                    final address = [city, state].where((s) => s.isNotEmpty).join(', ');
+                    final branchName = branch['branch_name'] as String? ?? '';
+                    String label;
+                    if (branchName.isNotEmpty) {
+                      label = address.isNotEmpty ? '$branchName ($address)' : branchName;
+                    } else {
+                      label = address.isNotEmpty ? address : 'Unnamed branch';
+                    }
+                    if (label.length > 45) label = '${label.substring(0, 42)}...';
+                    return DropdownMenuItem<String>(
+                      value: branch['branch_id'],
+                      child: Text(label, overflow: TextOverflow.ellipsis),
+                    );
+                  }).toList(),
+                ],
+                onChanged: (value) {
+                  setState(() {
+                    if (value == 'Remote' || value == 'Hybrid') {
+                      _selectedBranchId = null;
+                      _customLocationValue = value;
+                    } else if (value != null && value != '---') {
+                      _selectedBranchId = value;
+                      _customLocationValue = null;
+                    }
+                  });
+                },
+                validator: (value) => value == null || value == '---' ? 'Please select a location' : null,
               ),
               const SizedBox(height: 16),
 
@@ -726,7 +830,7 @@ class _CreateJobPostState extends State<CreateJobPost> {
               ),
               const SizedBox(height: 16),
 
-              // Remote option
+              // Remote option (checkbox)
               Row(
                 children: [
                   Checkbox(
@@ -795,7 +899,6 @@ class _CreateJobPostState extends State<CreateJobPost> {
     );
   }
 
-  // Helper: consistent text field (always uses a controller)
   Widget _buildTextField({
     required TextEditingController controller,
     required String label,

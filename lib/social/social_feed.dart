@@ -659,7 +659,7 @@ class _FeedCard extends StatelessWidget {
       if (post.userId == currentUser.userId) {
         Navigator.push(context, MaterialPageRoute(builder: (_) => JobDetailEmployer(job: jobMap!)));
       } else {
-        Navigator.push(context, MaterialPageRoute(builder: (_) => JobDetailPage(job: jobMap!)));
+        //Navigator.push(context, MaterialPageRoute(builder: (_) => JobDetailPage(job: jobMap!)));
       }
     } else {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Post details coming soon')));

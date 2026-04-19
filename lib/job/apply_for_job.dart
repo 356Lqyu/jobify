@@ -30,6 +30,7 @@ class _ApplyForJobPageState extends State<ApplyForJobPage> {
   bool _isSubmitting = false;
   bool _hasApplied = false;
   bool _isDescriptionExpanded = false;
+  bool _isJobSeeker = false;
   String? _selectedResumeId;
   String? _selectedResumeUrl;
   String? _selectedResumeName;
@@ -39,7 +40,7 @@ class _ApplyForJobPageState extends State<ApplyForJobPage> {
   @override
   void initState() {
     super.initState();
-    _loadData();
+    _checkUserRoleAndLoad();
   }
 
   @override
@@ -48,8 +49,40 @@ class _ApplyForJobPageState extends State<ApplyForJobPage> {
     super.dispose();
   }
 
-  Future<void> _loadData() async {
+  Future<void> _checkUserRoleAndLoad() async {
     setState(() => _isLoading = true);
+
+    try {
+      final userData = await supabase
+          .from('users')
+          .select('role')
+          .eq('user_id', widget.userId)
+          .maybeSingle();
+
+      final role = userData?['role'] as String?;
+
+      if (role != 'JOB_SEEKER') {
+        if (mounted) {
+          setState(() {
+            _isJobSeeker = false;
+            _isLoading = false;
+          });
+        }
+        return;
+      }
+
+      setState(() => _isJobSeeker = true);
+      await _loadData();
+
+    } catch (e) {
+      debugPrint('Error checking user role: $e');
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _loadData() async {
     await Future.wait([
       _checkExistingApplication(),
       _loadUserResumes(),
@@ -167,6 +200,72 @@ class _ApplyForJobPageState extends State<ApplyForJobPage> {
     if (_isLoading) {
       return const Scaffold(
         body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    // Access denied for posters
+    if (!_isJobSeeker) {
+      return Scaffold(
+        backgroundColor: const Color(0xFFF8FAFC),
+        appBar: AppBar(
+          title: const Text('Access Denied'),
+          backgroundColor: Colors.red,
+          elevation: 0,
+          foregroundColor: Colors.white,
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.block,
+                    size: 64,
+                    color: Colors.red.shade600,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  'Access Denied',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Only job seekers can apply for jobs.\n\n'
+                      'If you are an employer, please post jobs instead.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey,
+                  ),
+                ),
+                const SizedBox(height: 32),
+                ElevatedButton.icon(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.arrow_back),
+                  label: const Text('Go Back'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2563EB),
+                    padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       );
     }
 

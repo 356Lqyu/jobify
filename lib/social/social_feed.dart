@@ -24,9 +24,6 @@ class _SocialFeedPageState extends State<SocialFeedPage>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
   late final SocialFeedProvider _provider;
-  final _searchCtrl = TextEditingController();
-  bool _showSearch = false;
-  Timer? _searchDebounce;
 
   @override
   void initState() {
@@ -46,8 +43,6 @@ class _SocialFeedPageState extends State<SocialFeedPage>
   @override
   void dispose() {
     _tabController.dispose();
-    _searchCtrl.dispose();
-    _searchDebounce?.cancel();
     _provider.dispose();
     super.dispose();
   }
@@ -64,19 +59,6 @@ class _SocialFeedPageState extends State<SocialFeedPage>
           authorName: widget.user.fullname,
           authorAvatarUrl: widget.user.profileImageUrl,
         ),
-      ),
-    );
-  }
-
-  void _showFilterSheet() {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (_) => ChangeNotifierProvider.value(
-        value: _provider,
-        child: const _FeedFilterSheet(),
       ),
     );
   }
@@ -104,65 +86,10 @@ class _SocialFeedPageState extends State<SocialFeedPage>
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Search row
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 200),
-                              child: _showSearch
-                                  ? _SearchField(
-                                key: const ValueKey('search'),
-                                ctrl: _searchCtrl,
-                                onClose: () {
-                                  setState(() => _showSearch = false);
-                                  _searchCtrl.clear();
-                                },
-                              )
-                                  : GestureDetector(
-                                key: const ValueKey('bar'),
-                                onTap: () =>
-                                    setState(() => _showSearch = true),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 14,
-                                    vertical: 10,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFF1F5F9),
-                                    borderRadius: BorderRadius.circular(
-                                      20,
-                                    ),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      const Icon(
-                                        Icons.search,
-                                        size: 16,
-                                        color: Colors.blueGrey,
-                                      ),
-                                      const SizedBox(width: 6),
-                                      Text(
-                                        'Search posts, #hashtags…',
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          color: Colors.blueGrey.shade400,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                    Padding(padding: const EdgeInsets.fromLTRB(12, 10, 12, 6)),
                     // Filter chips
                     Consumer<SocialFeedProvider>(
-                      builder: (_, prov, __) => _FilterChips(provider: prov),
+                      builder: (_, prov, _) => _FilterChips(provider: prov),
                     ),
                     // Tabs
                     TabBar(
@@ -226,13 +153,13 @@ class _FilterChips extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Consumer<SocialFeedProvider>(
-      builder: (_, prov, __) => SizedBox(
+      builder: (_, prov, _) => SizedBox(
         height: 40,
         child: ListView.separated(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
           itemCount: _filters.length,
-          separatorBuilder: (_, __) => const SizedBox(width: 8),
+          separatorBuilder: (_, _) => const SizedBox(width: 8),
           itemBuilder: (_, i) {
             final f = _filters[i];
             final sel = prov.activeFilter == f['value'];
@@ -268,39 +195,6 @@ class _FilterChips extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SEARCH FIELD
-// ─────────────────────────────────────────────────────────────────────────────
-class _SearchField extends StatelessWidget {
-  final TextEditingController ctrl;
-  final VoidCallback onClose;
-  const _SearchField({super.key, required this.ctrl, required this.onClose});
-
-  @override
-  Widget build(BuildContext context) {
-    return TextField(
-      controller: ctrl,
-      autofocus: true,
-      decoration: InputDecoration(
-        hintText: 'Search posts, #hashtags…',
-        hintStyle: const TextStyle(fontSize: 13, color: Colors.blueGrey),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        filled: true,
-        fillColor: const Color(0xFFF1F5F9),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(20),
-          borderSide: BorderSide.none,
-        ),
-        prefixIcon: const Icon(Icons.search, size: 18, color: Colors.blueGrey),
-        suffixIcon: IconButton(
-          icon: const Icon(Icons.close, size: 16),
-          onPressed: onClose,
-        ),
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // FOR YOU TAB
 // ─────────────────────────────────────────────────────────────────────────────
 class _ForYouTab extends StatelessWidget {
@@ -310,7 +204,7 @@ class _ForYouTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Consumer<SocialFeedProvider>(
-      builder: (_, prov, __) {
+      builder: (_, prov, _) {
         if (prov.isLoadingForYou && prov.forYouPosts.isEmpty) {
           return const Center(child: CircularProgressIndicator());
         }
@@ -331,20 +225,15 @@ class _ForYouTab extends StatelessWidget {
             },
             child: ListView.builder(
               padding: const EdgeInsets.only(top: 8, bottom: 100),
-              itemCount:
-              prov.forYouPosts.length + (prov.isLoadingForYou ? 1 : 0) + 1,
+              itemCount: prov.forYouPosts.length + (prov.isLoadingForYou ? 1 : 0),
               itemBuilder: (ctx, i) {
-                final adj = i > 2 ? i - 1 : i;
-                if (adj >= prov.forYouPosts.length) {
+                if (i >= prov.forYouPosts.length) {
                   return const Padding(
                     padding: EdgeInsets.all(16),
                     child: Center(child: CircularProgressIndicator()),
                   );
                 }
-                return FeedCard(
-                  post: prov.forYouPosts[adj],
-                  currentUser: user,
-                );
+                return FeedCard(post: prov.forYouPosts[i], currentUser: user);
               },
             ),
           ),
@@ -364,7 +253,7 @@ class _FollowingTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Consumer<SocialFeedProvider>(
-      builder: (_, prov, __) {
+      builder: (_, prov, _) {
         if (prov.isLoadingFollowing && prov.followingPosts.isEmpty) {
           return const Center(child: CircularProgressIndicator());
         }
@@ -408,13 +297,11 @@ class _FollowingTab extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // FEED CARD
-// ─────────────────────────────────────────────────────────────────────────────
 class FeedCard extends StatelessWidget {
   final FeedPost post;
   final Users currentUser;
-  const FeedCard({required this.post, required this.currentUser});
+  const FeedCard({super.key, required this.post, required this.currentUser});
 
   @override
   Widget build(BuildContext context) {
@@ -572,16 +459,17 @@ class FeedCard extends StatelessWidget {
                   onTap: () {},
                 ),
                 const Spacer(),
-                IconButton(
-                  icon: Icon(
-                    post.isSaved ? Icons.bookmark : Icons.bookmark_border,
-                    size: 20,
-                    color: post.isSaved
-                        ? const Color(0xFF2563EB)
-                        : Colors.blueGrey,
-                  ),
-                  onPressed: () => prov.toggleSave(post),
-                ),
+                if (post.userId != currentUser.userId)
+                  IconButton(
+                    icon: Icon(
+                      post.isSaved ? Icons.bookmark : Icons.bookmark_border,
+                      size: 20,
+                      color: post.isSaved ? const Color(0xFF2563EB) : Colors.blueGrey,
+                    ),
+                    onPressed: () => prov.toggleSave(post),
+                  )
+                else
+                  const SizedBox(width: 36),
               ],
             ),
           ),
@@ -603,7 +491,6 @@ class FeedCard extends StatelessWidget {
           MaterialPageRoute(builder: (_) => JobDetailEmployer(job: jobMap)),
         );
         context.read<SocialFeedProvider>().refreshForYou();
-
       } else {
         // Job seeker view
         await Navigator.push(
@@ -634,7 +521,7 @@ class FeedCard extends StatelessWidget {
       backgroundColor: Colors.transparent,
       builder: (_) => ChangeNotifierProvider.value(
         value: prov,
-        child: _CommentSheet(post: post),
+        child: _CommentSheet(post: post, currentUser: currentUser), // pass currentUser
       ),
     );
   }
@@ -643,7 +530,9 @@ class FeedCard extends StatelessWidget {
 // COMMENT SHEET
 class _CommentSheet extends StatefulWidget {
   final FeedPost post;
-  const _CommentSheet({required this.post});
+  final Users currentUser;
+  const _CommentSheet({required this.post, required this.currentUser});
+
   @override
   State<_CommentSheet> createState() => _CommentSheetState();
 }
@@ -739,15 +628,18 @@ class _CommentSheetState extends State<_CommentSheet> {
                 itemCount: _comments.length,
                 itemBuilder: (_, i) {
                   final c = _comments[i];
+                  final isCurrentUser = c.userId == widget.currentUser.userId;
+                  final displayName = isCurrentUser ? 'You' : c.authorName;
+                  final avatarUrl = isCurrentUser ? widget.currentUser.profileImageUrl : c.authorAvatar;
+
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 14),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         _FeedAvatar(
-                          name: c.authorName,
-                          url: c.authorAvatar,
-                          radius: 16,
+                          name: displayName,
+                          url: avatarUrl,
                         ),
                         const SizedBox(width: 10),
                         Expanded(
@@ -758,13 +650,12 @@ class _CommentSheetState extends State<_CommentSheet> {
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Column(
-                              crossAxisAlignment:
-                              CrossAxisAlignment.start,
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Row(
                                   children: [
                                     Text(
-                                      c.authorName,
+                                      displayName,
                                       style: const TextStyle(
                                         fontWeight: FontWeight.w600,
                                         fontSize: 13,
@@ -844,84 +735,6 @@ class _CommentSheetState extends State<_CommentSheet> {
                 ],
               ),
             ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// FEED FILTER SHEET
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _FeedFilterSheet extends StatelessWidget {
-  const _FeedFilterSheet();
-
-  @override
-  Widget build(BuildContext context) {
-    return Consumer<SocialFeedProvider>(
-      builder: (_, prov, __) => Container(
-        padding: const EdgeInsets.all(20),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Text(
-                  'Filter Feed',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                const Spacer(),
-                TextButton(
-                  onPressed: () {
-                    prov.setFilter('All');
-                    Navigator.pop(context);
-                  },
-                  child: const Text('Reset'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'Post Type',
-              style: TextStyle(fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 10),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: ['All', 'post', 'job', 'tip', 'event', 'news'].map((v) {
-                final sel = prov.activeFilter == v;
-                final label = v == 'All'
-                    ? 'All'
-                    : PostType.values
-                    .firstWhere(
-                      (t) => t.name == v,
-                  orElse: () => PostType.post,
-                )
-                    .label;
-                return ChoiceChip(
-                  label: Text(label),
-                  selected: sel,
-                  selectedColor: const Color(0xFF2563EB),
-                  labelStyle: TextStyle(
-                    color: sel ? Colors.white : Colors.blueGrey,
-                    fontSize: 13,
-                  ),
-                  onSelected: (_) {
-                    prov.setFilter(v);
-                    Navigator.pop(context);
-                  },
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: 20),
           ],
         ),
       ),
@@ -1293,30 +1106,40 @@ class _FeedAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (url != null && url!.isNotEmpty) {
-      return CircleAvatar(
-        radius: radius,
-        backgroundImage: CachedNetworkImageProvider(url!),
+      return ClipOval(
+        child: CachedNetworkImage(
+          imageUrl: url!,
+          width: radius * 2,
+          height: radius * 2,
+          fit: BoxFit.cover,
+          placeholder: (_, __) => _buildInitialsAvatar(),
+          errorWidget: (_, __, ___) => _buildInitialsAvatar(),
+        ),
       );
     }
-    final initials = name.trim().isEmpty
-        ? '?'
-        : name.trim().split(' ').take(2).map((s) => s[0].toUpperCase()).join();
+    return _buildInitialsAvatar();
+  }
+
+  Widget _buildInitialsAvatar() {
+    final displayName = name.trim().isEmpty ? 'User' : name;
+    final initials = displayName
+        .split(' ')
+        .take(2)
+        .map((s) => s.isNotEmpty ? s[0].toUpperCase() : '')
+        .join();
+    final fallbackInitials = initials.isEmpty ? '?' : initials;
     const palette = [
-      Color(0xFF6366F1),
-      Color(0xFF2563EB),
-      Color(0xFF10B981),
-      Color(0xFFEC4899),
-      Color(0xFFF59E0B),
-      Color(0xFF0EA5E9),
+      Color(0xFF6366F1), Color(0xFF2563EB), Color(0xFF10B981),
+      Color(0xFFEC4899), Color(0xFFF59E0B), Color(0xFF0EA5E9),
     ];
-    final color = name.isEmpty
+    final color = displayName.isEmpty
         ? palette[0]
-        : palette[name.codeUnitAt(0) % palette.length];
+        : palette[displayName.codeUnitAt(0) % palette.length];
     return CircleAvatar(
       radius: radius,
       backgroundColor: color,
       child: Text(
-        initials,
+        fallbackInitials,
         style: TextStyle(
           color: Colors.white,
           fontWeight: FontWeight.bold,

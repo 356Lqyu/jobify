@@ -3,8 +3,8 @@
 // lib/job/applicant_detail.dart
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:jobify/job/application_repository.dart';
-import 'package:jobify/job/application_status.dart';
+import 'applicantion_respository.dart';
+import 'applicantion_status.dart';
 
 class ApplicantDetailPage extends StatefulWidget {
   final String applicationId;

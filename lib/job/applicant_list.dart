@@ -2,8 +2,8 @@
 
 // lib/job/applicant_list.dart
 import 'package:flutter/material.dart';
-import 'package:jobify/job/application_repository.dart';
-import 'package:jobify/job/applicant_detail.dart';
+import 'applicantion_respository.dart';
+import 'applicantion_details.dart';
 
 class ApplicantListPage extends StatefulWidget {
   final String jobId;

@@ -5,8 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:open_file/open_file.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
-import 'package:jobify/job/application_repository.dart';
-import 'package:jobify/job/application_status.dart';
+import 'applicantion_respository.dart';
+import 'applicantion_status.dart';
 
 class MyApplicationsPage extends StatefulWidget {
   const MyApplicationsPage({super.key});

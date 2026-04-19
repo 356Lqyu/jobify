@@ -123,6 +123,11 @@ class _SettingPageState extends State<SettingPage> {
     if (userId != null) {
       await LocalDB.clearUserCache(userId);
     }
+
+    // Clear UserProvider state
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    userProvider.clearUser();
+
     await supabase.auth.signOut();
     if (mounted) {
       Navigator.pushReplacementNamed(context, '/');

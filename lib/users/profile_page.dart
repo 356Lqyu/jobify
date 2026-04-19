@@ -7,7 +7,10 @@ import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:jobify/data/user_repository.dart';
 import 'package:jobify/data/local_db.dart';
-import 'package:jobify/job_post/job_post_service.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:jobify/data/job_repository.dart';
+import 'package:jobify/data/location_service.dart';
+import '../data/location_service.dart';
 import 'profile_page_widgets.dart';
 
 /// Function:
@@ -118,7 +121,7 @@ class _ProfilePageState extends State<ProfilePage> {
     if (_jobCategories.isNotEmpty) return;
     setState(() => _isLoadingCategories = true);
     try {
-      final jobPostService = JobPostService();
+      final jobPostService = JobRepository();
       final categories = await jobPostService.fetchJobCategories();
       if (mounted) {
         setState(() {

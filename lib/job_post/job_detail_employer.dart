@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:carousel_slider/carousel_slider.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
-import 'package:jobify/job_post/job_post_service.dart';
+import 'package:jobify/data/job_repository.dart';
 import 'package:jobify/job_post/create_job_post.dart';
+import 'package:jobify/data/local_db.dart';
+import 'package:jobify/job/applicant_list.dart'; // added import
 
 class JobDetailEmployer extends StatefulWidget {
   final Map<String, dynamic> job;
@@ -13,7 +15,7 @@ class JobDetailEmployer extends StatefulWidget {
 }
 
 class _JobDetailEmployerState extends State<JobDetailEmployer> {
-  final JobPostService _service = JobPostService();
+  final JobRepository _jobRepo = JobRepository();
   late Map<String, dynamic> _job;
   bool _isLoading = false;
   YoutubePlayerController? _youtubeController;
@@ -23,6 +25,8 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
     super.initState();
     _job = Map.from(widget.job);
     _initYoutubePlayer();
+    _loadFromCache();
+    _refresh();
   }
 
   void _initYoutubePlayer() {
@@ -38,9 +42,19 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
     }
   }
 
+  Future<void> _loadFromCache() async {
+    final cached = await LocalDB.getCachedJobMapById(_job['job_id']);
+    if (cached != null && mounted) {
+      setState(() {
+        _job = cached;
+        _initYoutubePlayer();
+      });
+    }
+  }
+
   Future<void> _refresh() async {
-    final updated = await _service.fetchJobPostById(_job['job_id']);
-    if (updated != null) {
+    final updated = await _jobRepo.fetchJobPostById(_job['job_id']);
+    if (updated != null && mounted) {
       setState(() {
         _job = updated;
         _initYoutubePlayer();
@@ -50,11 +64,12 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
 
   Future<void> _toggleStatus() async {
     final newStatus = _job['status'] == 'active' ? 'closed' : 'active';
-    await _service.updateJobPost(_job['job_id'], {'status': newStatus});
+    await _jobRepo.updateJobPost(_job['job_id'], {'status': newStatus});
     await _refresh();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Job ${newStatus == 'active' ? 'reopened' : 'closed'}')),
+        SnackBar(content: Text('Job ${newStatus == 'active' ? 'reopened' : 'closed'}'),
+          backgroundColor: Colors.green,),
       );
     }
   }
@@ -76,7 +91,7 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
     );
     if (confirm == true) {
       setState(() => _isLoading = true);
-      await _service.deleteJobPost(_job['job_id']);
+      await _jobRepo.deleteJobPost(_job['job_id']);
       if (mounted) Navigator.pop(context, true);
     }
   }
@@ -84,8 +99,13 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
   @override
   Widget build(BuildContext context) {
     final isActive = _job['status'] == 'active';
-    final List<String> imageUrls = List<String>.from(_job['image_urls'] ?? []);
+    final List<String> imageUrls = (_job['image_urls'] as List? ?? [])
+        .whereType<String>()
+        .where((url) => url.trim().isNotEmpty)
+        .toList();
     final hasVideo = _youtubeController != null;
+    final viewCount = _job['view_count'] ?? 0;
+    final appCount = _job['application_count'] ?? 0;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -113,7 +133,7 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
           padding: const EdgeInsets.all(16),
           child: Column(
             children: [
-              // Employer notice banner (separate)
+              // Employer notice banner
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -136,8 +156,6 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
                   ],
                 ),
               ),
-
-              // Single card with all job details
               Card(
                 elevation: 2,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -146,20 +164,17 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Job title
                       Text(
                         _job['job_title'] ?? 'Untitled',
                         style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 8),
-
-                      // Company & location row
                       Row(
                         children: [
                           Icon(Icons.business, size: 16, color: Colors.grey.shade600),
                           const SizedBox(width: 4),
                           Text(
-                            _job['company_profile']?['company_name'] ?? 'Company',
+                            _job['company_profile']?['company_name'] ?? _job['company_name'] ?? 'Company',
                             style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
                           ),
                           const SizedBox(width: 8),
@@ -177,40 +192,59 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
                         ],
                       ),
                       const SizedBox(height: 16),
-
-                      // Info chips
                       Wrap(
                         spacing: 8,
                         runSpacing: 8,
                         children: [
                           if (_job['salary_min'] != null && _job['salary_max'] != null)
                             _infoChip(Icons.attach_money, '${_job['salary_min']} - ${_job['salary_max']} MYR'),
-                          _infoChip(Icons.work_outline, _job['job_type_id']?['name'] ?? 'Full-time'),
-                          _infoChip(Icons.trending_up, _job['experience_level_id']?['name'] ?? 'Junior'),
+                          _infoChip(Icons.work_outline, _job['job_type'] ?? 'Full-time'),
+                          _infoChip(Icons.trending_up, _job['experience_level'] ?? 'Junior'),
                           if (_job['remote_option'] == true) _infoChip(Icons.wifi, 'Remote'),
-                          _infoChip(Icons.sell_outlined, _job['job_category_id']?['name'] ?? 'General'),
+                          _infoChip(Icons.sell_outlined, _job['job_category'] ?? 'General'),
                         ],
                       ),
                       const SizedBox(height: 20),
-
-                      // Description
-                      const Text(
-                        'Job Description',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      Container(
+                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.grey.shade200),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                          children: [
+                            _statItem(Icons.visibility, '$viewCount', 'Views'),
+                            Container(width: 1, height: 30, color: Colors.grey.shade300),
+                            // Make Applications clickable
+                            GestureDetector(
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => ApplicantListPage(
+                                      jobId: _job['job_id'],
+                                      jobTitle: _job['job_title'] ?? 'Position',
+                                    ),
+                                  ),
+                                );
+                              },
+                              child: _statItem(Icons.description, '$appCount', 'Applications'),
+                            ),
+                          ],
+                        ),
                       ),
+                      const SizedBox(height: 20),
+                      const Text('Job Description', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 8),
                       Text(
                         _job['description'] ?? 'No description provided.',
                         style: const TextStyle(height: 1.5),
                       ),
                       const SizedBox(height: 20),
-
-                      // Images (if any)
                       if (imageUrls.isNotEmpty) ...[
-                        const Text(
-                          'Images',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                        ),
+                        const Text('Images', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                         const SizedBox(height: 8),
                         CarouselSlider(
                           options: CarouselOptions(
@@ -231,22 +265,13 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
                         ),
                         const SizedBox(height: 16),
                       ],
-
-                      // Video (if any)
                       if (hasVideo) ...[
-                        const Text(
-                          'Video',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                        ),
+                        const Text('Video', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                         const SizedBox(height: 8),
                         YoutubePlayer(controller: _youtubeController!),
                         const SizedBox(height: 16),
                       ],
-
-                      // Divider before actions
                       const Divider(height: 32),
-
-                      // Action buttons
                       Row(
                         children: [
                           Expanded(
@@ -305,6 +330,17 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
           Text(label, style: TextStyle(fontSize: 12, color: Colors.grey.shade800)),
         ],
       ),
+    );
+  }
+
+  Widget _statItem(IconData icon, String value, String label) {
+    return Column(
+      children: [
+        Icon(icon, size: 22, color: Colors.blue.shade700),
+        const SizedBox(height: 4),
+        Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+      ],
     );
   }
 }

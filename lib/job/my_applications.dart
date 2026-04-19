@@ -32,6 +32,11 @@ class _MyApplicationsPageState extends State<MyApplicationsPage>
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
     _loadApplications();
+    _tabController.addListener(() {
+      if (!_tabController.indexIsChanging) {
+        setState(() {});
+      }
+    });
   }
 
   @override
@@ -75,25 +80,40 @@ class _MyApplicationsPageState extends State<MyApplicationsPage>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+
+    final allCount = _allApps.length;
+    final pendingCount = _pendingApps.length;
+    final acceptedCount = _acceptedApps.length;
+    final rejectedCount = _rejectedApps.length;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text('My Applications'),
+        title: const Text(
+          'My Applications',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         backgroundColor: Colors.white,
         elevation: 0,
         foregroundColor: Colors.black87,
         automaticallyImplyLeading: false,
-        bottom: TabBar(
-          controller: _tabController,
-          labelColor: const Color(0xFF2563EB),
-          unselectedLabelColor: Colors.grey,
-          indicatorColor: const Color(0xFF2563EB),
-          tabs: const [
-            Tab(text: 'All'),
-            Tab(text: 'Pending'),
-            Tab(text: 'Accepted'),
-            Tab(text: 'Rejected'),
-          ],
+        centerTitle: false,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(50),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                _buildStatusTab('All', allCount, 0, Colors.blue),
+                const SizedBox(width: 8),
+                _buildStatusTab('Pending', pendingCount, 1, Colors.orange),
+                const SizedBox(width: 8),
+                _buildStatusTab('Accepted', acceptedCount, 2, Colors.green),
+                const SizedBox(width: 8),
+                _buildStatusTab('Rejected', rejectedCount, 3, Colors.red),
+              ],
+            ),
+          ),
         ),
       ),
       body: _isLoading
@@ -141,6 +161,46 @@ class _MyApplicationsPageState extends State<MyApplicationsPage>
           _buildApplicationList(_acceptedApps),
           _buildApplicationList(_rejectedApps),
         ],
+      ),
+    );
+  }
+
+  Widget _buildStatusTab(String label, int count, int index, Color color) {
+    final isSelected = _tabController.index == index;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => _tabController.animateTo(index),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: isSelected ? color.withOpacity(0.1) : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isSelected ? color : Colors.grey.shade300,
+              width: 1,
+            ),
+          ),
+          child: Column(
+            children: [
+              Text(
+                count.toString(),
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: isSelected ? color : Colors.grey.shade600,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isSelected ? color : Colors.grey.shade500,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -282,7 +342,6 @@ class _ApplicationCardState extends State<_ApplicationCard> {
   Widget build(BuildContext context) {
     final status = widget.application['status'] as String;
 
-    // Don't render withdrawn applications
     if (status == 'withdrawn') {
       return const SizedBox.shrink();
     }
@@ -294,6 +353,22 @@ class _ApplicationCardState extends State<_ApplicationCard> {
     final description = widget.application['description'] ?? '';
     final hasLongDescription = description.length > 100;
     final isPending = status == 'pending';
+    final isAccepted = status == 'accepted';
+    final isRejected = status == 'rejected';
+
+    Color getStatusColor() {
+      if (isPending) return Colors.orange;
+      if (isAccepted) return Colors.green;
+      if (isRejected) return Colors.red;
+      return Colors.grey;
+    }
+
+    String getStatusText() {
+      if (isPending) return 'PENDING';
+      if (isAccepted) return 'ACCEPTED';
+      if (isRejected) return 'REJECTED';
+      return status.toUpperCase();
+    }
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -304,269 +379,247 @@ class _ApplicationCardState extends State<_ApplicationCard> {
           BoxShadow(
             color: Colors.black.withOpacity(0.05),
             blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header - Always visible
-          InkWell(
-            onTap: () => setState(() => _isExpanded = !_isExpanded),
-            borderRadius: BorderRadius.circular(16),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  Container(
-                    width: 50,
-                    height: 50,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF2563EB).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header
+            InkWell(
+              onTap: () => setState(() => _isExpanded = !_isExpanded),
+              borderRadius: BorderRadius.circular(16),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    // Company Logo/Icon
+                    Container(
+                      width: 50,
+                      height: 50,
+                      decoration: BoxDecoration(
+                        color: getStatusColor().withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        isAccepted ? Icons.check_circle : Icons.work_outline,
+                        color: getStatusColor(),
+                        size: 24,
+                      ),
                     ),
-                    child: const Center(
-                      child: Icon(Icons.business, color: Color(0xFF2563EB)),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.application['job_title'] ?? 'Position',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
+                    const SizedBox(width: 12),
+                    // Job Info
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.application['job_title'] ?? 'Position',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
                           ),
+                          const SizedBox(height: 4),
+                          Text(
+                            widget.application['company_name'] ?? 'Company',
+                            style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Status Chip
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: getStatusColor().withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        getStatusText(),
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: getStatusColor(),
                         ),
-                        const SizedBox(height: 4),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Icon(
+                      _isExpanded ? Icons.expand_less : Icons.expand_more,
+                      color: Colors.grey[400],
+                      size: 20,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            // Expanded Details
+            if (_isExpanded)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Divider(),
+                    const SizedBox(height: 12),
+                    // Location
+                    Row(
+                      children: [
+                        Icon(Icons.location_on, size: 16, color: Colors.grey[500]),
+                        const SizedBox(width: 8),
                         Text(
-                          widget.application['company_name'] ?? 'Company',
-                          style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                          widget.application['location'] ?? 'Not specified',
+                          style: TextStyle(color: Colors.grey[700], fontSize: 13),
                         ),
                       ],
                     ),
-                  ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      _buildStatusChip(status),
-                      const SizedBox(height: 4),
-                      Icon(
-                        _isExpanded ? Icons.expand_less : Icons.expand_more,
-                        color: Colors.grey[400],
-                        size: 20,
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          // Expanded Details
-          if (_isExpanded)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Divider(),
-                  const SizedBox(height: 12),
-
-                  // Job Details
-                  _buildDetailRow(Icons.location_on, 'Location',
-                      widget.application['location'] ?? 'Not specified'),
-                  const SizedBox(height: 8),
-                  _buildDetailRow(Icons.attach_money, 'Salary',
-                      _formatSalary(widget.application['salary_min'], widget.application['salary_max'])),
-                  const SizedBox(height: 8),
-                  _buildDetailRow(Icons.access_time, 'Job Type',
-                      widget.application['job_type'] ?? 'Full-time'),
-                  const SizedBox(height: 8),
-                  _buildDetailRow(Icons.calendar_today, 'Applied Date', appliedDate),
-
-                  // Resume Link with Preview
-                  if (widget.application['resume_url'] != null &&
-                      widget.application['resume_url'].toString().isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: _buildDetailRow(
-                        Icons.picture_as_pdf,
-                        'Resume',
-                        widget.application['resume_file_name'] ?? 'Resume.pdf',
-                        isLink: true,
+                    const SizedBox(height: 8),
+                    // Salary
+                    Row(
+                      children: [
+                        Icon(Icons.attach_money, size: 16, color: Colors.grey[500]),
+                        const SizedBox(width: 8),
+                        Text(
+                          _formatSalary(widget.application['salary_min'], widget.application['salary_max']),
+                          style: TextStyle(color: Colors.grey[700], fontSize: 13),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    // Job Type
+                    Row(
+                      children: [
+                        Icon(Icons.access_time, size: 16, color: Colors.grey[500]),
+                        const SizedBox(width: 8),
+                        Text(
+                          widget.application['job_type'] ?? 'Full-time',
+                          style: TextStyle(color: Colors.grey[700], fontSize: 13),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    // Applied Date
+                    Row(
+                      children: [
+                        Icon(Icons.calendar_today, size: 16, color: Colors.grey[500]),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Applied: $appliedDate',
+                          style: TextStyle(color: Colors.grey[700], fontSize: 13),
+                        ),
+                      ],
+                    ),
+                    // Resume
+                    if (widget.application['resume_url'] != null &&
+                        widget.application['resume_url'].toString().isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      GestureDetector(
                         onTap: () => _previewResume(
                           widget.application['resume_url'],
                           widget.application['resume_file_name'] ?? 'Resume.pdf',
                         ),
-                      ),
-                    ),
-
-                  const SizedBox(height: 12),
-
-                  // Job Description (Collapsible)
-                  if (description.isNotEmpty)
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            const Text(
-                              'Job Description',
-                              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                            ),
-                            const Spacer(),
-                            if (hasLongDescription)
-                              TextButton(
-                                onPressed: () => setState(() => _isDescriptionExpanded = !_isDescriptionExpanded),
-                                child: Text(
-                                  _isDescriptionExpanded ? 'Show Less' : 'Show More',
-                                  style: const TextStyle(fontSize: 11, color: Color(0xFF2563EB)),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF2563EB).withOpacity(0.05),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.picture_as_pdf, size: 16, color: Colors.red.shade600),
+                              const SizedBox(width: 8),
+                              Text(
+                                widget.application['resume_file_name'] ?? 'Resume.pdf',
+                                style: TextStyle(
+                                  color: const Color(0xFF2563EB),
+                                  fontSize: 13,
+                                  decoration: TextDecoration.underline,
                                 ),
                               ),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        AnimatedCrossFade(
-                          firstChild: Text(
-                            description,
-                            style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          secondChild: Text(
-                            description,
-                            style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                          ),
-                          crossFadeState: _isDescriptionExpanded
-                              ? CrossFadeState.showSecond
-                              : CrossFadeState.showFirst,
-                          duration: const Duration(milliseconds: 200),
-                        ),
-                      ],
-                    ),
-
-                  // Withdraw Button (only for pending applications)
-                  if (isPending && !_isWithdrawing) ...[
-                    const SizedBox(height: 12),
-                    const Divider(),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        TextButton.icon(
-                          onPressed: _withdrawApplication,
-                          icon: const Icon(Icons.delete_outline, size: 18),
-                          label: const Text('Withdraw Application'),
-                          style: TextButton.styleFrom(
-                            foregroundColor: Colors.red,
+                            ],
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
+                    // Job Description
+                    if (description.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      const Divider(),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          const Text(
+                            'Job Description',
+                            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                          ),
+                          const Spacer(),
+                          if (hasLongDescription)
+                            TextButton(
+                              onPressed: () => setState(() => _isDescriptionExpanded = !_isDescriptionExpanded),
+                              child: Text(
+                                _isDescriptionExpanded ? 'Show Less' : 'Show More',
+                                style: const TextStyle(fontSize: 11, color: Color(0xFF2563EB)),
+                              ),
+                            ),
+                        ],
+                      ),
+                      AnimatedCrossFade(
+                        firstChild: Text(
+                          description,
+                          style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        secondChild: Text(
+                          description,
+                          style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                        ),
+                        crossFadeState: _isDescriptionExpanded
+                            ? CrossFadeState.showSecond
+                            : CrossFadeState.showFirst,
+                        duration: const Duration(milliseconds: 200),
+                      ),
+                    ],
+                    // Withdraw Button
+                    if (isPending && !_isWithdrawing) ...[
+                      const SizedBox(height: 16),
+                      const Divider(),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          OutlinedButton.icon(
+                            onPressed: _withdrawApplication,
+                            icon: const Icon(Icons.delete_outline, size: 18),
+                            label: const Text('Withdraw Application'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.red,
+                              side: const BorderSide(color: Colors.red),
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                    if (isPending && _isWithdrawing)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 12),
+                        child: Center(child: CircularProgressIndicator()),
+                      ),
                   ],
-                  if (isPending && _isWithdrawing)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 12),
-                      child: Center(child: CircularProgressIndicator()),
-                    ),
-                ],
+                ),
               ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatusChip(String status) {
-    Color bgColor;
-    Color textColor;
-    IconData icon;
-    String label;
-
-    switch (status.toLowerCase()) {
-      case 'pending':
-        bgColor = Colors.amber.shade100;
-        textColor = Colors.amber.shade800;
-        icon = Icons.access_time;
-        label = 'Pending';
-        break;
-      case 'accepted':
-        bgColor = Colors.green.shade100;
-        textColor = Colors.green.shade800;
-        icon = Icons.check_circle;
-        label = 'Accepted';
-        break;
-      case 'rejected':
-        bgColor = Colors.red.shade100;
-        textColor = Colors.red.shade800;
-        icon = Icons.cancel;
-        label = 'Rejected';
-        break;
-      default:
-        bgColor = Colors.grey.shade200;
-        textColor = Colors.grey.shade700;
-        icon = Icons.help_outline;
-        label = status;
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 12, color: textColor),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: textColor,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDetailRow(IconData icon, String label, String value,
-      {bool isLink = false, VoidCallback? onTap}) {
-    return GestureDetector(
-      onTap: isLink ? onTap : null,
-      child: Row(
-        children: [
-          Icon(icon, size: 14, color: Colors.grey[500]),
-          const SizedBox(width: 8),
-          SizedBox(
-            width: 85,
-            child: Text(
-              label,
-              style: TextStyle(color: Colors.grey[600], fontSize: 12),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: TextStyle(
-                color: isLink ? const Color(0xFF2563EB) : Colors.grey[700],
-                fontSize: 12,
-                decoration: isLink ? TextDecoration.underline : null,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          if (isLink)
-            Icon(Icons.open_in_new, size: 14, color: const Color(0xFF2563EB)),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -589,7 +642,7 @@ class _ApplicationCardState extends State<_ApplicationCard> {
   }
 }
 
-// Resume Preview Dialog
+// Resume Preview Dialog (same as in apply_for_job.dart)
 class ResumePreviewDialog extends StatefulWidget {
   final String resumeUrl;
   final String fileName;
@@ -710,39 +763,41 @@ class _ResumePreviewDialogState extends State<ResumePreviewDialog> {
                       color: Colors.grey.shade100,
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.picture_as_pdf,
-                          size: 80,
-                          color: Colors.red.shade400,
-                        ),
-                        const SizedBox(height: 16),
-                        const Text(
-                          'PDF Ready to View',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          widget.fileName,
-                          style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 24),
-                        ElevatedButton.icon(
-                          onPressed: _openFullScreen,
-                          icon: const Icon(Icons.open_in_new),
-                          label: const Text('Open Full Screen'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF2563EB),
-                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.picture_as_pdf,
+                            size: 80,
+                            color: Colors.red.shade400,
+                          ),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'PDF Ready to View',
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            widget.fileName,
+                            style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 24),
+                          ElevatedButton.icon(
+                            onPressed: _openFullScreen,
+                            icon: const Icon(Icons.open_in_new),
+                            label: const Text('Open Full Screen'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF2563EB),
+                              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 )

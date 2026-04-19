@@ -1,4 +1,4 @@
-// lib/job/applicant_details.dart
+// lib/job/applicantion_details.dart
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'applicantion_respository.dart';
@@ -83,7 +83,6 @@ class _ApplicantDetailPageState extends State<ApplicantDetailPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Status Timeline
             ApplicationStatusTimeline(
               currentStatus: status,
               appliedAt: appliedAt,
@@ -91,7 +90,6 @@ class _ApplicantDetailPageState extends State<ApplicantDetailPage> {
             ),
             const SizedBox(height: 16),
 
-            // Applicant Profile Card
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -130,7 +128,7 @@ class _ApplicantDetailPageState extends State<ApplicantDetailPage> {
                     user['phone'] ?? 'Not provided',
                   ),
                   const SizedBox(height: 12),
-                  if (user['date_of_birth'] != null)
+                  if (user['date_of_birth'] != null && user['date_of_birth'].toString().isNotEmpty)
                     _buildInfoRow(
                       Icons.cake,
                       'Date of Birth',
@@ -164,7 +162,6 @@ class _ApplicantDetailPageState extends State<ApplicantDetailPage> {
 
             const SizedBox(height: 16),
 
-            // Resume Card
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -243,7 +240,6 @@ class _ApplicantDetailPageState extends State<ApplicantDetailPage> {
 
             const SizedBox(height: 24),
 
-            // Action Buttons (if pending)
             if (status == 'pending') ...[
               Row(
                 children: [

@@ -40,7 +40,6 @@ class ApplicationRepository {
     String? coverLetter,
   }) async {
     try {
-      // Check if already applied
       final existing = await checkExistingApplication(jobId, userId);
       if (existing) {
         throw Exception('You have already applied for this job');
@@ -64,7 +63,6 @@ class ApplicationRepository {
           .select()
           .single();
 
-      // Increment application count on job post
       try {
         final jobData = await _sb
             .from('job_post')
@@ -82,7 +80,6 @@ class ApplicationRepository {
         debugPrint('Error updating application count: $e');
       }
 
-      // Get job details for the response
       final jobDetails = await _getJobDetails(jobId);
 
       if (jobDetails != null) {
@@ -146,7 +143,6 @@ class ApplicationRepository {
     final userId = _uid;
     if (userId == null) return [];
 
-    // Try cache first
     if (!forceRefresh) {
       final cached = await LocalDB.getCachedJobApplications(userId);
       if (cached.isNotEmpty) {
@@ -188,15 +184,12 @@ class ApplicationRepository {
           .neq('status', 'withdrawn')
           .order('applied_at', ascending: false);
 
-      debugPrint('Raw response from Supabase: ${response.length} records');
-
       final List<Map<String, dynamic>> applications = [];
 
       for (final app in response) {
         final jobData = app['job_post'] as Map<String, dynamic>?;
 
         if (jobData == null) {
-          debugPrint('Warning: No job data found for application ${app['application_id']}');
           continue;
         }
 
@@ -223,7 +216,6 @@ class ApplicationRepository {
           'description': jobData['description'] ?? '',
         };
 
-        debugPrint('Processed application: ${processedApp['job_title']} - ${processedApp['status']}');
         applications.add(processedApp);
       }
 
@@ -238,54 +230,50 @@ class ApplicationRepository {
   }
 
   // ============================================================================
-  // WITHDRAW APPLICATION - HARD DELETE
+  // WITHDRAW APPLICATION
   // ============================================================================
 
   Future<bool> withdrawApplication(String applicationId) async {
     try {
-      debugPrint('=== WITHDRAW APPLICATION STARTED ===');
-      debugPrint('Application ID: $applicationId');
+      print('=== WITHDRAW APPLICATION STARTED ===');
+      print('Application ID: $applicationId');
 
-      // First, check if application exists and get its status
       final existingApp = await _sb
           .from('job_application')
           .select('application_id, status, job_id')
           .eq('application_id', applicationId)
           .maybeSingle();
 
-      debugPrint('Existing application: $existingApp');
+      print('Existing application: $existingApp');
 
       if (existingApp == null) {
-        debugPrint('Application not found in database');
+        print('Application not found in database');
         return false;
       }
 
       if (existingApp['status'] != 'pending') {
-        debugPrint('Cannot withdraw application with status: ${existingApp['status']}');
+        print('Cannot withdraw application with status: ${existingApp['status']}');
         return false;
       }
 
       final jobId = existingApp['job_id'];
-      debugPrint('Job ID: $jobId');
+      print('Job ID: $jobId');
 
-      // HARD DELETE - Remove from database completely
       await _sb
           .from('job_application')
           .delete()
           .eq('application_id', applicationId);
 
-      debugPrint('Delete request sent to Supabase');
+      print('Delete request sent to Supabase');
 
-      // Verify deletion
       final verifyDelete = await _sb
           .from('job_application')
           .select('application_id')
           .eq('application_id', applicationId)
           .maybeSingle();
 
-      debugPrint('After deletion check: $verifyDelete');
+      print('After deletion check: $verifyDelete');
 
-      // Update application count on job post
       try {
         final jobData = await _sb
             .from('job_post')
@@ -301,23 +289,21 @@ class ApplicationRepository {
             .update({'application_count': newCount})
             .eq('job_id', jobId);
 
-        debugPrint('Updated application count from $currentCount to $newCount');
+        print('Updated application count from $currentCount to $newCount');
       } catch (e) {
-        debugPrint('Error updating application count: $e');
+        print('Error updating application count: $e');
       }
 
-      // Clear local cache
       final userId = _uid;
       if (userId != null) {
         await LocalDB.deleteCachedJobApplication(applicationId, userId);
-        debugPrint('Removed from local cache');
+        print('Removed from local cache');
       }
 
-      debugPrint('=== APPLICATION WITHDRAWN SUCCESSFULLY ===');
+      print('=== APPLICATION WITHDRAWN SUCCESSFULLY ===');
       return true;
-
     } catch (e) {
-      debugPrint('Error in withdrawApplication: $e');
+      print('Error in withdrawApplication: $e');
       return false;
     }
   }
@@ -348,35 +334,63 @@ class ApplicationRepository {
 
   Future<List<Map<String, dynamic>>> getApplicantsForJob(String jobId) async {
     try {
+      print('=== GETTING APPLICANTS FOR JOB ===');
+      print('Job ID: $jobId');
+
       final response = await _sb
           .from('job_application')
           .select('''
-            *,
-            users!job_application_user_id_fkey (
-              user_id,
-              fullname,
-              email,
-              phone,
-              profile_image_url,
-              job_seeker_profile!job_seeker_profile_user_id_fkey (
-                bio,
-                address,
-                date_of_birth,
-                gender
-              )
-            )
+            application_id,
+            job_id,
+            user_id,
+            resume_url,
+            resume_file_name,
+            cover_letter,
+            status,
+            applied_at,
+            updated_at
           ''')
           .eq('job_id', jobId)
           .neq('status', 'withdrawn')
           .order('applied_at', ascending: false);
 
-      final applicants = List<Map<String, dynamic>>.from(response);
+      print('Found ${response.length} applications');
 
-      return applicants.map((app) {
-        final userData = app['users'] as Map<String, dynamic>?;
-        final profileData = userData?['job_seeker_profile'] as Map<String, dynamic>?;
+      final List<Map<String, dynamic>> applicants = [];
 
-        return {
+      for (final app in response) {
+        final userId = app['user_id'];
+
+        final userResponse = await _sb
+            .from('users')
+            .select('''
+              user_id,
+              fullname,
+              email,
+              phone,
+              profile_image_url
+            ''')
+            .eq('user_id', userId)
+            .maybeSingle();
+
+        if (userResponse == null) {
+          print('User not found for ID: $userId');
+          continue;
+        }
+
+        Map<String, dynamic>? profileData;
+        try {
+          final profileResponse = await _sb
+              .from('job_seeker_profile')
+              .select('bio, address, date_of_birth, gender')
+              .eq('user_id', userId)
+              .maybeSingle();
+          profileData = profileResponse as Map<String, dynamic>?;
+        } catch (e) {
+          print('Error fetching profile: $e');
+        }
+
+        final applicant = {
           'application_id': app['application_id'],
           'job_id': app['job_id'],
           'status': app['status'],
@@ -386,21 +400,58 @@ class ApplicationRepository {
           'resume_file_name': app['resume_file_name'],
           'cover_letter': app['cover_letter'],
           'user': {
-            'user_id': userData?['user_id'],
-            'fullname': userData?['fullname'] ?? 'Unknown',
-            'email': userData?['email'] ?? '',
-            'phone': userData?['phone'] ?? 'Not provided',
-            'profile_image_url': userData?['profile_image_url'],
+            'user_id': userResponse['user_id'],
+            'fullname': userResponse['fullname'] ?? 'Unknown',
+            'email': userResponse['email'] ?? '',
+            'phone': userResponse['phone'] ?? 'Not provided',
+            'profile_image_url': userResponse['profile_image_url'],
             'bio': profileData?['bio'] ?? 'No bio provided',
             'address': profileData?['address'] ?? 'Not specified',
             'date_of_birth': profileData?['date_of_birth'],
             'gender': profileData?['gender'],
           },
         };
-      }).toList();
+
+        print('Added applicant: ${userResponse['fullname']} - ${app['status']}');
+        applicants.add(applicant);
+      }
+
+      print('Total applicants processed: ${applicants.length}');
+      return applicants;
     } catch (e) {
-      debugPrint('Error fetching applicants: $e');
+      print('Error fetching applicants: $e');
       return [];
+    }
+  }
+
+  // ============================================================================
+  // POSTER: GET APPLICATION STATISTICS
+  // ============================================================================
+
+  Future<Map<String, int>> getApplicationStats(String jobId) async {
+    try {
+      final response = await _sb
+          .from('job_application')
+          .select('status')
+          .eq('job_id', jobId)
+          .neq('status', 'withdrawn');
+
+      final apps = List<Map<String, dynamic>>.from(response);
+
+      print('Stats - Total: ${apps.length}');
+      print('Stats - Pending: ${apps.where((a) => a['status'] == 'pending').length}');
+      print('Stats - Accepted: ${apps.where((a) => a['status'] == 'accepted').length}');
+      print('Stats - Rejected: ${apps.where((a) => a['status'] == 'rejected').length}');
+
+      return {
+        'total': apps.length,
+        'pending': apps.where((a) => a['status'] == 'pending').length,
+        'accepted': apps.where((a) => a['status'] == 'accepted').length,
+        'rejected': apps.where((a) => a['status'] == 'rejected').length,
+      };
+    } catch (e) {
+      print('Error getting stats: $e');
+      return {'total': 0, 'pending': 0, 'accepted': 0, 'rejected': 0};
     }
   }
 
@@ -418,6 +469,22 @@ class ApplicationRepository {
         throw Exception('Invalid status: $newStatus');
       }
 
+      // Get current status and job_id
+      final currentApp = await _sb
+          .from('job_application')
+          .select('status, job_id')
+          .eq('application_id', applicationId)
+          .maybeSingle();
+
+      if (currentApp == null) {
+        debugPrint('Application not found');
+        return false;
+      }
+
+      final oldStatus = currentApp['status'];
+      final jobId = currentApp['job_id'];
+
+      // Update the status
       final updates = {
         'status': newStatus,
         'updated_at': DateTime.now().toIso8601String(),
@@ -428,39 +495,30 @@ class ApplicationRepository {
           .update(updates)
           .eq('application_id', applicationId);
 
+      // Update job post counts
+      if (oldStatus != newStatus) {
+        final allApps = await _sb
+            .from('job_application')
+            .select('status')
+            .eq('job_id', jobId)
+            .neq('status', 'withdrawn');
+
+        final apps = List<Map<String, dynamic>>.from(allApps);
+        final totalCount = apps.length;
+
+        await _sb
+            .from('job_post')
+            .update({'application_count': totalCount})
+            .eq('job_id', jobId);
+      }
+
       await LocalDB.updateCachedApplicationStatus(applicationId, newStatus);
 
-      debugPrint('Application $applicationId status updated to: $newStatus');
+      debugPrint('Application $applicationId status updated from $oldStatus to: $newStatus');
       return true;
     } catch (e) {
       debugPrint('Error updating application status: $e');
       return false;
-    }
-  }
-
-  // ============================================================================
-  // GET APPLICATION STATISTICS
-  // ============================================================================
-
-  Future<Map<String, int>> getApplicationStats(String jobId) async {
-    try {
-      final response = await _sb
-          .from('job_application')
-          .select('status')
-          .eq('job_id', jobId)
-          .neq('status', 'withdrawn');
-
-      final apps = List<Map<String, dynamic>>.from(response);
-
-      return {
-        'total': apps.length,
-        'pending': apps.where((a) => a['status'] == 'pending').length,
-        'accepted': apps.where((a) => a['status'] == 'accepted').length,
-        'rejected': apps.where((a) => a['status'] == 'rejected').length,
-      };
-    } catch (e) {
-      debugPrint('Error getting stats: $e');
-      return {'total': 0, 'pending': 0, 'accepted': 0, 'rejected': 0};
     }
   }
 }

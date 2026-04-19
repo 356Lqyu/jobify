@@ -61,7 +61,6 @@ class _ApplyForJobPageState extends State<ApplyForJobPage> {
       final role = userData?['role'] as String?;
 
       if (role != 'JOB_SEEKER') {
-        // If not job seeker, just show access denied without loading data
         if (mounted) {
           setState(() {
             _isJobSeeker = false;
@@ -73,7 +72,6 @@ class _ApplyForJobPageState extends State<ApplyForJobPage> {
 
       setState(() => _isJobSeeker = true);
       await _loadData();
-
     } catch (e) {
       debugPrint('Error checking user role: $e');
       if (mounted) {
@@ -203,72 +201,65 @@ class _ApplyForJobPageState extends State<ApplyForJobPage> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       return const Scaffold(
+        backgroundColor: Color(0xFFF8FAFC),
         body: Center(child: CircularProgressIndicator()),
       );
     }
 
-    // Access denied for posters - show error and prevent access
     if (!_isJobSeeker) {
       return Scaffold(
         backgroundColor: const Color(0xFFF8FAFC),
         appBar: AppBar(
           title: const Text('Access Denied'),
-          backgroundColor: Colors.red,
+          backgroundColor: Colors.white,
           elevation: 0,
-          foregroundColor: Colors.white,
+          foregroundColor: Colors.red,
           automaticallyImplyLeading: true,
         ),
         body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: Colors.red.shade50,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.block,
-                    size: 64,
-                    color: Colors.red.shade600,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.block,
+                  size: 64,
+                  color: Colors.red.shade600,
+                ),
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                'Access Denied',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Only job seekers can apply for jobs.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 14, color: Colors.grey),
+              ),
+              const SizedBox(height: 32),
+              ElevatedButton.icon(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.arrow_back),
+                label: const Text('Go Back'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF2563EB),
+                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                const SizedBox(height: 24),
-                const Text(
-                  'Access Denied',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  'Only job seekers can apply for jobs.\n\n'
-                      'If you are an employer, please post jobs instead.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey,
-                  ),
-                ),
-                const SizedBox(height: 32),
-                ElevatedButton.icon(
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.arrow_back),
-                  label: const Text('Go Back'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF2563EB),
-                    padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       );
@@ -332,7 +323,10 @@ class _ApplyForJobPageState extends State<ApplyForJobPage> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text('Apply for Job'),
+        title: const Text(
+          'Apply for Job',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         backgroundColor: Colors.white,
         elevation: 0,
         foregroundColor: Colors.black87,
@@ -341,31 +335,16 @@ class _ApplyForJobPageState extends State<ApplyForJobPage> {
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildJobDetailsCard(),
             const SizedBox(height: 20),
-            const Text(
-              'Select Resume',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            if (_userResumes.isEmpty)
-              _buildNoResumesWidget()
-            else
-              _buildResumeList(),
+            _buildResumeSection(),
+            const SizedBox(height: 20),
+            _buildCoverLetterSection(),
             const SizedBox(height: 24),
-            const Text(
-              'Cover Letter (Optional)',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            _buildCoverLetterField(),
-            const SizedBox(height: 32),
             _buildSubmitButton(),
             const SizedBox(height: 16),
             _buildInfoNote(),
-            const SizedBox(height: 20),
           ],
         ),
       ),
@@ -375,9 +354,13 @@ class _ApplyForJobPageState extends State<ApplyForJobPage> {
   Widget _buildJobDetailsCard() {
     final description = widget.job['description'] ?? '';
     final companyData = widget.job['company_profile'] as Map<String, dynamic>?;
+    final salaryMin = widget.job['salary_min'];
+    final salaryMax = widget.job['salary_max'];
+    final location = widget.job['location'] ?? 'Not specified';
+    final jobType = widget.job['job_type'] ?? 'Full-time';
+    final companyName = companyData?['company_name'] ?? widget.job['company_name'] ?? 'Company';
 
     return Container(
-      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -385,182 +368,274 @@ class _ApplyForJobPageState extends State<ApplyForJobPage> {
           BoxShadow(
             color: Colors.black.withOpacity(0.05),
             blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF2563EB).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(
-                  Icons.work_outline,
-                  color: Color(0xFF2563EB),
-                  size: 24,
-                ),
+          // Header
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFF2563EB),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(16),
+                topRight: Radius.circular(16),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.work_outline,
+                    color: Colors.white,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.job['job_title'] ?? 'Position',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        companyName,
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.8),
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Body
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Info row
+                Row(
                   children: [
-                    Text(
-                      widget.job['job_title'] ?? 'Position',
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      companyData?['company_name'] ?? widget.job['company_name'] ?? 'Company',
-                      style: TextStyle(
-                        color: Colors.grey.shade600,
-                        fontSize: 14,
-                      ),
-                    ),
+                    _buildInfoItem(Icons.location_on, location, Colors.blue),
+                    const SizedBox(width: 12),
+                    _buildInfoItem(Icons.attach_money, _formatSalary(salaryMin, salaryMax), Colors.green),
+                    const SizedBox(width: 12),
+                    _buildInfoItem(Icons.access_time, jobType, Colors.orange),
                   ],
                 ),
-              ),
-            ],
+                const SizedBox(height: 16),
+                // Description
+                if (description.isNotEmpty) ...[
+                  const Text(
+                    'Job Description',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    description,
+                    style: TextStyle(
+                      color: Colors.grey[600],
+                      fontSize: 13,
+                      height: 1.5,
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ),
-          const SizedBox(height: 20),
-          const Divider(),
-          const SizedBox(height: 16),
-          _buildDetailRow(Icons.location_on, 'Location', widget.job['location'] ?? 'Not specified'),
-          const SizedBox(height: 12),
-          _buildDetailRow(Icons.attach_money, 'Salary', _formatSalary(
-            widget.job['salary_min'],
-            widget.job['salary_max'],
-          )),
-          const SizedBox(height: 12),
-          _buildDetailRow(Icons.access_time, 'Job Type', widget.job['job_type'] ?? 'Full-time'),
-          if (description.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            const Divider(),
-            const SizedBox(height: 8),
-            const Text(
-              'Job Description',
-              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              description,
-              style: const TextStyle(fontSize: 13, height: 1.5),
-            ),
-          ],
         ],
       ),
     );
   }
 
-  Widget _buildResumeList() {
+  Widget _buildInfoItem(IconData icon, String label, Color color) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: color),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: color,
+                  fontWeight: FontWeight.w500,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildResumeSection() {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
-      child: Column(
-        children: _userResumes.map((resume) {
-          final isSelected = _selectedResumeId == resume['resume_id'];
-          return InkWell(
-            onTap: () {
-              setState(() {
-                _selectedResumeId = resume['resume_id'];
-                _selectedResumeUrl = resume['file_url'];
-                _selectedResumeName = resume['file_name'];
-              });
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: isSelected ? const Color(0xFF2563EB).withOpacity(0.05) : Colors.transparent,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                children: [
-                  Radio<String>(
-                    value: resume['resume_id'],
-                    groupValue: _selectedResumeId,
-                    onChanged: (value) {
-                      setState(() {
-                        _selectedResumeId = value;
-                        _selectedResumeUrl = resume['file_url'];
-                        _selectedResumeName = resume['file_name'];
-                      });
-                    },
-                    activeColor: const Color(0xFF2563EB),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.description, color: Color(0xFF2563EB), size: 20),
+                SizedBox(width: 8),
+                Text(
+                  'Select Resume',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
                   ),
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.red.shade50,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(
-                      Icons.picture_as_pdf,
-                      color: Colors.red.shade600,
-                      size: 24,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          resume['file_name'],
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Uploaded: ${_formatDate(resume['uploaded_at'])}',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Colors.grey.shade500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF2563EB).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: IconButton(
-                      icon: Icon(Icons.visibility, color: const Color(0xFF2563EB), size: 20),
-                      onPressed: () => _previewResume(resume['file_url'], resume['file_name']),
-                      tooltip: 'Preview Resume',
-                    ),
-                  ),
-                ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            if (_userResumes.isEmpty)
+              _buildNoResumesWidget()
+            else
+              _buildResumeList(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildResumeList() {
+    return Column(
+      children: _userResumes.map((resume) {
+        final isSelected = _selectedResumeId == resume['resume_id'];
+        return GestureDetector(
+          onTap: () {
+            setState(() {
+              _selectedResumeId = resume['resume_id'];
+              _selectedResumeUrl = resume['file_url'];
+              _selectedResumeName = resume['file_name'];
+            });
+          },
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: isSelected ? const Color(0xFF2563EB).withOpacity(0.05) : Colors.grey.shade50,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isSelected ? const Color(0xFF2563EB) : Colors.grey.shade200,
+                width: isSelected ? 1.5 : 1,
               ),
             ),
-          );
-        }).toList(),
-      ),
+            child: Row(
+              children: [
+                Radio<String>(
+                  value: resume['resume_id'],
+                  groupValue: _selectedResumeId,
+                  onChanged: (value) {
+                    setState(() {
+                      _selectedResumeId = value;
+                      _selectedResumeUrl = resume['file_url'];
+                      _selectedResumeName = resume['file_name'];
+                    });
+                  },
+                  activeColor: const Color(0xFF2563EB),
+                ),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    Icons.picture_as_pdf,
+                    color: Colors.red.shade600,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        resume['file_name'],
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Uploaded: ${_formatDate(resume['uploaded_at'])}',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey.shade500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: Icon(Icons.visibility, color: const Color(0xFF2563EB), size: 20),
+                  onPressed: () => _previewResume(resume['file_url'], resume['file_name']),
+                  tooltip: 'Preview Resume',
+                ),
+              ],
+            ),
+          ),
+        );
+      }).toList(),
     );
   }
 
   Widget _buildNoResumesWidget() {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.grey.shade200),
       ),
       child: Column(
@@ -569,12 +644,12 @@ class _ApplyForJobPageState extends State<ApplyForJobPage> {
           const SizedBox(height: 12),
           const Text(
             'No resumes found',
-            style: TextStyle(fontWeight: FontWeight.w500),
+            style: TextStyle(fontWeight: FontWeight.w500, fontSize: 16),
           ),
           const SizedBox(height: 4),
           Text(
             'Please upload a resume in your profile first',
-            style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+            style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
           ),
           const SizedBox(height: 16),
           ElevatedButton.icon(
@@ -594,39 +669,74 @@ class _ApplyForJobPageState extends State<ApplyForJobPage> {
     );
   }
 
-  Widget _buildCoverLetterField() {
+  Widget _buildCoverLetterSection() {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
-      child: TextField(
-        controller: _coverLetterCtrl,
-        maxLines: 6,
-        decoration: InputDecoration(
-          hintText: 'Tell the employer why you\'re a good fit...',
-          hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.all(16),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.edit_note, color: Color(0xFF2563EB), size: 20),
+                SizedBox(width: 8),
+                Text(
+                  'Cover Letter (Optional)',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _coverLetterCtrl,
+              maxLines: 5,
+              decoration: InputDecoration(
+                hintText: 'Tell the employer why you\'re a good fit for this position...',
+                hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+                filled: true,
+                fillColor: Colors.grey.shade50,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+                contentPadding: const EdgeInsets.all(16),
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
   Widget _buildSubmitButton() {
+    final isEnabled = _userResumes.isNotEmpty && !_isSubmitting;
+
     return SizedBox(
       width: double.infinity,
+      height: 50,
       child: ElevatedButton(
-        onPressed: _isSubmitting || _userResumes.isEmpty ? null : _submitApplication,
+        onPressed: isEnabled ? _submitApplication : null,
         style: ElevatedButton.styleFrom(
           backgroundColor: const Color(0xFF2563EB),
           foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(vertical: 16),
+          elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
-          elevation: 0,
         ),
         child: _isSubmitting
             ? const SizedBox(
@@ -639,7 +749,10 @@ class _ApplyForJobPageState extends State<ApplyForJobPage> {
         )
             : const Text(
           'Submit Application',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+          ),
         ),
       ),
     );
@@ -667,33 +780,6 @@ class _ApplyForJobPageState extends State<ApplyForJobPage> {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildDetailRow(IconData icon, String label, String value) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, size: 18, color: Colors.grey.shade500),
-        const SizedBox(width: 12),
-        SizedBox(
-          width: 85,
-          child: Text(
-            label,
-            style: TextStyle(
-              fontWeight: FontWeight.w500,
-              color: Colors.grey.shade700,
-              fontSize: 13,
-            ),
-          ),
-        ),
-        Expanded(
-          child: Text(
-            value,
-            style: const TextStyle(fontSize: 13, height: 1.4),
-          ),
-        ),
-      ],
     );
   }
 
@@ -846,39 +932,41 @@ class _ResumePreviewDialogState extends State<ResumePreviewDialog> {
                       color: Colors.grey.shade100,
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.picture_as_pdf,
-                          size: 80,
-                          color: Colors.red.shade400,
-                        ),
-                        const SizedBox(height: 16),
-                        const Text(
-                          'PDF Ready to View',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          widget.fileName,
-                          style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 24),
-                        ElevatedButton.icon(
-                          onPressed: _openFullScreen,
-                          icon: const Icon(Icons.open_in_new),
-                          label: const Text('Open Full Screen'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF2563EB),
-                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.picture_as_pdf,
+                            size: 80,
+                            color: Colors.red.shade400,
+                          ),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'PDF Ready to View',
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            widget.fileName,
+                            style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 24),
+                          ElevatedButton.icon(
+                            onPressed: _openFullScreen,
+                            icon: const Icon(Icons.open_in_new),
+                            label: const Text('Open Full Screen'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF2563EB),
+                              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 )

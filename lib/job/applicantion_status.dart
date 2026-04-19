@@ -1,4 +1,4 @@
-// lib/job/application_status.dart
+// lib/job/applicantion_status.dart
 import 'package:flutter/material.dart';
 
 class ApplicationStatusTimeline extends StatelessWidget {
@@ -15,8 +15,6 @@ class ApplicationStatusTimeline extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final statuses = ['pending', 'accepted', 'rejected'];
-    final currentIndex = statuses.indexOf(currentStatus.toLowerCase());
     final isRejected = currentStatus.toLowerCase() == 'rejected';
     final isAccepted = currentStatus.toLowerCase() == 'accepted';
 
@@ -43,7 +41,6 @@ class ApplicationStatusTimeline extends StatelessWidget {
           Row(
             children: [
               _buildTimelineStep(
-                step: 1,
                 label: 'Applied',
                 isCompleted: true,
                 isActive: true,
@@ -58,26 +55,24 @@ class ApplicationStatusTimeline extends StatelessWidget {
                 ),
               ),
               _buildTimelineStep(
-                step: 2,
                 label: isRejected ? 'Rejected' : 'Reviewed',
-                isCompleted: currentIndex >= 0 && !isRejected,
-                isActive: currentIndex >= 0,
-                date: currentIndex >= 0 ? updatedAt : null,
+                isCompleted: !isRejected,
+                isActive: true,
+                date: isRejected ? updatedAt : null,
                 isRejected: isRejected,
               ),
               if (!isRejected) ...[
                 Expanded(
                   child: Container(
                     height: 2,
-                    color: currentIndex >= 1 ? Colors.green.shade300 : Colors.grey.shade300,
+                    color: isAccepted ? Colors.green.shade300 : Colors.grey.shade300,
                   ),
                 ),
                 _buildTimelineStep(
-                  step: 3,
                   label: 'Hired',
-                  isCompleted: currentIndex >= 1,
-                  isActive: currentIndex >= 1,
-                  date: currentIndex >= 1 ? updatedAt : null,
+                  isCompleted: isAccepted,
+                  isActive: isAccepted,
+                  date: isAccepted ? updatedAt : null,
                 ),
               ],
             ],
@@ -134,7 +129,6 @@ class ApplicationStatusTimeline extends StatelessWidget {
   }
 
   Widget _buildTimelineStep({
-    required int step,
     required String label,
     required bool isCompleted,
     required bool isActive,
@@ -158,7 +152,7 @@ class ApplicationStatusTimeline extends StatelessWidget {
           child: Center(
             child: isCompleted
                 ? Icon(isRejected ? Icons.close : Icons.check, size: 18, color: Colors.white)
-                : Text('$step', style: const TextStyle(color: Colors.white)),
+                : const Icon(Icons.access_time, size: 18, color: Colors.white),
           ),
         ),
         const SizedBox(height: 8),

@@ -48,22 +48,23 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
     try {
       final data = await _service.fetchMyJobPosts(userId: _userId);
 
-      // Fetch application counts for each job
       final jobsWithCounts = <Map<String, dynamic>>[];
       for (final job in data) {
-        final count = await _getJobApplicationCount(job['job_id']);
+        final totalCount = await _getJobApplicationCount(job['job_id']);
         final pendingCount = await _getPendingApplicationCount(job['job_id']);
         jobsWithCounts.add({
           ...job,
-          'application_count': count,
+          'application_count': totalCount,
           'pending_count': pendingCount,
         });
       }
 
-      setState(() => _jobs = jobsWithCounts);
+      setState(() {
+        _jobs = jobsWithCounts;
+        _isLoading = false;
+      });
     } catch (e) {
-      // ignore
-    } finally {
+      print('Error loading jobs: $e');
       setState(() => _isLoading = false);
     }
   }
@@ -79,6 +80,7 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
       final List<dynamic> results = response as List<dynamic>;
       return results.length;
     } catch (e) {
+      print('Error getting count: $e');
       return 0;
     }
   }
@@ -186,7 +188,6 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
         onRefresh: loadJobs,
         child: Column(
           children: [
-            // Summary cards with application stats
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
               child: Row(
@@ -197,12 +198,10 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
                 ],
               ),
             ),
-            // New: Total Applications Card
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
               child: _buildSummaryCard('Total Applications', totalApplications, Icons.people_outline, Colors.green),
             ),
-            // Header with Post button
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Row(
@@ -243,7 +242,6 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
                 ],
               ),
             ),
-            // Job list
             Expanded(
               child: _jobs.isEmpty
                   ? _buildEmptyState()
@@ -395,8 +393,7 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    // Show application count badge
-                    if (applicationCount > 0)
+                    if (pendingCount > 0)
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                         decoration: BoxDecoration(
@@ -404,7 +401,7 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
-                          '$applicationCount applicant${applicationCount != 1 ? 's' : ''}',
+                          '$pendingCount pending',
                           style: TextStyle(fontSize: 10, color: Colors.blue.shade700, fontWeight: FontWeight.w500),
                         ),
                       ),
@@ -421,15 +418,17 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
                 _actionButton(
                   icon: Icons.people_outline,
                   label: 'Applicants ($pendingCount)',
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => ApplicantListPage(
-                        jobId: job['job_id'],
-                        jobTitle: job['job_title'] ?? 'Position',
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ApplicantListPage(
+                          jobId: job['job_id'],
+                          jobTitle: job['job_title'] ?? 'Position',
+                        ),
                       ),
-                    ),
-                  ),
+                    );
+                  },
                   color: Colors.blue,
                 ),
                 _actionButton(
@@ -515,4 +514,6 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
       ),
     );
   }
+
+
 }

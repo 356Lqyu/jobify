@@ -7,6 +7,7 @@ import 'package:jobify/job_post/create_job_post.dart';
 import 'package:jobify/job_post/job_post_management.dart';
 import 'package:jobify/users/profile_page.dart';
 import 'package:provider/provider.dart';
+import 'discovery/job_discovery.dart';
 import 'users/user_provider.dart';
 
 class HomePage extends StatefulWidget {
@@ -40,8 +41,7 @@ class _HomePageState extends State<HomePage> {
     if (_isJobSeeker) {
       _screens = [
         SocialFeedPage(user: widget.user),
-        //DiscoverScreen(user:widget.user),
-        const DiscoverScreen(),
+        DiscoveryJob(user:widget.user),
         const AppliedScreen(),
         const SettingPage(),
       ];
@@ -71,8 +71,7 @@ class _HomePageState extends State<HomePage> {
     } else {
       _screens = [
         SocialFeedPage(user: widget.user),
-        //DiscoverScreen(user:widget.user),
-        const DiscoverScreen(),
+        DiscoveryJob(user:widget.user),
         JobPostManagementPage(key: _jobsPageKey),
         CreateJobPost(
           onPostSuccess: () {
@@ -159,15 +158,6 @@ class _HomePageState extends State<HomePage> {
         ),
       ),
     );
-  }
-}
-
-class DiscoverScreen extends StatelessWidget {
-  const DiscoverScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const Center(child: Text("Discover Screen"));
   }
 }
 

@@ -42,7 +42,6 @@ class _HomePageState extends State<HomePage> {
       _screens = [
         SocialFeedPage(user: widget.user),
         DiscoveryJob(user:widget.user),
-        const DiscoverScreen(),
         const AppliedScreen(),
         const SettingPage(),
       ];
@@ -57,11 +56,6 @@ class _HomePageState extends State<HomePage> {
           icon: Icons.search_outlined,
           activeIcon: Icons.search,
           label: 'Discover',
-        ),
-        BottomBarItem(
-          icon: Icons.add_box_outlined,
-          activeIcon: Icons.add_box,
-          label: 'Post',
         ),
         BottomBarItem(
           icon: Icons.description_outlined,
@@ -164,15 +158,6 @@ class _HomePageState extends State<HomePage> {
         ),
       ),
     );
-  }
-}
-
-class DiscoverScreen extends StatelessWidget {
-  const DiscoverScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const Center(child: Text("Discover Screen"));
   }
 }
 

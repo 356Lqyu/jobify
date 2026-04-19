@@ -9,6 +9,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:jobify/social/post_feed_setting.dart';
+import 'event_bus.dart';
 import 'local_db.dart';
 import 'job_repository.dart';
 
@@ -364,13 +365,14 @@ class FeedRepository {
         await _sb.from('post_like').insert({
           'post_id': postId,
           'user_id': _uid,
-        });
+        }).select();
       } else {
         await _sb
             .from('post_like')
             .delete()
             .eq('post_id', postId)
-            .eq('user_id', _uid!);
+            .eq('user_id', _uid!)
+            .select();
       }
       return newLiked;
     } catch (e) {
@@ -396,6 +398,18 @@ class FeedRepository {
             .eq('post_id', postId)
             .eq('user_id', _uid!);
       }
+
+      final postData = await _sb
+          .from('post')
+          .select('job_id')
+          .eq('post_id', postId)
+          .maybeSingle();
+      final jobId = postData?['job_id'] as String?;
+      if (jobId != null) {
+        await LocalDB.setJobSaved(jobId, newSaved, _uid!);
+        EventBus().notifyJobSavedChanged(jobId);
+      }
+
       await LocalDB.setPostSaved(postId, newSaved, _uid!);
       return newSaved;
     } catch (e) {

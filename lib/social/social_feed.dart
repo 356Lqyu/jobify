@@ -10,7 +10,6 @@ import 'package:jobify/data/feed_repository.dart';
 import 'package:jobify/users/users.dart';
 import 'package:jobify/data/local_db.dart';
 import 'package:jobify/job_post/job_detail_employer.dart';
-import 'package:jobify/discovery/job_details.dart';
 import 'package:jobify/social/social_post_details.dart';
 
 class SocialFeedPage extends StatefulWidget {
@@ -23,10 +22,10 @@ class SocialFeedPage extends StatefulWidget {
 
 class _SocialFeedPageState extends State<SocialFeedPage>
     with SingleTickerProviderStateMixin {
-  late final TabController      _tabController;
+  late final TabController _tabController;
   late final SocialFeedProvider _provider;
-  final _searchCtrl  = TextEditingController();
-  bool  _showSearch  = false;
+  final _searchCtrl = TextEditingController();
+  bool _showSearch = false;
   Timer? _searchDebounce;
 
   @override
@@ -39,7 +38,7 @@ class _SocialFeedPageState extends State<SocialFeedPage>
     });
     _provider = SocialFeedProvider(
       repository: FeedRepository(),
-      userId:     widget.user.userId,
+      userId: widget.user.userId,
     );
     WidgetsBinding.instance.addPostFrameCallback((_) => _provider.init());
   }
@@ -61,8 +60,8 @@ class _SocialFeedPageState extends State<SocialFeedPage>
       builder: (_) => ChangeNotifierProvider.value(
         value: _provider,
         child: SocialPostBottomSheet(
-          userId:          widget.user.userId,
-          authorName:      widget.user.fullname,
+          userId: widget.user.userId,
+          authorName: widget.user.fullname,
           authorAvatarUrl: widget.user.profileImageUrl,
         ),
       ),
@@ -73,7 +72,8 @@ class _SocialFeedPageState extends State<SocialFeedPage>
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (_) => ChangeNotifierProvider.value(
         value: _provider,
         child: const _FeedFilterSheet(),
@@ -114,40 +114,49 @@ class _SocialFeedPageState extends State<SocialFeedPage>
                               duration: const Duration(milliseconds: 200),
                               child: _showSearch
                                   ? _SearchField(
-                                key: const ValueKey('search'),
-                                ctrl: _searchCtrl,
-                                onClose: () {
-                                  setState(() => _showSearch = false);
-                                  _searchCtrl.clear();
-                                },
-                              )
+                                      key: const ValueKey('search'),
+                                      ctrl: _searchCtrl,
+                                      onClose: () {
+                                        setState(() => _showSearch = false);
+                                        _searchCtrl.clear();
+                                      },
+                                    )
                                   : GestureDetector(
-                                key: const ValueKey('bar'),
-                                onTap: () => setState(() => _showSearch = true),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 14, vertical: 10),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFF1F5F9),
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      const Icon(Icons.search,
-                                          size: 16, color: Colors.blueGrey),
-                                      const SizedBox(width: 6),
-                                      Text(
-                                        'Search posts, #hashtags…',
-                                        style: TextStyle(
-                                            fontSize: 13,
-                                            color: Colors.blueGrey.shade400),
+                                      key: const ValueKey('bar'),
+                                      onTap: () =>
+                                          setState(() => _showSearch = true),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 14,
+                                          vertical: 10,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFF1F5F9),
+                                          borderRadius: BorderRadius.circular(
+                                            20,
+                                          ),
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            const Icon(
+                                              Icons.search,
+                                              size: 16,
+                                              color: Colors.blueGrey,
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Text(
+                                              'Search posts, #hashtags…',
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                color: Colors.blueGrey.shade400,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
                                       ),
-                                    ],
-                                  ),
-                                ),
-                              ),
+                                    ),
                             ),
-                          )
+                          ),
                         ],
                       ),
                     ),
@@ -163,7 +172,9 @@ class _SocialFeedPageState extends State<SocialFeedPage>
                       indicatorColor: const Color(0xFF2563EB),
                       indicatorWeight: 2.5,
                       labelStyle: const TextStyle(
-                          fontWeight: FontWeight.w600, fontSize: 14),
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
                       tabs: const [
                         Tab(text: 'For You'),
                         Tab(text: 'Following'),
@@ -184,11 +195,13 @@ class _SocialFeedPageState extends State<SocialFeedPage>
             ],
           ),
         ),
-        floatingActionButton: FloatingActionButton(
+        floatingActionButton: widget.user.role == 'JOB_SEEKER'
+            ? FloatingActionButton(
           onPressed: _openCreatePost,
           backgroundColor: const Color(0xFF2563EB),
           child: const Icon(Icons.add, color: Colors.white),
-        ),
+        )
+            : null,
       ),
     );
   }
@@ -202,12 +215,12 @@ class _FilterChips extends StatelessWidget {
   const _FilterChips({required this.provider});
 
   static const _filters = [
-    {'label': 'All',    'value': 'All'},
-    {'label': 'Posts',  'value': 'post'},
+    {'label': 'All', 'value': 'All'},
+    {'label': 'Posts', 'value': 'post'},
     {'label': 'Hiring', 'value': 'job'},
-    {'label': 'Tips',   'value': 'tip'},
+    {'label': 'Tips', 'value': 'tip'},
     {'label': 'Events', 'value': 'event'},
-    {'label': 'News',   'value': 'news'},
+    {'label': 'News', 'value': 'news'},
   ];
 
   @override
@@ -221,23 +234,29 @@ class _FilterChips extends StatelessWidget {
           itemCount: _filters.length,
           separatorBuilder: (_, __) => const SizedBox(width: 8),
           itemBuilder: (_, i) {
-            final f   = _filters[i];
+            final f = _filters[i];
             final sel = prov.activeFilter == f['value'];
             return GestureDetector(
               onTap: () => prov.setFilter(f['value']!),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 150),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
-                  color: sel ? const Color(0xFF2563EB) : const Color(0xFFF1F5F9),
+                  color: sel
+                      ? const Color(0xFF2563EB)
+                      : const Color(0xFFF1F5F9),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
                   f['label']!,
                   style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: sel ? Colors.white : Colors.blueGrey),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: sel ? Colors.white : Colors.blueGrey,
+                  ),
                 ),
               ),
             );
@@ -268,7 +287,9 @@ class _SearchField extends StatelessWidget {
         filled: true,
         fillColor: const Color(0xFFF1F5F9),
         border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
+          borderRadius: BorderRadius.circular(20),
+          borderSide: BorderSide.none,
+        ),
         prefixIcon: const Icon(Icons.search, size: 18, color: Colors.blueGrey),
         suffixIcon: IconButton(
           icon: const Icon(Icons.close, size: 16),
@@ -310,9 +331,8 @@ class _ForYouTab extends StatelessWidget {
             },
             child: ListView.builder(
               padding: const EdgeInsets.only(top: 8, bottom: 100),
-              itemCount: prov.forYouPosts.length +
-                  (prov.isLoadingForYou ? 1 : 0) +
-                  1,
+              itemCount:
+                  prov.forYouPosts.length + (prov.isLoadingForYou ? 1 : 0) + 1,
               itemBuilder: (ctx, i) {
                 final adj = i > 2 ? i - 1 : i;
                 if (adj >= prov.forYouPosts.length) {
@@ -321,8 +341,10 @@ class _ForYouTab extends StatelessWidget {
                     child: Center(child: CircularProgressIndicator()),
                   );
                 }
-                return _FeedCard(
-                    post: prov.forYouPosts[adj], currentUser: user);
+                return FeedCard(
+                  post: prov.forYouPosts[adj],
+                  currentUser: user,
+                );
               },
             ),
           ),
@@ -363,7 +385,8 @@ class _FollowingTab extends StatelessWidget {
             },
             child: ListView.builder(
               padding: const EdgeInsets.only(top: 8, bottom: 100),
-              itemCount: prov.followingPosts.length +
+              itemCount:
+                  prov.followingPosts.length +
                   (prov.isLoadingFollowing ? 1 : 0),
               itemBuilder: (_, i) {
                 if (i >= prov.followingPosts.length) {
@@ -372,8 +395,10 @@ class _FollowingTab extends StatelessWidget {
                     child: Center(child: CircularProgressIndicator()),
                   );
                 }
-                return _FeedCard(
-                    post: prov.followingPosts[i], currentUser: user);
+                return FeedCard(
+                  post: prov.followingPosts[i],
+                  currentUser: user,
+                );
               },
             ),
           ),
@@ -386,10 +411,10 @@ class _FollowingTab extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 // FEED CARD
 // ─────────────────────────────────────────────────────────────────────────────
-class _FeedCard extends StatelessWidget {
+class FeedCard extends StatelessWidget {
   final FeedPost post;
   final Users currentUser;
-  const _FeedCard({required this.post, required this.currentUser});
+  const FeedCard({required this.post, required this.currentUser});
 
   @override
   Widget build(BuildContext context) {
@@ -402,9 +427,10 @@ class _FeedCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 8,
-              offset: const Offset(0, 2))
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
         ],
       ),
       child: Column(
@@ -424,26 +450,41 @@ class _FeedCard extends StatelessWidget {
                       Row(
                         children: [
                           Flexible(
-                            child: Text(post.authorName,
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.bold, fontSize: 14),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis),
+                            child: Text(
+                              post.authorName,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
                           if (post.isVerified) ...[
                             const SizedBox(width: 4),
-                            const Icon(Icons.verified,
-                                size: 14, color: Color(0xFF2563EB)),
+                            const Icon(
+                              Icons.verified,
+                              size: 14,
+                              color: Color(0xFF2563EB),
+                            ),
                           ],
                         ],
                       ),
                       if (post.authorSubtitle.isNotEmpty)
-                        Text(post.authorSubtitle,
-                            style: const TextStyle(
-                                fontSize: 11, color: Colors.blueGrey)),
-                      Text(post.timeAgo,
+                        Text(
+                          post.authorSubtitle,
                           style: const TextStyle(
-                              fontSize: 10, color: Colors.blueGrey)),
+                            fontSize: 11,
+                            color: Colors.blueGrey,
+                          ),
+                        ),
+                      Text(
+                        post.timeAgo,
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: Colors.blueGrey,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -453,7 +494,7 @@ class _FeedCard extends StatelessWidget {
                   _FollowBtn(
                     isFollowing: post.isFollowing,
                     onTap: () => prov.toggleFollow(post),
-                  )
+                  ),
               ],
             ),
           ),
@@ -464,31 +505,42 @@ class _FeedCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
                   child: _RichContent(content: post.content),
                 ),
                 if (post.hashtags.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
                     child: Wrap(
-                      spacing: 8, runSpacing: 4,
+                      spacing: 8,
+                      runSpacing: 4,
                       children: post.hashtags
-                          .map((tag) => GestureDetector(
-                        onTap: () => ScaffoldMessenger.of(context)
-                            .showSnackBar(SnackBar(
-                            content: Text('Search: #$tag'),
-                            duration: const Duration(seconds: 1))),
-                        child: Text('#$tag',
-                            style: const TextStyle(
-                                color: Color(0xFF2563EB),
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500)),
-                      ))
+                          .map(
+                            (tag) => GestureDetector(
+                              onTap: () =>
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Search: #$tag'),
+                                      duration: const Duration(seconds: 1),
+                                    ),
+                                  ),
+                              child: Text(
+                                '#$tag',
+                                style: const TextStyle(
+                                  color: Color(0xFF2563EB),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          )
                           .toList(),
                     ),
                   ),
-                if (post.mediaUrls.isNotEmpty)
-                  _MediaGrid(urls: post.mediaUrls),
+                if (post.mediaUrls.isNotEmpty) _MediaGrid(urls: post.mediaUrls),
                 if (post.postType == PostType.job && post.linkedJob != null)
                   _LinkedJobCard(job: post.linkedJob!),
               ],
@@ -501,15 +553,18 @@ class _FeedCard extends StatelessWidget {
                 _ActionBtn(
                   icon: post.isLiked ? Icons.favorite : Icons.favorite_border,
                   label: post.likeCount.toString(),
-                  color: post.isLiked ? const Color(0xFFEF4444) : Colors.blueGrey,
+                  color: post.isLiked
+                      ? const Color(0xFFEF4444)
+                      : Colors.blueGrey,
                   onTap: () => prov.toggleLike(post),
                 ),
-                _ActionBtn(
-                  icon: Icons.mode_comment_outlined,
-                  label: post.commentCount.toString(),
-                  color: Colors.blueGrey,
-                  onTap: () => _showComments(context, post, prov),
-                ),
+                if (post.postType != PostType.job)
+                  _ActionBtn(
+                    icon: Icons.mode_comment_outlined,
+                    label: post.commentCount.toString(),
+                    color: Colors.blueGrey,
+                    onTap: () => _showComments(context, post, prov),
+                  ),
                 _ActionBtn(
                   icon: Icons.share_outlined,
                   label: '',
@@ -521,7 +576,9 @@ class _FeedCard extends StatelessWidget {
                   icon: Icon(
                     post.isSaved ? Icons.bookmark : Icons.bookmark_border,
                     size: 20,
-                    color: post.isSaved ? const Color(0xFF2563EB) : Colors.blueGrey,
+                    color: post.isSaved
+                        ? const Color(0xFF2563EB)
+                        : Colors.blueGrey,
                   ),
                   onPressed: () => prov.toggleSave(post),
                 ),
@@ -539,34 +596,34 @@ class _FeedCard extends StatelessWidget {
 
       if (post.userId == currentUser.userId) {
         // Employer view
-        final jobMap = await LocalDB.getCachedJobMapById(job.jobId) ?? job.toLocalDbMap();
-        Navigator.push(
+        final jobMap =
+            await LocalDB.getCachedJobMapById(job.jobId) ?? job.toLocalDbMap();
+        await Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => JobDetailEmployer(job: jobMap)),
         );
+        context.read<SocialFeedProvider>().refreshForYou();
+
       } else {
         // Job seeker view
-        Navigator.push(
+        await Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => JobDetailPage(
-              job: job,
-              currentUser: currentUser,
-            ),
+            builder: (_) => JobDetailPage(job: job, currentUser: currentUser),
           ),
         );
+        context.read<SocialFeedProvider>().refreshForYou();
       }
     } else {
       // Normal post
-      Navigator.push(
+      await Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => SocialPostDetails(
-            post: post,
-            currentUser: currentUser,
-          ),
+          builder: (_) =>
+              SocialPostDetails(post: post, currentUser: currentUser),
         ),
       );
+      context.read<SocialFeedProvider>().refreshForYou();
     }
   }
 
@@ -605,7 +662,11 @@ class _CommentSheetState extends State<_CommentSheet> {
   Future<void> _load() async {
     final prov = context.read<SocialFeedProvider>();
     final c = await prov.fetchComments(widget.post.postId);
-    if (mounted) setState(() { _comments = c; _loading = false; });
+    if (mounted)
+      setState(() {
+        _comments = c;
+        _loading = false;
+      });
   }
 
   Future<void> _submit() async {
@@ -620,7 +681,10 @@ class _CommentSheetState extends State<_CommentSheet> {
   }
 
   @override
-  void dispose() { _ctrl.dispose(); super.dispose(); }
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -638,18 +702,24 @@ class _CommentSheetState extends State<_CommentSheet> {
           children: [
             Container(
               margin: const EdgeInsets.only(top: 12, bottom: 4),
-              width: 40, height: 4,
+              width: 40,
+              height: 4,
               decoration: BoxDecoration(
-                  color: Colors.grey.shade300,
-                  borderRadius: BorderRadius.circular(2)),
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2),
+              ),
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Align(
                 alignment: Alignment.centerLeft,
-                child: Text('Comments (${widget.post.commentCount})',
-                    style: const TextStyle(
-                        fontWeight: FontWeight.bold, fontSize: 16)),
+                child: Text(
+                  'Comments (${widget.post.commentCount})',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
               ),
             ),
             const Divider(height: 1),
@@ -657,64 +727,84 @@ class _CommentSheetState extends State<_CommentSheet> {
               child: _loading
                   ? const Center(child: CircularProgressIndicator())
                   : _comments.isEmpty
-                  ? const Center(child: Text('No comments yet.',
-                  style: TextStyle(color: Colors.blueGrey)))
+                  ? const Center(
+                      child: Text(
+                        'No comments yet.',
+                        style: TextStyle(color: Colors.blueGrey),
+                      ),
+                    )
                   : ListView.builder(
-                controller: ctrl,
-                padding: const EdgeInsets.all(16),
-                itemCount: _comments.length,
-                itemBuilder: (_, i) {
-                  final c = _comments[i];
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 14),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _FeedAvatar(
-                            name: c.authorName,
-                            url: c.authorAvatar,
-                            radius: 16),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF8FAFC),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Text(c.authorName,
+                      controller: ctrl,
+                      padding: const EdgeInsets.all(16),
+                      itemCount: _comments.length,
+                      itemBuilder: (_, i) {
+                        final c = _comments[i];
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 14),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _FeedAvatar(
+                                name: c.authorName,
+                                url: c.authorAvatar,
+                                radius: 16,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF8FAFC),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Text(
+                                            c.authorName,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                          const Spacer(),
+                                          Text(
+                                            c.timeAgo,
+                                            style: const TextStyle(
+                                              fontSize: 10,
+                                              color: Colors.blueGrey,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        c.commentText,
                                         style: const TextStyle(
-                                            fontWeight: FontWeight.w600,
-                                            fontSize: 13)),
-                                    const Spacer(),
-                                    Text(c.timeAgo,
-                                        style: const TextStyle(
-                                            fontSize: 10,
-                                            color: Colors.blueGrey)),
-                                  ],
+                                          fontSize: 13,
+                                          height: 1.4,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                                const SizedBox(height: 4),
-                                Text(c.commentText,
-                                    style: const TextStyle(
-                                        fontSize: 13, height: 1.4)),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
-                        ),
-                      ],
+                        );
+                      },
                     ),
-                  );
-                },
-              ),
             ),
             Padding(
-              padding: EdgeInsets.fromLTRB(16, 8, 16,
-                  MediaQuery.of(context).viewInsets.bottom + 12),
+              padding: EdgeInsets.fromLTRB(
+                16,
+                8,
+                16,
+                MediaQuery.of(context).viewInsets.bottom + 12,
+              ),
               child: Row(
                 children: [
                   Expanded(
@@ -724,21 +814,30 @@ class _CommentSheetState extends State<_CommentSheet> {
                       decoration: InputDecoration(
                         hintText: 'Write a comment…',
                         contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 10),
+                          horizontal: 16,
+                          vertical: 10,
+                        ),
                         filled: true,
                         fillColor: const Color(0xFFF1F5F9),
                         border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(24),
-                            borderSide: BorderSide.none),
+                          borderRadius: BorderRadius.circular(24),
+                          borderSide: BorderSide.none,
+                        ),
                       ),
                     ),
                   ),
                   const SizedBox(width: 8),
                   Container(
                     decoration: const BoxDecoration(
-                        color: Color(0xFF2563EB), shape: BoxShape.circle),
+                      color: Color(0xFF2563EB),
+                      shape: BoxShape.circle,
+                    ),
                     child: IconButton(
-                      icon: const Icon(Icons.send, color: Colors.white, size: 18),
+                      icon: const Icon(
+                        Icons.send,
+                        color: Colors.white,
+                        size: 18,
+                      ),
                       onPressed: _submit,
                     ),
                   ),
@@ -774,9 +873,10 @@ class _FeedFilterSheet extends StatelessWidget {
           children: [
             Row(
               children: [
-                const Text('Filter Feed',
-                    style: TextStyle(
-                        fontSize: 18, fontWeight: FontWeight.bold)),
+                const Text(
+                  'Filter Feed',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
                 const Spacer(),
                 TextButton(
                   onPressed: () {
@@ -788,28 +888,32 @@ class _FeedFilterSheet extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
-            const Text('Post Type',
-                style: TextStyle(fontWeight: FontWeight.w600)),
+            const Text(
+              'Post Type',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
             const SizedBox(height: 10),
             Wrap(
-              spacing: 8, runSpacing: 8,
-              children: [
-                'All', 'post', 'job', 'tip', 'event', 'news',
-              ].map((v) {
-                final sel  = prov.activeFilter == v;
+              spacing: 8,
+              runSpacing: 8,
+              children: ['All', 'post', 'job', 'tip', 'event', 'news'].map((v) {
+                final sel = prov.activeFilter == v;
                 final label = v == 'All'
                     ? 'All'
                     : PostType.values
-                    .firstWhere((t) => t.name == v,
-                    orElse: () => PostType.post)
-                    .label;
+                          .firstWhere(
+                            (t) => t.name == v,
+                            orElse: () => PostType.post,
+                          )
+                          .label;
                 return ChoiceChip(
                   label: Text(label),
                   selected: sel,
                   selectedColor: const Color(0xFF2563EB),
                   labelStyle: TextStyle(
-                      color: sel ? Colors.white : Colors.blueGrey,
-                      fontSize: 13),
+                    color: sel ? Colors.white : Colors.blueGrey,
+                    fontSize: 13,
+                  ),
                   onSelected: (_) {
                     prov.setFilter(v);
                     Navigator.pop(context);
@@ -845,25 +949,37 @@ class _RichContentState extends State<_RichContent> {
     final spans = <InlineSpan>[];
     for (final word in widget.content.split(' ')) {
       if (word.startsWith('#')) {
-        spans.add(WidgetSpan(
-          child: GestureDetector(
-            onTap: () => ScaffoldMessenger.of(context).showSnackBar(
+        spans.add(
+          WidgetSpan(
+            child: GestureDetector(
+              onTap: () => ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                    content: Text('Search: $word'),
-                    duration: const Duration(seconds: 1))),
-            child: Text('$word ',
+                  content: Text('Search: $word'),
+                  duration: const Duration(seconds: 1),
+                ),
+              ),
+              child: Text(
+                '$word ',
                 style: const TextStyle(
-                    color: Color(0xFF2563EB),
-                    fontWeight: FontWeight.w500,
-                    fontSize: 14)),
+                  color: Color(0xFF2563EB),
+                  fontWeight: FontWeight.w500,
+                  fontSize: 14,
+                ),
+              ),
+            ),
           ),
-        ));
+        );
       } else {
-        spans.add(TextSpan(
-          text: '$word ',
-          style: const TextStyle(
-              fontSize: 14, height: 1.5, color: Colors.black87),
-        ));
+        spans.add(
+          TextSpan(
+            text: '$word ',
+            style: const TextStyle(
+              fontSize: 14,
+              height: 1.5,
+              color: Colors.black87,
+            ),
+          ),
+        );
       }
     }
 
@@ -893,9 +1009,10 @@ class _RichContentState extends State<_RichContent> {
                   child: Text(
                     _expanded ? 'Show less' : 'See more',
                     style: const TextStyle(
-                        color: Color(0xFF2563EB),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500),
+                      color: Color(0xFF2563EB),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ),
               ),
@@ -923,15 +1040,19 @@ class _MediaGrid extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           child: CachedNetworkImage(
             imageUrl: urls.first,
-            width: double.infinity, height: 200,
+            width: double.infinity,
+            height: 200,
             fit: BoxFit.cover,
             placeholder: (_, __) =>
                 Container(height: 200, color: Colors.grey.shade100),
             errorWidget: (_, __, ___) => Container(
-                height: 200,
-                color: Colors.grey.shade100,
-                child: const Icon(Icons.broken_image_outlined,
-                    color: Colors.grey)),
+              height: 200,
+              color: Colors.grey.shade100,
+              child: const Icon(
+                Icons.broken_image_outlined,
+                color: Colors.grey,
+              ),
+            ),
           ),
         ),
       );
@@ -957,8 +1078,7 @@ class _MediaGrid extends StatelessWidget {
               CachedNetworkImage(
                 imageUrl: urls[i],
                 fit: BoxFit.cover,
-                placeholder: (_, __) =>
-                    Container(color: Colors.grey.shade100),
+                placeholder: (_, __) => Container(color: Colors.grey.shade100),
                 errorWidget: (_, __, ___) =>
                     Container(color: Colors.grey.shade100),
               ),
@@ -966,11 +1086,14 @@ class _MediaGrid extends StatelessWidget {
                 Container(
                   color: Colors.black54,
                   child: Center(
-                    child: Text('+${urls.length - 4}',
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold)),
+                    child: Text(
+                      '+${urls.length - 4}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ),
             ],
@@ -1004,37 +1127,42 @@ class _LinkedJobCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.work_outline,
-                  size: 15, color: Color(0xFF2563EB)),
+              const Icon(
+                Icons.work_outline,
+                size: 15,
+                color: Color(0xFF2563EB),
+              ),
               const SizedBox(width: 6),
               Expanded(
-                child: Text(job.jobTitle,
-                    style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                        color: Color(0xFF1E40AF)),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis),
+                child: Text(
+                  job.jobTitle,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    color: Color(0xFF1E40AF),
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),
           const SizedBox(height: 4),
-          Text(job.companyName,
-              style: const TextStyle(
-                  fontSize: 11, color: Colors.blueGrey)),
+          Text(
+            job.companyName,
+            style: const TextStyle(fontSize: 11, color: Colors.blueGrey),
+          ),
           const SizedBox(height: 6),
           Wrap(
-            spacing: 10, runSpacing: 4,
+            spacing: 10,
+            runSpacing: 4,
             children: [
               _InlineChip(
-                  icon: Icons.location_on_outlined,
-                  label: job.location),
-              _InlineChip(
-                  icon: Icons.attach_money,
-                  label: job.salaryDisplay),
-              _InlineChip(
-                  icon: Icons.access_time_outlined,
-                  label: job.jobType),
+                icon: Icons.location_on_outlined,
+                label: job.location,
+              ),
+              _InlineChip(icon: Icons.attach_money, label: job.salaryDisplay),
+              _InlineChip(icon: Icons.access_time_outlined, label: job.jobType),
             ],
           ),
         ],
@@ -1049,7 +1177,7 @@ class _LinkedJobCard extends StatelessWidget {
 
 class _InlineChip extends StatelessWidget {
   final IconData icon;
-  final String   label;
+  final String label;
   const _InlineChip({required this.icon, required this.label});
   @override
   Widget build(BuildContext context) => Row(
@@ -1057,8 +1185,7 @@ class _InlineChip extends StatelessWidget {
     children: [
       Icon(icon, size: 11, color: Colors.blueGrey),
       const SizedBox(width: 3),
-      Text(label,
-          style: const TextStyle(fontSize: 11, color: Colors.blueGrey)),
+      Text(label, style: const TextStyle(fontSize: 11, color: Colors.blueGrey)),
     ],
   );
 }
@@ -1079,11 +1206,14 @@ class _TypeBadge extends StatelessWidget {
       children: [
         Icon(type.icon, size: 10, color: type.color),
         const SizedBox(width: 4),
-        Text(type.label,
-            style: TextStyle(
-                fontSize: 10,
-                color: type.color,
-                fontWeight: FontWeight.w600)),
+        Text(
+          type.label,
+          style: TextStyle(
+            fontSize: 10,
+            color: type.color,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
       ],
     ),
   );
@@ -1099,36 +1229,35 @@ class _FollowBtn extends StatelessWidget {
     child: Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: isFollowing
-            ? Colors.grey.shade100
-            : const Color(0xFF2563EB),
+        color: isFollowing ? Colors.grey.shade100 : const Color(0xFF2563EB),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-            color: isFollowing
-                ? Colors.grey.shade300
-                : const Color(0xFF2563EB)),
+          color: isFollowing ? Colors.grey.shade300 : const Color(0xFF2563EB),
+        ),
       ),
       child: Text(
         isFollowing ? 'Following' : '+ Follow',
         style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            color: isFollowing ? Colors.blueGrey : Colors.white),
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: isFollowing ? Colors.blueGrey : Colors.white,
+        ),
       ),
     ),
   );
 }
 
 class _ActionBtn extends StatelessWidget {
-  final IconData     icon;
-  final String       label;
-  final Color        color;
+  final IconData icon;
+  final String label;
+  final Color color;
   final VoidCallback onTap;
-  const _ActionBtn(
-      {required this.icon,
-        required this.label,
-        required this.color,
-        required this.onTap});
+  const _ActionBtn({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
   @override
   Widget build(BuildContext context) => InkWell(
     borderRadius: BorderRadius.circular(20),
@@ -1140,11 +1269,14 @@ class _ActionBtn extends StatelessWidget {
           Icon(icon, size: 19, color: color),
           if (label.isNotEmpty) ...[
             const SizedBox(width: 4),
-            Text(label,
-                style: TextStyle(
-                    fontSize: 13,
-                    color: color,
-                    fontWeight: FontWeight.w500)),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                color: color,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
           ],
         ],
       ),
@@ -1153,11 +1285,10 @@ class _ActionBtn extends StatelessWidget {
 }
 
 class _FeedAvatar extends StatelessWidget {
-  final String  name;
+  final String name;
   final String? url;
-  final double  radius;
-  const _FeedAvatar(
-      {required this.name, this.url, this.radius = 20});
+  final double radius;
+  const _FeedAvatar({required this.name, this.url, this.radius = 20});
 
   @override
   Widget build(BuildContext context) {
@@ -1169,15 +1300,14 @@ class _FeedAvatar extends StatelessWidget {
     }
     final initials = name.trim().isEmpty
         ? '?'
-        : name
-        .trim()
-        .split(' ')
-        .take(2)
-        .map((s) => s[0].toUpperCase())
-        .join();
+        : name.trim().split(' ').take(2).map((s) => s[0].toUpperCase()).join();
     const palette = [
-      Color(0xFF6366F1), Color(0xFF2563EB), Color(0xFF10B981),
-      Color(0xFFEC4899), Color(0xFFF59E0B), Color(0xFF0EA5E9),
+      Color(0xFF6366F1),
+      Color(0xFF2563EB),
+      Color(0xFF10B981),
+      Color(0xFFEC4899),
+      Color(0xFFF59E0B),
+      Color(0xFF0EA5E9),
     ];
     final color = name.isEmpty
         ? palette[0]
@@ -1185,18 +1315,21 @@ class _FeedAvatar extends StatelessWidget {
     return CircleAvatar(
       radius: radius,
       backgroundColor: color,
-      child: Text(initials,
-          style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-              fontSize: radius * 0.65)),
+      child: Text(
+        initials,
+        style: TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.bold,
+          fontSize: radius * 0.65,
+        ),
+      ),
     );
   }
 }
 
 class _EmptyState extends StatelessWidget {
   final IconData icon;
-  final String   message;
+  final String message;
   const _EmptyState({required this.icon, required this.message});
   @override
   Widget build(BuildContext context) => Center(
@@ -1207,10 +1340,11 @@ class _EmptyState extends StatelessWidget {
         children: [
           Icon(icon, size: 56, color: Colors.blueGrey.shade200),
           const SizedBox(height: 16),
-          Text(message,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                  color: Colors.blueGrey.shade400, fontSize: 15)),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.blueGrey.shade400, fontSize: 15),
+          ),
         ],
       ),
     ),

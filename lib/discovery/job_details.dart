@@ -20,20 +20,75 @@ class JobDetailPage extends StatefulWidget {
 class _JobDetailPageState extends State<JobDetailPage> {
   final _repo = JobRepository();
   final _appRepo = ApplicationRepository();
+  bool _isLoading = true;
   bool _isSaved = false;
   bool _hasApplied = false;
   bool _checkingApply = true;
+  JobPost? _freshJob;
 
   bool get _isJobSeeker => widget.currentUser.role.toUpperCase() == 'JOB_SEEKER';
 
   @override
   void initState() {
     super.initState();
+    _loadData();
+
     _isSaved = widget.job.isSaved;
+    _fetchSavedState();
     if (_isJobSeeker) {
       _checkApplication();
     } else {
       setState(() => _checkingApply = false);
+    }
+  }
+
+  Future<void> _loadData() async {
+    print('Current user role: ${widget.currentUser.role}');
+    print('_isJobSeeker: $_isJobSeeker');
+    // 1. Increment view count (only for job seekers)
+    if (_isJobSeeker) {
+      await _repo.incrementViewCount(widget.job.jobId);
+      await Future.delayed(const Duration(milliseconds: 150));
+    }
+
+    // 2. Fetch the latest job data (includes updated view count)
+    final updatedJob = await _repo.fetchJobById(widget.job.jobId);
+    print('Fetched view_count: ${updatedJob?.viewCount}');
+    if (updatedJob != null && mounted) {
+      setState(() {
+        _freshJob = updatedJob;
+        _isSaved = updatedJob.isSaved;
+      });
+    }
+
+    // 3. Check if the user has already applied (job seekers only)
+    if (_isJobSeeker) {
+      final applied = await _appRepo.checkExistingApplication(
+        widget.job.jobId,
+        widget.currentUser.userId,
+      );
+      if (mounted) setState(() {
+        _hasApplied = applied;
+        _checkingApply = false;
+      });
+    } else {
+      setState(() => _checkingApply = false);
+    }
+
+    setState(() => _isLoading = false);
+  }
+
+  Future<void> _refresh() async {
+    setState(() => _isLoading = true);
+    await _loadData();
+  }
+
+  Future<void> _fetchSavedState() async {
+    try {
+      final saved = await _repo.isJobSaved(widget.job.jobId);
+      if (mounted) setState(() => _isSaved = saved);
+    } catch (e) {
+      debugPrint('Error fetching saved state: $e');
     }
   }
 
@@ -70,11 +125,22 @@ class _JobDetailPageState extends State<JobDetailPage> {
     final wasSaved = _isSaved;
     setState(() => _isSaved = !wasSaved);
     await _repo.toggleSaveJob(widget.job.jobId, wasSaved);
+    _fetchSavedState();
   }
+
 
   @override
   Widget build(BuildContext context) {
-    final job = widget.job;
+    if (_isLoading) {
+      return const Scaffold(
+        backgroundColor: Color(0xFFF1F5F9),
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    // Use fresh job data if available, otherwise fallback to the initial job
+    final job = _freshJob ?? widget.job;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF1F5F9),
       body: CustomScrollView(

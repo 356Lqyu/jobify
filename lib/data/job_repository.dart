@@ -335,18 +335,52 @@ class JobRepository {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // SAVE JOB (LOCAL ONLY – can be extended to remote)
+  // SAVE JOB (remote post_saved table)
   // ══════════════════════════════════════════════════════════════════════════
-
   Future<bool> toggleSaveJob(String jobId, bool currentlySaved) async {
     if (_uid == null) return currentlySaved;
-    final newSaved = !currentlySaved;
-    try {
-      await LocalDB.setJobSaved(jobId, newSaved, _uid!);
-      return newSaved;
-    } catch (e) {
-      debugPrint('toggleSaveJob error: $e');
+
+    final postId = await _findPostIdForJob(jobId);
+    if (postId == null) {
       return currentlySaved;
+    }
+
+    final feedRepo = FeedRepository();
+    final newSaved = await feedRepo.toggleSavePost(postId, currentlySaved);
+
+    await LocalDB.setJobSaved(jobId, newSaved, _uid!);
+
+    return newSaved;
+  }
+
+  Future<String?> _findPostIdForJob(String jobId) async {
+    try {
+      final resp = await _sb
+          .from('post')
+          .select('post_id')
+          .eq('job_id', jobId)
+          .maybeSingle();
+      return resp?['post_id'] as String?;
+    } catch (e) {
+      debugPrint('Error finding post for job: $e');
+      return null;
+    }
+  }
+
+  Future<bool> isJobSaved(String jobId) async {
+    if (_uid == null) return false;
+    try {
+      final postId = await _findPostIdForJob(jobId);
+      if (postId == null) return false;
+      final resp = await _sb
+          .from('post_saved')
+          .select()
+          .eq('post_id', postId)
+          .eq('user_id', _uid!)
+          .maybeSingle();
+      return resp != null;
+    } catch (e) {
+      return false;
     }
   }
 }

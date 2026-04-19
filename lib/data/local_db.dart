@@ -97,16 +97,7 @@ class LocalDB {
       )
     ''');
 
-    // 4. Saved jobs
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS saved_jobs (
-        job_id     TEXT PRIMARY KEY,
-        user_id    TEXT NOT NULL,
-        created_at TEXT NOT NULL
-      )
-    ''');
-
-    // 5. Reference tables
+    // 4. Reference tables
     await db.execute('''
       CREATE TABLE IF NOT EXISTS reference_table (
         table_name TEXT PRIMARY KEY,
@@ -115,7 +106,7 @@ class LocalDB {
       )
     ''');
 
-    // 6. Users
+    // 5. Users
     await db.execute('''
     CREATE TABLE IF NOT EXISTS users (
       user_id           TEXT PRIMARY KEY,
@@ -130,7 +121,7 @@ class LocalDB {
     )
   ''');
 
-    // 8. Cached job seeker profiles
+    // 6. Cached job seeker profiles
     await db.execute('''
     CREATE TABLE IF NOT EXISTS job_seeker_profiles (
       user_id         TEXT PRIMARY KEY,
@@ -143,7 +134,7 @@ class LocalDB {
     )
   ''');
 
-    // 9. Cached company profiles
+    // 7. Cached company profiles
     await db.execute('''
     CREATE TABLE IF NOT EXISTS company_profiles (
       user_id              TEXT PRIMARY KEY,
@@ -158,7 +149,7 @@ class LocalDB {
     )
   ''');
 
-    // 10. Cached skills
+    // 8. Cached skills
     await db.execute('''
     CREATE TABLE IF NOT EXISTS skills (
       skill_id      TEXT PRIMARY KEY,
@@ -170,7 +161,7 @@ class LocalDB {
     )
   ''');
 
-    // 11. Cached education
+    // 9. Cached education
     await db.execute('''
     CREATE TABLE IF NOT EXISTS education (
       education_id      TEXT PRIMARY KEY,
@@ -186,7 +177,7 @@ class LocalDB {
     )
   ''');
 
-    // 12. Cached experience
+    // 10. Cached experience
     await db.execute('''
     CREATE TABLE IF NOT EXISTS experience (
       experience_id  TEXT PRIMARY KEY,
@@ -201,7 +192,7 @@ class LocalDB {
     )
   ''');
 
-    // 13. Cached resumes
+    // 11. Cached resumes
     await db.execute('''
     CREATE TABLE IF NOT EXISTS resumes (
       resume_id     TEXT PRIMARY KEY,
@@ -215,6 +206,7 @@ class LocalDB {
     )
   ''');
 
+    //12.Cached branch
     await db.execute('''
     CREATE TABLE IF NOT EXISTS company_branches (
       branch_id     TEXT PRIMARY KEY,

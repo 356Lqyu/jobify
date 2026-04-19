@@ -10,6 +10,8 @@ import 'package:jobify/users/users.dart';
 //import 'package:jobify/job_post/job_detail.dart'; // job seeker detail page
 import 'package:jobify/job_post/job_detail_employer.dart';
 
+import '../users/view_profile_page.dart';
+
 class SocialFeedPage extends StatefulWidget {
   final Users user;
   const SocialFeedPage({super.key, required this.user});
@@ -468,8 +470,27 @@ class _FeedCard extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _FeedAvatar(
-                    name: post.authorName, url: post.authorAvatar),
+                // Make avatar clickable
+                GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ViewProfilePage(
+                          userId: post.userId,
+                          companyId: post.companyId,
+                          name: post.authorName,
+                          avatarUrl: post.authorAvatar,
+                          isCompany: post.companyId != null,
+                        ),
+                      ),
+                    );
+                  },
+                  child: _FeedAvatar(
+                    name: post.authorName,
+                    url: post.authorAvatar,
+                  ),
+                ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(

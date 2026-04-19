@@ -11,6 +11,7 @@ import 'package:path/path.dart';
 import 'package:jobify/social/post_feed_setting.dart';
 import '../users/users.dart';
 
+// SQLite cache layer
 class LocalDB {
   static Database? _db;
 
@@ -20,10 +21,10 @@ class LocalDB {
   }
 
   static Future<Database> _init() async {
-    final dbPath = join(await getDatabasesPath(), 'jobify_v1.db');
+    final dbPath = join(await getDatabasesPath(), 'jobify_v4.db');
     return openDatabase(
       dbPath,
-      version: 2,
+      version: 4,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -116,133 +117,129 @@ class LocalDB {
 
     // 6. Users
     await db.execute('''
-      CREATE TABLE IF NOT EXISTS users (
-        user_id           TEXT PRIMARY KEY,
-        role              TEXT NOT NULL,
-        fullname          TEXT NOT NULL DEFAULT '',
-        phone             TEXT,
-        profile_image_url TEXT,
-        email             TEXT NOT NULL,
-        created_at        TEXT NOT NULL,
-        updated_at        TEXT NOT NULL,
-        cached_at         TEXT NOT NULL
-      )
-    ''');
+    CREATE TABLE IF NOT EXISTS users (
+      user_id           TEXT PRIMARY KEY,
+      role              TEXT NOT NULL,
+      fullname          TEXT NOT NULL DEFAULT '',
+      phone             TEXT,
+      profile_image_url TEXT,
+      email             TEXT NOT NULL,
+      created_at        TEXT NOT NULL,
+      updated_at        TEXT NOT NULL,
+      cached_at         TEXT NOT NULL
+    )
+  ''');
 
-    // 7. Job seeker profiles
+    // 8. Cached job seeker profiles
     await db.execute('''
-      CREATE TABLE IF NOT EXISTS job_seeker_profiles (
-        user_id         TEXT PRIMARY KEY,
-        date_of_birth   TEXT,
-        gender          TEXT,
-        address         TEXT,
-        bio             TEXT,
-        cached_at       TEXT NOT NULL,
-        FOREIGN KEY (user_id) REFERENCES users (user_id) ON DELETE CASCADE
-      )
-    ''');
+    CREATE TABLE IF NOT EXISTS job_seeker_profiles (
+      user_id         TEXT PRIMARY KEY,
+      date_of_birth   TEXT,
+      gender          TEXT,
+      address         TEXT,
+      bio             TEXT,
+      cached_at       TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users (user_id) ON DELETE CASCADE
+    )
+  ''');
 
-    // 8. Company profiles
+    // 9. Cached company profiles
     await db.execute('''
-      CREATE TABLE IF NOT EXISTS company_profiles (
-        user_id              TEXT PRIMARY KEY,
-        company_name         TEXT NOT NULL DEFAULT '',
-        company_description  TEXT,
-        industry             TEXT,
-        company_size         TEXT,
-        location             TEXT,
-        logo_url             TEXT,
-        cached_at            TEXT NOT NULL,
-        FOREIGN KEY (user_id) REFERENCES users (user_id) ON DELETE CASCADE
-      )
-    ''');
+    CREATE TABLE IF NOT EXISTS company_profiles (
+      user_id              TEXT PRIMARY KEY,
+      company_name         TEXT NOT NULL DEFAULT '',
+      company_description  TEXT,
+      industry             TEXT,
+      company_size         TEXT,
+      location             TEXT,
+      logo_url             TEXT,
+      cached_at            TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users (user_id) ON DELETE CASCADE
+    )
+  ''');
 
-    // 9. Skills
+    // 10. Cached skills
     await db.execute('''
-      CREATE TABLE IF NOT EXISTS skills (
-        skill_id      TEXT PRIMARY KEY,
-        user_id       TEXT NOT NULL,
-        skill_name    TEXT NOT NULL,
-        skill_level   TEXT,
-        cached_at     TEXT NOT NULL,
-        FOREIGN KEY (user_id) REFERENCES users (user_id) ON DELETE CASCADE
-      )
-    ''');
+    CREATE TABLE IF NOT EXISTS skills (
+      skill_id      TEXT PRIMARY KEY,
+      user_id       TEXT NOT NULL,
+      skill_name    TEXT NOT NULL,
+      skill_level   TEXT,
+      cached_at     TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users (user_id) ON DELETE CASCADE
+    )
+  ''');
 
-    // 10. Education
+    // 11. Cached education
     await db.execute('''
-      CREATE TABLE IF NOT EXISTS education (
-        education_id      TEXT PRIMARY KEY,
-        user_id           TEXT NOT NULL,
-        institution_name  TEXT NOT NULL,
-        qualification     TEXT NOT NULL,
-        field_of_study    TEXT,
-        start_date        TEXT,
-        end_date          TEXT,
-        description       TEXT,
-        cached_at         TEXT NOT NULL,
-        FOREIGN KEY (user_id) REFERENCES users (user_id) ON DELETE CASCADE
-      )
-    ''');
+    CREATE TABLE IF NOT EXISTS education (
+      education_id      TEXT PRIMARY KEY,
+      user_id           TEXT NOT NULL,
+      institution_name  TEXT NOT NULL,
+      qualification     TEXT NOT NULL,
+      field_of_study    TEXT,
+      start_date        TEXT,
+      end_date          TEXT,
+      description       TEXT,
+      cached_at         TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users (user_id) ON DELETE CASCADE
+    )
+  ''');
 
-    // 11. Experience
+    // 12. Cached experience
     await db.execute('''
-      CREATE TABLE IF NOT EXISTS experience (
-        experience_id  TEXT PRIMARY KEY,
-        user_id        TEXT NOT NULL,
-        company_name   TEXT NOT NULL,
-        job_title      TEXT NOT NULL,
-        start_date     TEXT NOT NULL,
-        end_date       TEXT,
-        description    TEXT,
-        cached_at      TEXT NOT NULL,
-        FOREIGN KEY (user_id) REFERENCES users (user_id) ON DELETE CASCADE
-      )
-    ''');
+    CREATE TABLE IF NOT EXISTS experience (
+      experience_id  TEXT PRIMARY KEY,
+      user_id        TEXT NOT NULL,
+      company_name   TEXT NOT NULL,
+      job_title      TEXT NOT NULL,
+      start_date     TEXT NOT NULL,
+      end_date       TEXT,
+      description    TEXT,
+      cached_at      TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users (user_id) ON DELETE CASCADE
+    )
+  ''');
 
-    // 12. Resumes
+    // 13. Cached resumes
     await db.execute('''
-      CREATE TABLE IF NOT EXISTS resumes (
-        resume_id     TEXT PRIMARY KEY,
-        user_id       TEXT NOT NULL,
-        file_url      TEXT NOT NULL,
-        file_name     TEXT NOT NULL,
-        uploaded_at   TEXT NOT NULL,
-        is_default    INTEGER NOT NULL DEFAULT 0,
-        cached_at     TEXT NOT NULL,
-        FOREIGN KEY (user_id) REFERENCES users (user_id) ON DELETE CASCADE
-      )
-    ''');
+    CREATE TABLE IF NOT EXISTS resumes (
+      resume_id     TEXT PRIMARY KEY,
+      user_id       TEXT NOT NULL,
+      file_url      TEXT NOT NULL,
+      file_name     TEXT NOT NULL,
+      uploaded_at   TEXT NOT NULL,
+      is_default    INTEGER NOT NULL DEFAULT 0,
+      cached_at     TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users (user_id) ON DELETE CASCADE
+    )
+  ''');
 
-    // 13. Company branches
     await db.execute('''
-      CREATE TABLE IF NOT EXISTS company_branches (
-        branch_id       TEXT PRIMARY KEY,
-        company_id      TEXT NOT NULL,
-        branch_name     TEXT NOT NULL,
-        address         TEXT NOT NULL,
-        city            TEXT NOT NULL,
-        state           TEXT NOT NULL,
-        postal_code     TEXT,
-        country         TEXT NOT NULL DEFAULT 'Malaysia',
-        phone           TEXT,
-        email           TEXT,
-        is_head_office  INTEGER NOT NULL DEFAULT 0,
-        created_at      TEXT NOT NULL,
-        updated_at      TEXT NOT NULL,
-        cached_at       TEXT NOT NULL,
-        FOREIGN KEY (company_id) REFERENCES company_profiles (company_id) ON DELETE CASCADE
-      )
-    ''');
+    CREATE TABLE IF NOT EXISTS company_branches (
+      branch_id     TEXT PRIMARY KEY,
+      company_id    TEXT NOT NULL,
+      branch_name   TEXT NOT NULL,
+      address       TEXT NOT NULL,
+      city          TEXT NOT NULL,
+      state         TEXT NOT NULL,
+      postal_code   TEXT,
+      country       TEXT NOT NULL DEFAULT 'Malaysia',
+      phone         TEXT,
+      email         TEXT,
+      is_head_office INTEGER NOT NULL DEFAULT 0,
+      created_at    TEXT NOT NULL,
+      updated_at    TEXT NOT NULL,
+      cached_at     TEXT NOT NULL,
+      FOREIGN KEY (company_id) REFERENCES company_profiles (company_id) ON DELETE CASCADE
+    )
+  ''');
   }
 
   static Future<void> _onUpgrade(Database db, int oldV, int newV) async {
-    final tables = [
-      'posts', 'saved_posts', 'job_posts', 'saved_jobs', 'reference_table',
-      'users', 'job_seeker_profiles', 'company_profiles', 'skills',
-      'education', 'experience', 'resumes', 'company_branches'
-    ];
-    for (final t in tables) {
+    for (final t in ['posts','comments','liked_posts','saved_posts','job_posts','saved_jobs',
+      'users','job_seeker_profiles','company_profiles',
+      'skills','education','experience','resumes']) {
       await db.execute('DROP TABLE IF EXISTS $t');
     }
     await _onCreate(db, newV);
@@ -579,12 +576,12 @@ class LocalDB {
   // ══════════════════════════════════════════════════════════════════════════
   // USER PROFILES
   // ══════════════════════════════════════════════════════════════════════════
-
-  static const int _userCacheTTLMinutes = 5;
+  // cache invalidation trigger when user update profile (clearUserCache / logout / TTL expire(5 minutes))
+  static const int _userCacheTTLMinutes = 5; // Cache valid for 5 minutes
 
   static Future<void> cacheUser(Users user) async {
-    final d = await db;
-    await d.insert('users', {
+    final db = await LocalDB.db;
+    await db.insert('users', {
       'user_id': user.userId,
       'role': user.role,
       'fullname': user.fullname,
@@ -598,8 +595,8 @@ class LocalDB {
   }
 
   static Future<Users?> getCachedUser(String userId) async {
-    final d = await db;
-    final result = await d.query(
+    final db = await LocalDB.db;
+    final result = await db.query(
       'users',
       where: 'user_id = ?',
       whereArgs: [userId],
@@ -626,7 +623,6 @@ class LocalDB {
     final db = await LocalDB.db;
     await db.insert('job_seeker_profiles', {
       'user_id': userId,
-      'fullname': profile['fullname'] ?? '',
       'date_of_birth': profile['date_of_birth'],
       'gender': profile['gender'],
       'address': profile['address'],
@@ -673,6 +669,7 @@ class LocalDB {
 
   static Future<void> cacheSkills(String userId, List<Map<String, dynamic>> skills) async {
     final db = await LocalDB.db;
+    // Delete old skills for this user first
     await db.delete('skills', where: 'user_id = ?', whereArgs: [userId]);
 
     final batch = db.batch();
@@ -793,10 +790,6 @@ class LocalDB {
     );
     return result;
   }
-
-  // ══════════════════════════════════════════════════════════════════════════
-  // COMPANY BRANCHES
-  // ══════════════════════════════════════════════════════════════════════════
 
   static Future<void> cacheBranches(String companyId, List<Map<String, dynamic>> branches) async {
     final db = await LocalDB.db;

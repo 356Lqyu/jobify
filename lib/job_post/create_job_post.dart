@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:jobify/job_post/job_post_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:jobify/data/job_repository.dart';
 import 'package:jobify/data/feed_repository.dart';

@@ -149,13 +149,18 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
       await loadJobs();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Job ${newStatus == 'active' ? 'reopened' : 'closed'}')),
+          SnackBar(content: Text('Job ${newStatus == 'active' ? 'reopened' : 'closed'}'),
+            backgroundColor: Colors.green,
+          ),
+
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to update status: $e')),
+          SnackBar(content: Text('Failed to update status: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -180,7 +185,11 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
       await _jobRepo.deleteJobPost(jobId);
       loadJobs();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Job deleted')));
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+                content: Text('Job deleted'),
+                backgroundColor: Colors.green,
+            ));
       }
     }
   }
@@ -548,7 +557,9 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
                       if (result == true) loadJobs();
                     } else {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Failed to load job details')),
+                        const SnackBar(content: Text('Failed to load job details'),
+                          backgroundColor: Colors.red,
+                        ),
                       );
                     }
                   },

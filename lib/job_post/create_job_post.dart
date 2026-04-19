@@ -419,7 +419,9 @@ class _CreateJobPostState extends State<CreateJobPost> {
     setState(() => _isLoading = true);
 
     if (_userId == null || _companyProfile == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Missing user or company profile.')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Missing user or company profile.'),
+        backgroundColor: Colors.red,
+      ));
       setState(() => _isLoading = false);
       return;
     }
@@ -427,7 +429,9 @@ class _CreateJobPostState extends State<CreateJobPost> {
     if (_formData['job_category_id'] == null ||
         _formData['job_type_id'] == null ||
         _formData['experience_level_id'] == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select all required dropdown fields.')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select all required dropdown fields.'),
+        backgroundColor: Colors.red,
+      ));
       setState(() => _isLoading = false);
       return;
     }
@@ -447,17 +451,25 @@ class _CreateJobPostState extends State<CreateJobPost> {
         final jobId = widget.existingJob!['job_id'].toString();
         final updatedCount = await _jobRepo.updateJobPost(jobId, data);
         if (updatedCount == 0) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Update failed: job not found.')));
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Update failed: job not found.'),
+            backgroundColor: Colors.red,
+          ));
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Job updated')));
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Job updated'),
+            backgroundColor: Colors.green,
+          ));
         }
       } else {
         final jobId = await _jobRepo.createJobPost(data, autoCreateSocialPost: true);
         if (jobId != null) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Job published and shared to feed')));
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Job published and shared to feed'),
+            backgroundColor: Colors.green,
+          ));
           _resetForm();
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to publish job')));
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to publish job'),
+            backgroundColor: Colors.red,
+          ));
         }
       }
 
@@ -467,7 +479,9 @@ class _CreateJobPostState extends State<CreateJobPost> {
         Navigator.pop(context, true);
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'),
+        backgroundColor: Colors.red,
+      ));
     } finally {
       setState(() => _isLoading = false);
     }
@@ -663,7 +677,9 @@ class _CreateJobPostState extends State<CreateJobPost> {
                           if (totalImages + newFiles.length <= 5) {
                             setState(() => _imageFiles.addAll(newFiles));
                           } else {
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Maximum 5 images allowed')));
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Maximum 5 images allowed'),
+                              backgroundColor: Colors.red,
+                            ));
                           }
                         }
                       },

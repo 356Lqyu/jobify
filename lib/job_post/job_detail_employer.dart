@@ -68,7 +68,8 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
     await _refresh();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Job ${newStatus == 'active' ? 'reopened' : 'closed'}')),
+        SnackBar(content: Text('Job ${newStatus == 'active' ? 'reopened' : 'closed'}'),
+          backgroundColor: Colors.green,),
       );
     }
   }

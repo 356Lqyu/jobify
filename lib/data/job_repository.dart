@@ -145,12 +145,12 @@ class JobRepository {
       return await _sb
           .from('job_post')
           .select('''
-            *,
-            job_category_id(name, job_category_id),
-            job_type_id(name, job_type_id),
-            experience_level_id(name, experience_level_id),
-            company_id(company_name, location, company_description, logo_url)
-          ''')
+          *,
+          job_category_id(name, job_category_id),
+          job_type_id(name, job_type_id),
+          experience_level_id(name, experience_level_id),
+          company_id(company_name, company_description, logo_url)
+        ''')
           .eq('job_id', jobId)
           .maybeSingle();
     } catch (e) {

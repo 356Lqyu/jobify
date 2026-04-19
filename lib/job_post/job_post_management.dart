@@ -34,7 +34,7 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
       return;
     }
     _userId = session.user.id;
-    print('🔐 Logged in user ID: $_userId');
+    print('Logged in user ID: $_userId');
 
     final userData = await supabase
         .from('users')
@@ -42,7 +42,7 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
         .eq('user_id', _userId!)
         .maybeSingle();
     if (userData != null) _userRole = userData['role'];
-    print('👤 User role: $_userRole');
+    print('User role: $_userRole');
 
     await loadJobs();
   }
@@ -341,6 +341,7 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
     final jobType = job['job_type'] ?? 'Full-time';
     final location = job['location'] ?? 'Unknown location';
     final pendingCount = job['pending_count'] as int? ?? 0;
+    final hasApplications = (job['application_count'] ?? 0) > 0;
 
     // Ensure thumbnail is a valid non‑empty URL
     final validThumbnail = (thumbnail != null && thumbnail.trim().isNotEmpty) ? thumbnail : null;
@@ -535,14 +536,23 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
                 _actionButton(
                   icon: Icons.edit_outlined,
                   label: 'Edit',
-                  onTap: () async {
-                    final result = await Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => CreateJobPost(existingJob: job)),
-                    );
-                    if (result == true) loadJobs();
+                  onTap: hasApplications
+                      ? null
+                      : () async {
+                    final fullJob = await _jobRepo.fetchJobPostById(job['job_id']);
+                    if (fullJob != null && mounted) {
+                      final result = await Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => CreateJobPost(existingJob: fullJob)),
+                      );
+                      if (result == true) loadJobs();
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Failed to load job details')),
+                      );
+                    }
                   },
-                  color: Colors.blue,
+                  color: hasApplications ? Colors.grey : Colors.blue,
                 ),
                 _actionButton(
                   icon: Icons.delete_outline,
@@ -561,7 +571,7 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
   Widget _actionButton({
     required IconData icon,
     required String label,
-    required VoidCallback onTap,
+    required VoidCallback? onTap,   // now nullable
     required Color color,
   }) {
     return InkWell(
@@ -573,7 +583,10 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
           children: [
             Icon(icon, size: 20, color: color),
             const SizedBox(height: 4),
-            Text(label, style: TextStyle(fontSize: 12, color: color, fontWeight: FontWeight.w500)),
+            Text(
+              label,
+              style: TextStyle(fontSize: 12, color: color, fontWeight: FontWeight.w500),
+            ),
           ],
         ),
       ),

@@ -32,6 +32,14 @@ class _JobDetailPageState extends State<JobDetailPage> {
   void initState() {
     super.initState();
     _loadData();
+
+    _isSaved = widget.job.isSaved;
+    _fetchSavedState();
+    if (_isJobSeeker) {
+      _checkApplication();
+    } else {
+      setState(() => _checkingApply = false);
+    }
   }
 
   Future<void> _loadData() async {
@@ -75,10 +83,21 @@ class _JobDetailPageState extends State<JobDetailPage> {
     await _loadData();
   }
 
-  void _toggleSave() async {
-    final wasSaved = _isSaved;
-    setState(() => _isSaved = !wasSaved);
-    await _repo.toggleSaveJob(widget.job.jobId, wasSaved);
+  Future<void> _fetchSavedState() async {
+    try {
+      final saved = await _repo.isJobSaved(widget.job.jobId);
+      if (mounted) setState(() => _isSaved = saved);
+    } catch (e) {
+      debugPrint('Error fetching saved state: $e');
+    }
+  }
+
+  Future<void> _checkApplication() async {
+    final applied = await _appRepo.checkExistingApplication(
+      widget.job.jobId,
+      widget.currentUser.userId,
+    );
+    if (mounted) setState(() { _hasApplied = applied; _checkingApply = false; });
   }
 
   void _openApplySheet() {
@@ -99,8 +118,16 @@ class _JobDetailPageState extends State<JobDetailPage> {
           userId: widget.currentUser.userId,
         ),
       ),
-    ).then((_) => _refresh());
+    ).then((_) => _checkApplication());
   }
+
+  void _toggleSave() async {
+    final wasSaved = _isSaved;
+    setState(() => _isSaved = !wasSaved);
+    await _repo.toggleSaveJob(widget.job.jobId, wasSaved);
+    _fetchSavedState();
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -123,10 +150,8 @@ class _JobDetailPageState extends State<JobDetailPage> {
             foregroundColor: Colors.black87,
             elevation: 0,
             pinned: true,
-            title: const Text(
-              'Job Details',
-              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17),
-            ),
+            title: const Text('Job Details',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17)),
             actions: [
               IconButton(
                 icon: Icon(
@@ -141,7 +166,6 @@ class _JobDetailPageState extends State<JobDetailPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Header card
                 Container(
                   color: Colors.white,
                   padding: const EdgeInsets.all(20),
@@ -155,12 +179,9 @@ class _JobDetailPageState extends State<JobDetailPage> {
                             borderRadius: BorderRadius.circular(10),
                             child: job.companyLogoUrl != null
                                 ? CachedNetworkImage(
-                              imageUrl: job.companyLogoUrl!,
-                              width: 56,
-                              height: 56,
-                              fit: BoxFit.cover,
-                              errorWidget: (_, __, ___) => _LogoBox(name: job.companyName),
-                            )
+                                imageUrl: job.companyLogoUrl!,
+                                width: 56, height: 56, fit: BoxFit.cover,
+                                errorWidget: (_, __, ___) => _LogoBox(name: job.companyName))
                                 : _LogoBox(name: job.companyName),
                           ),
                           const SizedBox(width: 14),
@@ -168,29 +189,22 @@ class _JobDetailPageState extends State<JobDetailPage> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  job.jobTitle,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 18,
-                                    color: Colors.black87,
-                                  ),
-                                ),
+                                Text(job.jobTitle,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 18,
+                                        color: Colors.black87)),
                                 const SizedBox(height: 3),
-                                Text(
-                                  job.companyName,
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    color: Color(0xFF2563EB),
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
+                                Text(job.companyName,
+                                    style: const TextStyle(
+                                        fontSize: 14,
+                                        color: Color(0xFF2563EB),
+                                        fontWeight: FontWeight.w600)),
                                 if (job.companyIndustry != null) ...[
                                   const SizedBox(height: 2),
-                                  Text(
-                                    job.companyIndustry!,
-                                    style: const TextStyle(fontSize: 12, color: Colors.blueGrey),
-                                  ),
+                                  Text(job.companyIndustry!,
+                                      style: const TextStyle(
+                                          fontSize: 12, color: Colors.blueGrey)),
                                 ],
                               ],
                             ),
@@ -203,24 +217,19 @@ class _JobDetailPageState extends State<JobDetailPage> {
                           const Icon(Icons.location_on_outlined, size: 14, color: Colors.blueGrey),
                           const SizedBox(width: 4),
                           Expanded(
-                            child: Text(
-                              job.location,
-                              style: const TextStyle(fontSize: 12, color: Colors.blueGrey),
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                            child: Text(job.location,
+                                style: const TextStyle(fontSize: 12, color: Colors.blueGrey),
+                                overflow: TextOverflow.ellipsis),
                           ),
                           const Icon(Icons.attach_money, size: 14, color: Colors.blueGrey),
                           const SizedBox(width: 4),
-                          Text(
-                            job.salaryDisplay,
-                            style: const TextStyle(fontSize: 12, color: Colors.blueGrey),
-                          ),
+                          Text(job.salaryDisplay,
+                              style: const TextStyle(fontSize: 12, color: Colors.blueGrey)),
                         ],
                       ),
                       const SizedBox(height: 12),
                       Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
+                        spacing: 6, runSpacing: 6,
                         children: [
                           if (job.jobType.isNotEmpty)
                             _Tag(label: job.jobType, color: const Color(0xFF2563EB)),
@@ -236,76 +245,44 @@ class _JobDetailPageState extends State<JobDetailPage> {
                   ),
                 ),
                 const SizedBox(height: 10),
-
-                // Stats row
                 Container(
                   color: Colors.white,
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
-                      _StatItem(
-                        icon: Icons.remove_red_eye_outlined,
-                        value: '${job.viewCount}',
-                        label: 'Views',
-                      ),
+                      _StatItem(icon: Icons.remove_red_eye_outlined, value: '${job.viewCount}', label: 'Views'),
                       _VertDivider(),
-                      _StatItem(
-                        icon: Icons.send_outlined,
-                        value: '${job.applicationCount}',
-                        label: 'Applied',
-                      ),
+                      _StatItem(icon: Icons.send_outlined, value: '${job.applicationCount}', label: 'Applied'),
                       _VertDivider(),
-                      _StatItem(
-                        icon: Icons.people_outline,
-                        value: '${job.vacancyCount}',
-                        label: 'Vacancies',
-                      ),
+                      _StatItem(icon: Icons.people_outline, value: '${job.vacancyCount}', label: 'Vacancies'),
                     ],
                   ),
                 ),
                 const SizedBox(height: 10),
-
-                // Description
                 Container(
                   color: Colors.white,
                   padding: const EdgeInsets.all(20),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Job Description',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 16,
-                          color: Colors.black87,
-                        ),
-                      ),
+                      const Text('Job Description',
+                          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: Colors.black87)),
                       const SizedBox(height: 10),
-                      Text(
-                        job.description,
-                        style: const TextStyle(fontSize: 14, color: Colors.black87, height: 1.6),
-                      ),
+                      Text(job.description,
+                          style: const TextStyle(fontSize: 14, color: Colors.black87, height: 1.6)),
                     ],
                   ),
                 ),
                 const SizedBox(height: 10),
-
-                // Details
                 Container(
                   color: Colors.white,
                   padding: const EdgeInsets.all(20),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Details',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 16,
-                          color: Colors.black87,
-                        ),
-                      ),
+                      const Text('Details',
+                          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: Colors.black87)),
                       const SizedBox(height: 12),
                       _DetailRow(icon: Icons.attach_money, label: 'Salary', value: job.salaryDisplay),
                       _DetailRow(icon: Icons.location_on_outlined, label: 'Location', value: job.location),
@@ -314,10 +291,9 @@ class _JobDetailPageState extends State<JobDetailPage> {
                       _DetailRow(icon: Icons.category_outlined, label: 'Category', value: job.jobCategory),
                       if (job.applicationDeadline != null)
                         _DetailRow(
-                          icon: Icons.event_outlined,
-                          label: 'Deadline',
-                          value: DateFormat('dd MMM yyyy').format(job.applicationDeadline!),
-                        ),
+                            icon: Icons.event_outlined,
+                            label: 'Deadline',
+                            value: DateFormat('dd MMM yyyy').format(job.applicationDeadline!)),
                       _DetailRow(icon: Icons.access_time_outlined, label: 'Posted', value: job.timeAgo),
                     ],
                   ),
@@ -334,10 +310,7 @@ class _JobDetailPageState extends State<JobDetailPage> {
           : Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20),
         child: _isJobSeeker
-            ? _ApplyButton(
-          hasApplied: _hasApplied,
-          onTap: _hasApplied ? null : _openApplySheet,
-        )
+            ? _ApplyButton(hasApplied: _hasApplied, onTap: _hasApplied ? null : _openApplySheet)
             : _DisabledApplyButton(),
       ),
     );
@@ -345,9 +318,8 @@ class _JobDetailPageState extends State<JobDetailPage> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Helper widgets
+// APPLY BUTTON VARIANTS
 // ─────────────────────────────────────────────────────────────────────────────
-
 class _ApplyButton extends StatelessWidget {
   final bool hasApplied;
   final VoidCallback? onTap;
@@ -397,6 +369,9 @@ class _DisabledApplyButton extends StatelessWidget {
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// SMALL WIDGETS (unchanged)
+// ─────────────────────────────────────────────────────────────────────────────
 class _StatItem extends StatelessWidget {
   final IconData icon;
   final String value;
@@ -411,10 +386,9 @@ class _StatItem extends StatelessWidget {
         children: [
           Icon(icon, size: 16, color: const Color(0xFF2563EB)),
           const SizedBox(width: 4),
-          Text(
-            value,
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: Colors.black87),
-          ),
+          Text(value,
+              style: const TextStyle(
+                  fontWeight: FontWeight.w700, fontSize: 16, color: Colors.black87)),
         ],
       ),
       const SizedBox(height: 2),
@@ -444,10 +418,9 @@ class _DetailRow extends StatelessWidget {
         const SizedBox(width: 10),
         SizedBox(width: 90, child: Text(label, style: const TextStyle(fontSize: 13, color: Colors.blueGrey))),
         Expanded(
-          child: Text(
-            value,
-            style: const TextStyle(fontSize: 13, color: Colors.black87, fontWeight: FontWeight.w500),
-          ),
+          child: Text(value,
+              style: const TextStyle(
+                  fontSize: 13, color: Colors.black87, fontWeight: FontWeight.w500)),
         ),
       ],
     ),
@@ -466,10 +439,8 @@ class _Tag extends StatelessWidget {
       color: color.withOpacity(0.1),
       borderRadius: BorderRadius.circular(20),
     ),
-    child: Text(
-      label,
-      style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600),
-    ),
+    child: Text(label,
+        style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600)),
   );
 }
 
@@ -480,16 +451,12 @@ class _LogoBox extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const palette = [
-      Color(0xFF6366F1),
-      Color(0xFF2563EB),
-      Color(0xFF10B981),
-      Color(0xFFEC4899),
-      Color(0xFFF59E0B),
+      Color(0xFF6366F1), Color(0xFF2563EB), Color(0xFF10B981),
+      Color(0xFFEC4899), Color(0xFFF59E0B),
     ];
     final color = name.isEmpty ? palette[0] : palette[name.codeUnitAt(0) % palette.length];
     return Container(
-      width: 56,
-      height: 56,
+      width: 56, height: 56,
       decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(10)),
       child: Center(
         child: Text(

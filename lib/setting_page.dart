@@ -25,6 +25,19 @@ class _SettingPageState extends State<SettingPage> {
 
   bool showLogoutDialog = false;
 
+  // Stats for Job Seeker
+  int _applicationsCount = 0;
+  int _savedJobsCount = 0;
+  int _followingCount = 0;
+  int _userPostsCount = 0;
+
+  // Stats for Employer
+  int _jobPostsCount = 0;
+  int _companyFollowersCount = 0;
+  int _applicationsReceivedCount = 0;
+
+  bool _isLoadingStats = false;
+
   @override
   void initState() {
     super.initState();
@@ -42,7 +55,6 @@ class _SettingPageState extends State<SettingPage> {
     });
   }
 
-
   Future<void> fetchUserInfo() async {
     // Get current user from provider or cache
     final userProvider = Provider.of<UserProvider>(context, listen: false);
@@ -54,6 +66,9 @@ class _SettingPageState extends State<SettingPage> {
         userName = user.fullname;
         profileImageUrl = user.profileImageUrl;
       });
+
+      // Load stats after getting user info
+      await _loadStats();
     }
 
     // Fetch company name if employer (from cache)
@@ -70,6 +85,120 @@ class _SettingPageState extends State<SettingPage> {
           });
         }
       }
+    }
+  }
+
+  Future<void> _loadStats() async {
+    setState(() => _isLoadingStats = true);
+
+    try {
+      final userId = supabase.auth.currentUser?.id;
+      if (userId == null) return;
+
+      final bool isJobSeeker = role?.toUpperCase() == 'JOB_SEEKER';
+
+      if (isJobSeeker) {
+        // Load job seeker stats
+        await _loadJobSeekerStats(userId);
+      } else if (role?.toUpperCase() == 'POSTER') {
+        // Load employer stats
+        await _loadEmployerStats(userId);
+      }
+    } catch (e) {
+      debugPrint('Error loading stats: $e');
+    } finally {
+      if (mounted) setState(() => _isLoadingStats = false);
+    }
+  }
+
+  Future<void> _loadJobSeekerStats(String userId) async {
+    try {
+      // Count posts by user
+      final postsResult = await supabase
+          .from('post')
+          .select('post_id')
+          .eq('user_id', userId);
+      _userPostsCount = (postsResult as List).length;
+
+      // Count saved jobs
+      final savedJobsResult = await supabase
+          .from('saved_jobs')
+          .select('job_id')
+          .eq('user_id', userId);
+      _savedJobsCount = (savedJobsResult as List).length;
+
+      // Count following (users/companies the current user follows)
+      final followingResult = await supabase
+          .from('follows')
+          .select('follow_id')
+          .eq('follower_id', userId);
+      _followingCount = (followingResult as List).length;
+
+      // Count job applications
+      final applicationsResult = await supabase
+          .from('job_application')
+          .select('application_id')
+          .eq('user_id', userId);
+      _applicationsCount = (applicationsResult as List).length;
+
+      debugPrint('Job Seeker Stats - Posts: $_userPostsCount, Saved Jobs: $_savedJobsCount, Following: $_followingCount, Applications: $_applicationsCount');
+
+      if (mounted) setState(() {});
+    } catch (e) {
+      debugPrint('Error loading job seeker stats: $e');
+    }
+  }
+
+  Future<void> _loadEmployerStats(String userId) async {
+    try {
+      // First get company profile
+      final companyProfile = await supabase
+          .from('company_profile')
+          .select('company_id')
+          .eq('user_id', userId)
+          .maybeSingle();
+
+      if (companyProfile != null) {
+        final companyId = companyProfile['company_id'];
+
+        // Count job posts
+        final jobPostsResult = await supabase
+            .from('job_post')
+            .select('job_id')
+            .eq('company_id', companyId);
+        _jobPostsCount = (jobPostsResult as List).length;
+
+        // Count company followers
+        final followersResult = await supabase
+            .from('follows')
+            .select('follow_id')
+            .eq('following_id', companyId);
+        _companyFollowersCount = (followersResult as List).length;
+
+        // Count applications received for company's jobs
+        final jobsResult = await supabase
+            .from('job_post')
+            .select('job_id')
+            .eq('company_id', companyId);
+
+        final jobIds = (jobsResult as List).map((j) => j['job_id'] as String).toList();
+
+        if (jobIds.isNotEmpty) {
+          final applicationsResult = await supabase
+              .from('job_application')
+              .select('application_id')
+              .inFilter('job_id', jobIds);
+          _applicationsReceivedCount = (applicationsResult as List).length;
+        } else {
+          _applicationsReceivedCount = 0;
+        }
+
+        debugPrint('Employer Stats - Job Posts: $_jobPostsCount, Followers: $_companyFollowersCount, Applications Received: $_applicationsReceivedCount');
+      }
+
+      if (mounted) setState(() {});
+    } catch (e) {
+      debugPrint('Error loading employer stats: $e');
     }
   }
 
@@ -114,6 +243,9 @@ class _SettingPageState extends State<SettingPage> {
           await LocalDB.cacheCompanyProfile(userId, companyData);
         }
       }
+
+      // Reload stats
+      await _loadStats();
     }
   }
 
@@ -123,6 +255,11 @@ class _SettingPageState extends State<SettingPage> {
     if (userId != null) {
       await LocalDB.clearUserCache(userId);
     }
+
+    // Clear UserProvider state
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    userProvider.clearUser();
+
     await supabase.auth.signOut();
     if (mounted) {
       Navigator.pushReplacementNamed(context, '/');
@@ -250,6 +387,21 @@ class _SettingPageState extends State<SettingPage> {
   }
 
   Widget buildJobSeekerStats() {
+    if (_isLoadingStats) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        margin: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 6),
+          ],
+        ),
+        child: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return Container(
       padding: const EdgeInsets.all(16),
       margin: const EdgeInsets.symmetric(vertical: 8),
@@ -269,10 +421,10 @@ class _SettingPageState extends State<SettingPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              buildStatItem('0', 'Applications'),
-              buildStatItem('0', 'Saved Jobs'),
-              buildStatItem('0', 'Following'),
-              buildStatItem('0', 'Posts'),
+              buildStatItem(_applicationsCount.toString(), 'Applications'),
+              buildStatItem(_savedJobsCount.toString(), 'Saved Jobs'),
+              buildStatItem(_followingCount.toString(), 'Following'),
+              buildStatItem(_userPostsCount.toString(), 'Posts'),
             ],
           )
         ],
@@ -281,6 +433,21 @@ class _SettingPageState extends State<SettingPage> {
   }
 
   Widget buildEmployerStats() {
+    if (_isLoadingStats) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        margin: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 6),
+          ],
+        ),
+        child: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return Container(
       padding: const EdgeInsets.all(16),
       margin: const EdgeInsets.symmetric(vertical: 8),
@@ -300,9 +467,9 @@ class _SettingPageState extends State<SettingPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              buildStatItem('0', 'Job Posts'),
-              buildStatItem('0', 'Followers'),
-              buildStatItem('0'.toString(), 'Applications'),
+              buildStatItem(_jobPostsCount.toString(), 'Job Posts'),
+              buildStatItem(_companyFollowersCount.toString(), 'Followers'),
+              buildStatItem(_applicationsReceivedCount.toString(), 'Applications'),
             ],
           )
         ],
@@ -453,7 +620,7 @@ class _SettingPageState extends State<SettingPage> {
           // Full-screen overlay dialog
           if (showLogoutDialog)
             Container(
-              color: Colors.black54, // This now covers the entire screen including AppBar
+              color: Colors.black54,
               child: Center(
                 child: GestureDetector(
                   onTap: () => setState(() => showLogoutDialog = false),
@@ -478,7 +645,7 @@ class _SettingPageState extends State<SettingPage> {
                         const Text(
                           "Are you sure you want to logout? You'll need to login again to access your account.",
                           textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 13, color: const Color(0xFF4E4C4C)),
+                          style: TextStyle(fontSize: 13, color: Color(0xFF4E4C4C)),
                         ),
                         const SizedBox(height: 16),
                         Row(

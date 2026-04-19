@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
-import 'applicantion_respository.dart';
+import '../data/applicantion_respository.dart';
 import 'applicantion_details.dart';
 
 class ApplicantListPage extends StatefulWidget {

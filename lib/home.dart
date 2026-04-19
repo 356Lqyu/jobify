@@ -5,6 +5,7 @@ import 'package:jobify/users/users.dart';
 import 'package:jobify/bottom_bar.dart';
 import 'package:jobify/job_post/create_job_post.dart';
 import 'package:jobify/job_post/job_post_management.dart';
+import 'package:jobify/discovery/job_discovery.dart';
 import 'package:jobify/users/profile_page.dart';
 import 'package:provider/provider.dart';
 import 'users/user_provider.dart';
@@ -40,7 +41,7 @@ class _HomePageState extends State<HomePage> {
     if (_isJobSeeker) {
       _screens = [
         SocialFeedPage(user: widget.user),
-        //DiscoverScreen(user:widget.user),
+        DiscoveryJob(user:widget.user),
         const DiscoverScreen(),
         const AppliedScreen(),
         const SettingPage(),
@@ -58,6 +59,11 @@ class _HomePageState extends State<HomePage> {
           label: 'Discover',
         ),
         BottomBarItem(
+          icon: Icons.add_box_outlined,
+          activeIcon: Icons.add_box,
+          label: 'Post',
+        ),
+        BottomBarItem(
           icon: Icons.description_outlined,
           activeIcon: Icons.description,
           label: 'Applied',
@@ -71,9 +77,7 @@ class _HomePageState extends State<HomePage> {
     } else {
       _screens = [
         SocialFeedPage(user: widget.user),
-        //DiscoverScreen(user:widget.user),
-        const DiscoverScreen(),
-        JobPostManagementPage(key: _jobsPageKey),
+        DiscoveryJob(user:widget.user),
         CreateJobPost(
           onPostSuccess: () {
             _jobsPageKey.currentState?.loadJobs();
@@ -82,6 +86,7 @@ class _HomePageState extends State<HomePage> {
             });
           },
         ),
+        JobPostManagementPage(key: _jobsPageKey),
         const SettingPage(),
       ];
 
@@ -97,14 +102,14 @@ class _HomePageState extends State<HomePage> {
           label: 'Discover',
         ),
         BottomBarItem(
-          icon: Icons.work_outline,
-          activeIcon: Icons.work,
-          label: 'My Jobs',
-        ),
-        BottomBarItem(
           icon: Icons.add_box_outlined,
           activeIcon: Icons.add_box,
           label: 'Post',
+        ),
+        BottomBarItem(
+          icon: Icons.work_outline,
+          activeIcon: Icons.work,
+          label: 'My Jobs',
         ),
         BottomBarItem(
           icon: Icons.business_outlined,

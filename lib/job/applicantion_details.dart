@@ -1,7 +1,7 @@
 // lib/job/applicantion_details.dart
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'applicantion_respository.dart';
+import '../data/applicantion_respository.dart';
 import 'applicantion_status.dart';
 
 class ApplicantDetailPage extends StatefulWidget {

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:jobify/discovery/job_details.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:jobify/social/post_feed_setting.dart';
@@ -8,8 +9,9 @@ import 'package:jobify/social/social_post_bottom_sheet.dart';
 import 'package:jobify/data/feed_repository.dart';
 import 'package:jobify/users/users.dart';
 import 'package:jobify/data/local_db.dart';
-//import 'package:jobify/job_post/job_detail.dart'; // job seeker detail page
 import 'package:jobify/job_post/job_detail_employer.dart';
+import 'package:jobify/discovery/job_details.dart';
+import 'package:jobify/social/social_post_details.dart';
 
 class SocialFeedPage extends StatefulWidget {
   final Users user;
@@ -30,18 +32,15 @@ class _SocialFeedPageState extends State<SocialFeedPage>
   @override
   void initState() {
     super.initState();
-
     _tabController = TabController(length: 2, vsync: this);
     _tabController.addListener(() {
       if (!_tabController.indexIsChanging) return;
       if (_tabController.index == 1) _provider.refreshFollowing();
     });
-
     _provider = SocialFeedProvider(
       repository: FeedRepository(),
       userId:     widget.user.userId,
     );
-
     WidgetsBinding.instance.addPostFrameCallback((_) => _provider.init());
   }
 
@@ -87,8 +86,14 @@ class _SocialFeedPageState extends State<SocialFeedPage>
     return ChangeNotifierProvider.value(
       value: _provider,
       child: Scaffold(
-        backgroundColor: const Color(0xFFF1F5F9),
-        // ── Use CustomScrollView so we have full control over header height ──
+        backgroundColor: const Color(0xFFF8FAFC),
+        appBar: AppBar(
+          title: const Text('Home'),
+          backgroundColor: Colors.blue,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          automaticallyImplyLeading: false,
+        ),
         body: SafeArea(
           bottom: false,
           child: Column(
@@ -101,8 +106,7 @@ class _SocialFeedPageState extends State<SocialFeedPage>
                   children: [
                     // Search row
                     Padding(
-                      padding:
-                      const EdgeInsets.fromLTRB(12, 10, 12, 6),
+                      padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
                       child: Row(
                         children: [
                           Expanded(
@@ -113,76 +117,44 @@ class _SocialFeedPageState extends State<SocialFeedPage>
                                 key: const ValueKey('search'),
                                 ctrl: _searchCtrl,
                                 onClose: () {
-                                  setState(
-                                          () => _showSearch = false);
+                                  setState(() => _showSearch = false);
                                   _searchCtrl.clear();
                                 },
                               )
                                   : GestureDetector(
                                 key: const ValueKey('bar'),
-                                onTap: () => setState(
-                                        () => _showSearch = true),
+                                onTap: () => setState(() => _showSearch = true),
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 14, vertical: 10),
                                   decoration: BoxDecoration(
                                     color: const Color(0xFFF1F5F9),
-                                    borderRadius:
-                                    BorderRadius.circular(20),
+                                    borderRadius: BorderRadius.circular(20),
                                   ),
                                   child: Row(
                                     children: [
                                       const Icon(Icons.search,
-                                          size: 16,
-                                          color: Colors.blueGrey),
+                                          size: 16, color: Colors.blueGrey),
                                       const SizedBox(width: 6),
                                       Text(
                                         'Search posts, #hashtags…',
                                         style: TextStyle(
                                             fontSize: 13,
-                                            color: Colors.blueGrey
-                                                .shade400),
+                                            color: Colors.blueGrey.shade400),
                                       ),
                                     ],
                                   ),
                                 ),
                               ),
                             ),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.tune_outlined,
-                                color: Colors.blueGrey, size: 22),
-                            onPressed: _showFilterSheet,
-                          ),
-                          Stack(
-                            children: [
-                              IconButton(
-                                icon: const Icon(
-                                    Icons.notifications_outlined,
-                                    size: 24),
-                                onPressed: () {},
-                              ),
-                              Positioned(
-                                top: 8, right: 8,
-                                child: Container(
-                                  width: 8, height: 8,
-                                  decoration: const BoxDecoration(
-                                      color: Color(0xFFEF4444),
-                                      shape: BoxShape.circle),
-                                ),
-                              ),
-                            ],
-                          ),
+                          )
                         ],
                       ),
                     ),
-
                     // Filter chips
                     Consumer<SocialFeedProvider>(
-                      builder: (_, prov, __) =>
-                          _FilterChips(provider: prov),
+                      builder: (_, prov, __) => _FilterChips(provider: prov),
                     ),
-
                     // Tabs
                     TabBar(
                       controller: _tabController,
@@ -200,8 +172,6 @@ class _SocialFeedPageState extends State<SocialFeedPage>
                   ],
                 ),
               ),
-
-              // ── Tab content fills remaining space ──────────────────────
               Expanded(
                 child: TabBarView(
                   controller: _tabController,
@@ -214,7 +184,6 @@ class _SocialFeedPageState extends State<SocialFeedPage>
             ],
           ),
         ),
-
         floatingActionButton: FloatingActionButton(
           onPressed: _openCreatePost,
           backgroundColor: const Color(0xFF2563EB),
@@ -228,7 +197,6 @@ class _SocialFeedPageState extends State<SocialFeedPage>
 // ─────────────────────────────────────────────────────────────────────────────
 // FILTER CHIPS ROW
 // ─────────────────────────────────────────────────────────────────────────────
-
 class _FilterChips extends StatelessWidget {
   final SocialFeedProvider provider;
   const _FilterChips({required this.provider});
@@ -249,8 +217,7 @@ class _FilterChips extends StatelessWidget {
         height: 40,
         child: ListView.separated(
           scrollDirection: Axis.horizontal,
-          padding:
-          const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
           itemCount: _filters.length,
           separatorBuilder: (_, __) => const SizedBox(width: 8),
           itemBuilder: (_, i) {
@@ -260,12 +227,9 @@ class _FilterChips extends StatelessWidget {
               onTap: () => prov.setFilter(f['value']!),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 150),
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 14, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
                 decoration: BoxDecoration(
-                  color: sel
-                      ? const Color(0xFF2563EB)
-                      : const Color(0xFFF1F5F9),
+                  color: sel ? const Color(0xFF2563EB) : const Color(0xFFF1F5F9),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
@@ -287,7 +251,6 @@ class _FilterChips extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 // SEARCH FIELD
 // ─────────────────────────────────────────────────────────────────────────────
-
 class _SearchField extends StatelessWidget {
   final TextEditingController ctrl;
   final VoidCallback onClose;
@@ -301,15 +264,12 @@ class _SearchField extends StatelessWidget {
       decoration: InputDecoration(
         hintText: 'Search posts, #hashtags…',
         hintStyle: const TextStyle(fontSize: 13, color: Colors.blueGrey),
-        contentPadding:
-        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         filled: true,
         fillColor: const Color(0xFFF1F5F9),
         border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(20),
-            borderSide: BorderSide.none),
-        prefixIcon:
-        const Icon(Icons.search, size: 18, color: Colors.blueGrey),
+            borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
+        prefixIcon: const Icon(Icons.search, size: 18, color: Colors.blueGrey),
         suffixIcon: IconButton(
           icon: const Icon(Icons.close, size: 16),
           onPressed: onClose,
@@ -322,11 +282,9 @@ class _SearchField extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 // FOR YOU TAB
 // ─────────────────────────────────────────────────────────────────────────────
-
 class _ForYouTab extends StatelessWidget {
   final Users user;
   const _ForYouTab({required this.user});
-
 
   @override
   Widget build(BuildContext context) {
@@ -351,16 +309,11 @@ class _ForYouTab extends StatelessWidget {
               return false;
             },
             child: ListView.builder(
-              padding:
-              const EdgeInsets.only(top: 8, bottom: 100),
-              // +1 for trending banner, +1 if loading more
+              padding: const EdgeInsets.only(top: 8, bottom: 100),
               itemCount: prov.forYouPosts.length +
                   (prov.isLoadingForYou ? 1 : 0) +
                   1,
               itemBuilder: (ctx, i) {
-                // Trending banner at position 2
-                if (i == 2) return const _TrendingBanner();
-                // Adjust index to skip the banner slot
                 final adj = i > 2 ? i - 1 : i;
                 if (adj >= prov.forYouPosts.length) {
                   return const Padding(
@@ -369,8 +322,7 @@ class _ForYouTab extends StatelessWidget {
                   );
                 }
                 return _FeedCard(
-                    post: prov.forYouPosts[adj],
-                    currentUser: user);
+                    post: prov.forYouPosts[adj], currentUser: user);
               },
             ),
           ),
@@ -383,7 +335,6 @@ class _ForYouTab extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 // FOLLOWING TAB
 // ─────────────────────────────────────────────────────────────────────────────
-
 class _FollowingTab extends StatelessWidget {
   final Users user;
   const _FollowingTab({required this.user});
@@ -398,8 +349,7 @@ class _FollowingTab extends StatelessWidget {
         if (prov.followingPosts.isEmpty) {
           return const _EmptyState(
             icon: Icons.people_outline,
-            message:
-            'Follow companies & people to see their posts here.',
+            message: 'Follow companies & people to see their posts here.',
           );
         }
         return RefreshIndicator(
@@ -412,8 +362,7 @@ class _FollowingTab extends StatelessWidget {
               return false;
             },
             child: ListView.builder(
-              padding:
-              const EdgeInsets.only(top: 8, bottom: 100),
+              padding: const EdgeInsets.only(top: 8, bottom: 100),
               itemCount: prov.followingPosts.length +
                   (prov.isLoadingFollowing ? 1 : 0),
               itemBuilder: (_, i) {
@@ -424,8 +373,7 @@ class _FollowingTab extends StatelessWidget {
                   );
                 }
                 return _FeedCard(
-                    post: prov.followingPosts[i],
-                    currentUser: user);
+                    post: prov.followingPosts[i], currentUser: user);
               },
             ),
           ),
@@ -438,7 +386,6 @@ class _FollowingTab extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 // FEED CARD
 // ─────────────────────────────────────────────────────────────────────────────
-
 class _FeedCard extends StatelessWidget {
   final FeedPost post;
   final Users currentUser;
@@ -463,14 +410,12 @@ class _FeedCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Header (avatar, name, follow button, menu) ─────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 14, 6, 0),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _FeedAvatar(
-                    name: post.authorName, url: post.authorAvatar),
+                _FeedAvatar(name: post.authorName, url: post.authorAvatar),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(
@@ -481,8 +426,7 @@ class _FeedCard extends StatelessWidget {
                           Flexible(
                             child: Text(post.authorName,
                                 style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14),
+                                    fontWeight: FontWeight.bold, fontSize: 14),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis),
                           ),
@@ -509,45 +453,20 @@ class _FeedCard extends StatelessWidget {
                   _FollowBtn(
                     isFollowing: post.isFollowing,
                     onTap: () => prov.toggleFollow(post),
-                  ),
-                PopupMenuButton<String>(
-                  icon: const Icon(Icons.more_vert,
-                      size: 18, color: Colors.blueGrey),
-                  onSelected: (v) async {
-                    if (v == 'save') prov.toggleSave(post);
-                    if (v == 'delete' &&
-                        post.userId == currentUser.userId) {
-                      await prov.deletePost(post.postId);
-                    }
-                  },
-                  itemBuilder: (_) => [
-                    const PopupMenuItem(
-                        value: 'save', child: Text('Save post')),
-                    if (post.userId == currentUser.userId)
-                      const PopupMenuItem(
-                          value: 'delete',
-                          child: Text('Delete',
-                              style: TextStyle(color: Colors.red))),
-                  ],
-                ),
+                  )
               ],
             ),
           ),
-
-          // ── Content (clickable area) ───────────────────────────────────
           GestureDetector(
             onTap: () => _navigateToDetail(context),
             behavior: HitTestBehavior.opaque,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Rich content (text with hashtags)
                 Padding(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 14, vertical: 10),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   child: _RichContent(content: post.content),
                 ),
-                // Hashtags
                 if (post.hashtags.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
@@ -555,13 +474,10 @@ class _FeedCard extends StatelessWidget {
                       spacing: 8, runSpacing: 4,
                       children: post.hashtags
                           .map((tag) => GestureDetector(
-                        onTap: () =>
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                  content: Text('Search: #$tag'),
-                                  duration:
-                                  const Duration(seconds: 1)),
-                            ),
+                        onTap: () => ScaffoldMessenger.of(context)
+                            .showSnackBar(SnackBar(
+                            content: Text('Search: #$tag'),
+                            duration: const Duration(seconds: 1))),
                         child: Text('#$tag',
                             style: const TextStyle(
                                 color: Color(0xFF2563EB),
@@ -571,29 +487,21 @@ class _FeedCard extends StatelessWidget {
                           .toList(),
                     ),
                   ),
-                // Media (images)
                 if (post.mediaUrls.isNotEmpty)
                   _MediaGrid(urls: post.mediaUrls),
-                // Linked job card (if job post)
                 if (post.postType == PostType.job && post.linkedJob != null)
                   _LinkedJobCard(job: post.linkedJob!),
               ],
             ),
           ),
-
-          // ── Action row (like, comment, share, save) ────────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(6, 4, 6, 6),
             child: Row(
               children: [
                 _ActionBtn(
-                  icon: post.isLiked
-                      ? Icons.favorite
-                      : Icons.favorite_border,
+                  icon: post.isLiked ? Icons.favorite : Icons.favorite_border,
                   label: post.likeCount.toString(),
-                  color: post.isLiked
-                      ? const Color(0xFFEF4444)
-                      : Colors.blueGrey,
+                  color: post.isLiked ? const Color(0xFFEF4444) : Colors.blueGrey,
                   onTap: () => prov.toggleLike(post),
                 ),
                 _ActionBtn(
@@ -611,13 +519,9 @@ class _FeedCard extends StatelessWidget {
                 const Spacer(),
                 IconButton(
                   icon: Icon(
-                    post.isSaved
-                        ? Icons.bookmark
-                        : Icons.bookmark_border,
+                    post.isSaved ? Icons.bookmark : Icons.bookmark_border,
                     size: 20,
-                    color: post.isSaved
-                        ? const Color(0xFF2563EB)
-                        : Colors.blueGrey,
+                    color: post.isSaved ? const Color(0xFF2563EB) : Colors.blueGrey,
                   ),
                   onPressed: () => prov.toggleSave(post),
                 ),
@@ -629,47 +533,44 @@ class _FeedCard extends StatelessWidget {
     );
   }
 
-  // Navigation helper
-  void _navigateToDetail(BuildContext context) async {  // note: async
+  void _navigateToDetail(BuildContext context) async {
     if (post.postType == PostType.job && post.linkedJob != null) {
-      final jobId = post.linkedJob!.jobId;
-
-      // Try to get the latest job map from cache
-      Map<String, dynamic>? jobMap = await LocalDB.getCachedJobMapById(jobId);
-
-      // Fallback: build a minimal map from the linkedJob if cache miss
-      jobMap ??= {
-        'job_id': jobId,
-        'job_title': post.linkedJob!.jobTitle,
-        'company_name': post.linkedJob!.companyName,
-        'location': post.linkedJob!.location,
-        'description': post.linkedJob!.description,
-        'job_type': post.linkedJob!.jobType,
-        'job_category': post.linkedJob!.jobCategory,
-        'experience_level': post.linkedJob!.experienceLevel,
-        'remote_option': post.linkedJob!.remoteOption,
-        'salary_min': post.linkedJob!.salaryMin,
-        'salary_max': post.linkedJob!.salaryMax,
-        'view_count': post.linkedJob!.viewCount,
-        'application_count': post.linkedJob!.applicationCount,
-        'image_urls': post.linkedJob!.imageUrls,
-        'video_url': post.linkedJob!.videoUrl,
-        'status': post.linkedJob!.status,
-      };
+      final job = post.linkedJob!;
 
       if (post.userId == currentUser.userId) {
-        Navigator.push(context, MaterialPageRoute(builder: (_) => JobDetailEmployer(job: jobMap!)));
+        // Employer view
+        final jobMap = await LocalDB.getCachedJobMapById(job.jobId) ?? job.toLocalDbMap();
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => JobDetailEmployer(job: jobMap)),
+        );
       } else {
-        //Navigator.push(context, MaterialPageRoute(builder: (_) => JobDetailPage(job: jobMap!)));
+        // Job seeker view
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => JobDetailPage(
+              job: job,
+              currentUser: currentUser,
+            ),
+          ),
+        );
       }
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Post details coming soon')));
+      // Normal post
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => SocialPostDetails(
+            post: post,
+            currentUser: currentUser,
+          ),
+        ),
+      );
     }
   }
 
-  // Keep the existing _showComments method unchanged
-  void _showComments(
-      BuildContext ctx, FeedPost post, SocialFeedProvider prov) {
+  void _showComments(BuildContext ctx, FeedPost post, SocialFeedProvider prov) {
     showModalBottomSheet(
       context: ctx,
       isScrollControlled: true,
@@ -682,10 +583,7 @@ class _FeedCard extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // COMMENT SHEET
-// ─────────────────────────────────────────────────────────────────────────────
-
 class _CommentSheet extends StatefulWidget {
   final FeedPost post;
   const _CommentSheet({required this.post});
@@ -746,12 +644,10 @@ class _CommentSheetState extends State<_CommentSheet> {
                   borderRadius: BorderRadius.circular(2)),
             ),
             Padding(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Align(
                 alignment: Alignment.centerLeft,
-                child: Text(
-                    'Comments (${widget.post.commentCount})',
+                child: Text('Comments (${widget.post.commentCount})',
                     style: const TextStyle(
                         fontWeight: FontWeight.bold, fontSize: 16)),
               ),
@@ -761,10 +657,8 @@ class _CommentSheetState extends State<_CommentSheet> {
               child: _loading
                   ? const Center(child: CircularProgressIndicator())
                   : _comments.isEmpty
-                  ? const Center(
-                  child: Text('No comments yet.',
-                      style: TextStyle(
-                          color: Colors.blueGrey)))
+                  ? const Center(child: Text('No comments yet.',
+                  style: TextStyle(color: Colors.blueGrey)))
                   : ListView.builder(
                 controller: ctrl,
                 padding: const EdgeInsets.all(16),
@@ -772,52 +666,42 @@ class _CommentSheetState extends State<_CommentSheet> {
                 itemBuilder: (_, i) {
                   final c = _comments[i];
                   return Padding(
-                    padding: const EdgeInsets.only(
-                        bottom: 14),
+                    padding: const EdgeInsets.only(bottom: 14),
                     child: Row(
-                      crossAxisAlignment:
-                      CrossAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         _FeedAvatar(
                             name: c.authorName,
-                            url:  c.authorAvatar,
+                            url: c.authorAvatar,
                             radius: 16),
                         const SizedBox(width: 10),
                         Expanded(
                           child: Container(
-                            padding:
-                            const EdgeInsets.all(10),
+                            padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
-                              color:
-                              const Color(0xFFF8FAFC),
-                              borderRadius:
-                              BorderRadius.circular(
-                                  12),
+                              color: const Color(0xFFF8FAFC),
+                              borderRadius: BorderRadius.circular(12),
                             ),
                             child: Column(
-                              crossAxisAlignment:
-                              CrossAxisAlignment.start,
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Row(
                                   children: [
                                     Text(c.authorName,
                                         style: const TextStyle(
-                                            fontWeight:
-                                            FontWeight.w600,
+                                            fontWeight: FontWeight.w600,
                                             fontSize: 13)),
                                     const Spacer(),
                                     Text(c.timeAgo,
                                         style: const TextStyle(
                                             fontSize: 10,
-                                            color: Colors
-                                                .blueGrey)),
+                                            color: Colors.blueGrey)),
                                   ],
                                 ),
                                 const SizedBox(height: 4),
                                 Text(c.commentText,
                                     style: const TextStyle(
-                                        fontSize: 13,
-                                        height: 1.4)),
+                                        fontSize: 13, height: 1.4)),
                               ],
                             ),
                           ),
@@ -852,11 +736,9 @@ class _CommentSheetState extends State<_CommentSheet> {
                   const SizedBox(width: 8),
                   Container(
                     decoration: const BoxDecoration(
-                        color: Color(0xFF2563EB),
-                        shape: BoxShape.circle),
+                        color: Color(0xFF2563EB), shape: BoxShape.circle),
                     child: IconButton(
-                      icon: const Icon(Icons.send,
-                          color: Colors.white, size: 18),
+                      icon: const Icon(Icons.send, color: Colors.white, size: 18),
                       onPressed: _submit,
                     ),
                   ),
@@ -1308,61 +1190,6 @@ class _FeedAvatar extends StatelessWidget {
               color: Colors.white,
               fontWeight: FontWeight.bold,
               fontSize: radius * 0.65)),
-    );
-  }
-}
-
-class _TrendingBanner extends StatelessWidget {
-  const _TrendingBanner();
-  @override
-  Widget build(BuildContext context) {
-    const skills = [
-      'Flutter', 'Python', 'React', 'SQL', 'UI/UX', 'DevOps', 'AI/ML'
-    ];
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF1E40AF), Color(0xFF3B82F6)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(children: const [
-            Icon(Icons.trending_up, color: Colors.white70, size: 14),
-            SizedBox(width: 6),
-            Text('Trending skills in Malaysia',
-                style: TextStyle(
-                    color: Colors.white70, fontSize: 11)),
-          ]),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 6, runSpacing: 5,
-            children: skills
-                .map((s) => Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                    color: Colors.white.withOpacity(0.3)),
-              ),
-              child: Text(s,
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500)),
-            ))
-                .toList(),
-          ),
-        ],
-      ),
     );
   }
 }

@@ -10,7 +10,6 @@ import 'auth/forgot_password.dart';
 import 'auth/login.dart';
 import 'setting_page.dart';
 import 'home.dart';
-import 'data/user_repository.dart';
 
 const String supabaseUrl = 'https://nejlppdligklddlwvzub.supabase.co';
 const String supabaseKey = 'sb_secret_518COekCnlz8R_OAgQVCIw_2E9LVs8_';

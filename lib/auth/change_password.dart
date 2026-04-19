@@ -1,4 +1,3 @@
-// change_password.dart
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -234,7 +233,7 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
                             ),
                             validator: (value) {
                               if (value == null || value.isEmpty) {
-                                return 'Please enter your current password';
+                                return 'Current password is required.';
                               }
                               return null;
                             },
@@ -289,7 +288,7 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
                             ),
                             validator: (value) {
                               if (value == null || value.isEmpty) {
-                                return 'Please enter a new password';
+                                return 'New password is required.';
                               }
                               if (value.length < 8) {
                                 return 'Password must be at least 8 characters';

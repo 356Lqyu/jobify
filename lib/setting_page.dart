@@ -7,6 +7,10 @@ import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'auth/change_password.dart';
 import 'users/view_profile_page.dart';
+import 'package:jobify/job/resume_management_page.dart';
+import 'package:jobify/job/applicantion_respository.dart';
+import 'package:jobify/main.dart';
+import 'job_post/job_post_management.dart';
 
 class SettingPage extends StatefulWidget {
   const SettingPage({super.key});
@@ -25,6 +29,7 @@ class _SettingPageState extends State<SettingPage> {
   String? profileImageUrl;
   String? userId;
   String? companyId;
+  int _jobPostsCount = 0;  // Add this to store job posts count
 
   bool showLogoutDialog = false;
 
@@ -50,7 +55,6 @@ class _SettingPageState extends State<SettingPage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Refresh when coming back from ProfilePage
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _refreshProfileData();
@@ -58,8 +62,50 @@ class _SettingPageState extends State<SettingPage> {
     });
   }
 
+  Future<int> _getTotalApplicationsForEmployer() async {
+    final userId = supabase.auth.currentUser?.id;
+    if (userId == null) return 0;
+
+    try {
+      // Get all jobs created by this employer
+      final jobsResponse = await supabase
+          .from('job_post')
+          .select('job_id')
+          .eq('created_by', userId);
+
+      final jobIds = List<String>.from(jobsResponse.map((job) => job['job_id'] as String));
+
+      // Update job posts count
+      setState(() {
+        _jobPostsCount = jobIds.length;
+      });
+
+      if (jobIds.isEmpty) return 0;
+
+      // Get total applications for all jobs
+      final applicationsResponse = await supabase
+          .from('job_application')
+          .select('application_id')
+          .inFilter('job_id', jobIds)
+          .neq('status', 'withdrawn');
+
+      final List<dynamic> results = applicationsResponse as List<dynamic>;
+      return results.length;
+    } catch (e) {
+      debugPrint('Error getting total applications: $e');
+      return 0;
+    }
+  }
+
+  Future<int> _getApplicationCount() async {
+    final userId = supabase.auth.currentUser?.id;
+    if (userId == null) return 0;
+
+    final appRepo = ApplicationRepository();
+    return await appRepo.getUserApplicationCount(userId);
+  }
+
   Future<void> fetchUserInfo() async {
-    // Get current user from provider or cache
     final userProvider = Provider.of<UserProvider>(context, listen: false);
     final user = userProvider.currentUser ?? await _userRepo.getCurrentUser();
 
@@ -75,7 +121,6 @@ class _SettingPageState extends State<SettingPage> {
       await _loadStats();
     }
 
-    // Fetch company name and ID if employer
     if (role?.toUpperCase() == 'POSTER') {
       final authUserId = supabase.auth.currentUser?.id;
       if (authUserId != null) {
@@ -108,143 +153,19 @@ class _SettingPageState extends State<SettingPage> {
             });
           }
         }
+        // Also fetch job posts count
+        await _getTotalApplicationsForEmployer();
       }
     }
   }
 
-  Future<void> _loadStats() async {
-    setState(() => _isLoadingStats = true);
-
-    try {
-      final authUserId = supabase.auth.currentUser?.id;
-      if (authUserId == null) return;
-
-      final bool isJobSeeker = role?.toUpperCase() == 'JOB_SEEKER';
-
-      if (isJobSeeker) {
-        // Load job seeker stats
-        await _loadJobSeekerStats(authUserId);
-      } else if (role?.toUpperCase() == 'POSTER') {
-        // Load employer stats
-        await _loadEmployerStats(authUserId);
-      }
-    } catch (e) {
-      debugPrint('Error loading stats: $e');
-    } finally {
-      if (mounted) setState(() => _isLoadingStats = false);
-    }
-  }
-
-  Future<void> _loadJobSeekerStats(String authUserId) async {
-    try {
-      // Count posts by user
-      final postsResult = await supabase
-          .from('post')
-          .select('post_id')
-          .eq('user_id', authUserId);
-      _userPostsCount = (postsResult as List).length;
-
-      // Count saved jobs
-      final savedJobsResult = await supabase
-          .from('saved_jobs')
-          .select('job_id')
-          .eq('user_id', authUserId);
-      _savedJobsCount = (savedJobsResult as List).length;
-
-      // Count following (users/companies the current user follows)
-      final followingResult = await supabase
-          .from('follows')
-          .select('follow_id')
-          .eq('follower_id', authUserId);
-      _followingCount = (followingResult as List).length;
-
-      // Count job applications
-      final applicationsResult = await supabase
-          .from('job_application')
-          .select('application_id')
-          .eq('user_id', authUserId);
-      _applicationsCount = (applicationsResult as List).length;
-
-      debugPrint('Job Seeker Stats - Posts: $_userPostsCount, Saved Jobs: $_savedJobsCount, Following: $_followingCount, Applications: $_applicationsCount');
-
-      if (mounted) setState(() {});
-    } catch (e) {
-      debugPrint('Error loading job seeker stats: $e');
-    }
-  }
-
-  Future<void> _loadEmployerStats(String authUserId) async {
-    try {
-      // First get company profile
-      final companyProfile = await supabase
-          .from('company_profile')
-          .select('company_id')
-          .eq('user_id', authUserId)
-          .maybeSingle();
-
-      if (companyProfile != null) {
-        final compId = companyProfile['company_id'];
-
-        // Update companyId if not set
-        if (companyId == null && mounted) {
-          setState(() {
-            companyId = compId;
-          });
-        }
-
-        // Count job posts
-        final jobPostsResult = await supabase
-            .from('job_post')
-            .select('job_id')
-            .eq('company_id', compId);
-        _jobPostsCount = (jobPostsResult as List).length;
-
-        // Count company followers
-        final followersResult = await supabase
-            .from('follows')
-            .select('follow_id')
-            .eq('following_id', compId);
-        _companyFollowersCount = (followersResult as List).length;
-
-        // Count applications received for company's jobs
-        final jobsResult = await supabase
-            .from('job_post')
-            .select('job_id')
-            .eq('company_id', compId);
-
-        final jobIds = (jobsResult as List).map((j) => j['job_id'] as String).toList();
-
-        if (jobIds.isNotEmpty) {
-          final applicationsResult = await supabase
-              .from('job_application')
-              .select('application_id')
-              .inFilter('job_id', jobIds);
-          _applicationsReceivedCount = (applicationsResult as List).length;
-        } else {
-          _applicationsReceivedCount = 0;
-        }
-
-        debugPrint('Employer Stats - Job Posts: $_jobPostsCount, Followers: $_companyFollowersCount, Applications Received: $_applicationsReceivedCount');
-      }
-
-      if (mounted) setState(() {});
-    } catch (e) {
-      debugPrint('Error loading employer stats: $e');
-    }
-  }
-
-  // Method to refresh profile data when returning from ProfilePage
   Future<void> _refreshProfileData() async {
-    final authUserId = supabase.auth.currentUser?.id;
-    if (authUserId != null) {
-      // Force clear cache to get fresh data
-      await LocalDB.clearUserCache(authUserId);
-
-      // Force refresh from server
+    final userId = supabase.auth.currentUser?.id;
+    if (userId != null) {
+      await LocalDB.clearUserCache(userId);
       final userProvider = Provider.of<UserProvider>(context, listen: false);
       await userProvider.refreshUser();
 
-      // Update local state
       final updatedUser = userProvider.currentUser;
       if (updatedUser != null && mounted) {
         setState(() {
@@ -255,9 +176,7 @@ class _SettingPageState extends State<SettingPage> {
         });
       }
 
-      // Also refresh company profile if employer
       if (role?.toUpperCase() == 'POSTER') {
-        // Fetch fresh company profile from Supabase
         final companyData = await supabase
             .from('company_profile')
             .select()
@@ -272,9 +191,10 @@ class _SettingPageState extends State<SettingPage> {
               profileImageUrl = companyData['logo_url'];
             }
           });
-          // Update cache
-          await LocalDB.cacheCompanyProfile(authUserId, companyData);
+          await LocalDB.cacheCompanyProfile(userId, companyData);
         }
+        // Refresh job posts count
+        await _getTotalApplicationsForEmployer();
       }
 
       // Reload stats
@@ -295,7 +215,38 @@ class _SettingPageState extends State<SettingPage> {
 
     await supabase.auth.signOut();
     if (mounted) {
-      Navigator.pushReplacementNamed(context, '/');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Logging out...')),
+      );
+    }
+
+    try {
+      final userId = supabase.auth.currentUser?.id;
+      if (userId != null) {
+        await LocalDB.clearUserCache(userId);
+      }
+
+      await LocalDB.clearAllCaches();
+
+      final userProvider = Provider.of<UserProvider>(context, listen: false);
+      userProvider.clearUser();
+
+      await supabase.auth.signOut();
+
+      if (mounted) {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (context) => const AnimatedHomePage()),
+              (route) => false,
+        );
+      }
+    } catch (e) {
+      debugPrint('Logout error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error during logout: $e'), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
@@ -420,93 +371,77 @@ class _SettingPageState extends State<SettingPage> {
   }
 
   Widget buildJobSeekerStats() {
-    if (_isLoadingStats) {
-      return Container(
-        padding: const EdgeInsets.all(16),
-        margin: const EdgeInsets.symmetric(vertical: 8),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 6),
-          ],
-        ),
-        child: const Center(child: CircularProgressIndicator()),
-      );
-    }
+    return FutureBuilder<int>(
+      future: _getApplicationCount(),
+      builder: (context, snapshot) {
+        final applicationCount = snapshot.data ?? 0;
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      margin: const EdgeInsets.symmetric(vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 6),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Your Activity',
-              style: TextStyle(fontWeight: FontWeight.w500, fontSize: 15)),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              buildStatItem(_applicationsCount.toString(), 'Applications'),
-              buildStatItem(_savedJobsCount.toString(), 'Saved Jobs'),
-              buildStatItem(_followingCount.toString(), 'Following'),
-              buildStatItem(_userPostsCount.toString(), 'Posts'),
+        return Container(
+          padding: const EdgeInsets.all(16),
+          margin: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 6),
             ],
-          )
-        ],
-      ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Your Activity',
+                  style: TextStyle(fontWeight: FontWeight.w500, fontSize: 15)),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  buildStatItem(applicationCount.toString(), 'Applications'),
+                  buildStatItem('0', 'Saved Jobs'),
+                  buildStatItem('0', 'Following'),
+                  buildStatItem('0', 'Posts'),
+                ],
+              )
+            ],
+          ),
+        );
+      },
     );
   }
 
   Widget buildEmployerStats() {
-    if (_isLoadingStats) {
-      return Container(
-        padding: const EdgeInsets.all(16),
-        margin: const EdgeInsets.symmetric(vertical: 8),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 6),
-          ],
-        ),
-        child: const Center(child: CircularProgressIndicator()),
-      );
-    }
+    return FutureBuilder<int>(
+      future: _getTotalApplicationsForEmployer(),
+      builder: (context, snapshot) {
+        final totalApplications = snapshot.data ?? 0;
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      margin: const EdgeInsets.symmetric(vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 6),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Company Activity',
-              style: TextStyle(fontWeight: FontWeight.w500, fontSize: 15)),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              buildStatItem(_jobPostsCount.toString(), 'Job Posts'),
-              buildStatItem(_companyFollowersCount.toString(), 'Followers'),
-              buildStatItem(_applicationsReceivedCount.toString(), 'Applications'),
+        return Container(
+          padding: const EdgeInsets.all(16),
+          margin: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 6),
             ],
-          )
-        ],
-      ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Company Activity',
+                  style: TextStyle(fontWeight: FontWeight.w500, fontSize: 15)),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  buildStatItem(_jobPostsCount.toString(), 'Job Posts'),
+                  buildStatItem('0', 'Followers'),
+                  buildStatItem(totalApplications.toString(), 'Applications'),
+                ],
+              )
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -640,7 +575,6 @@ class _SettingPageState extends State<SettingPage> {
       ),
       body: Stack(
         children: [
-          // Main content
           RefreshIndicator(
             onRefresh: _refreshProfileData,
             child: SingleChildScrollView(
@@ -665,20 +599,32 @@ class _SettingPageState extends State<SettingPage> {
                     child: Column(
                       children: [
                         buildSectionHeader('Profile'),
-                        buildListItem(Icons.person_outline, 'My Profile', () async {
-                          await Navigator.push(
+                        buildListItem(Icons.person_outline, 'My Profile', () {
+                          Navigator.push(
                             context,
                             MaterialPageRoute(
                                 builder: (_) => const ProfilePage()),
-                          );
-                          await _refreshProfileData();
+                          ).then((_) => _refreshProfileData());
                         }),
                         // New Dashboard item
                         buildListItem(Icons.dashboard_outlined, 'My Dashboard', () {
                           _navigateToDashboard();
                         }),
                         if (isJobSeeker)
-                          buildListItem(Icons.work, 'My Resume', () {}),
+                          buildListItem(Icons.work, 'My Resume', () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const ResumeManagementPage()),
+                            );
+                          }),
+                        if (role == 'poster')
+                          buildListItem(Icons.dashboard, 'My Dashboard', () {
+                            // Navigate to JobPostManagementPage
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const JobPostManagementPage()),
+                            );
+                          }),
                       ],
                     ),
                   ),
@@ -697,6 +643,7 @@ class _SettingPageState extends State<SettingPage> {
                     child: Column(
                       children: [
                         buildSectionHeader('Account'),
+                        buildListItem(Icons.person, 'Account Settings', () {}),
                         buildListItem(Icons.lock, 'Change Password', () {
                           Navigator.push(
                             context,
@@ -803,7 +750,10 @@ class _SettingPageState extends State<SettingPage> {
                             const SizedBox(width: 8),
                             Expanded(
                               child: ElevatedButton(
-                                onPressed: handleLogout,
+                                onPressed: () async {
+                                  setState(() => showLogoutDialog = false);
+                                  await handleLogout();
+                                },
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: Colors.red,
                                   foregroundColor: Colors.white,

@@ -106,9 +106,9 @@ class LocalDB {
       )
     ''');
 
-    // 5. Users
+    // 7. Cached users (with fullname field from version 8)
     await db.execute('''
-    CREATE TABLE IF NOT EXISTS users (
+    CREATE TABLE IF NOT EXISTS cached_users (
       user_id           TEXT PRIMARY KEY,
       role              TEXT NOT NULL,
       fullname          TEXT NOT NULL DEFAULT '',
@@ -123,20 +123,20 @@ class LocalDB {
 
     // 6. Cached job seeker profiles
     await db.execute('''
-    CREATE TABLE IF NOT EXISTS job_seeker_profiles (
+    CREATE TABLE IF NOT EXISTS cached_job_seeker_profiles (
       user_id         TEXT PRIMARY KEY,
       date_of_birth   TEXT,
       gender          TEXT,
       address         TEXT,
       bio             TEXT,
       cached_at       TEXT NOT NULL,
-      FOREIGN KEY (user_id) REFERENCES users (user_id) ON DELETE CASCADE
+      FOREIGN KEY (user_id) REFERENCES cached_users (user_id) ON DELETE CASCADE
     )
   ''');
 
     // 7. Cached company profiles
     await db.execute('''
-    CREATE TABLE IF NOT EXISTS company_profiles (
+    CREATE TABLE IF NOT EXISTS cached_company_profiles (
       user_id              TEXT PRIMARY KEY,
       company_name         TEXT NOT NULL DEFAULT '',
       company_description  TEXT,
@@ -145,25 +145,25 @@ class LocalDB {
       location             TEXT,
       logo_url             TEXT,
       cached_at            TEXT NOT NULL,
-      FOREIGN KEY (user_id) REFERENCES users (user_id) ON DELETE CASCADE
+      FOREIGN KEY (user_id) REFERENCES cached_users (user_id) ON DELETE CASCADE
     )
   ''');
 
     // 8. Cached skills
     await db.execute('''
-    CREATE TABLE IF NOT EXISTS skills (
+    CREATE TABLE IF NOT EXISTS cached_skills (
       skill_id      TEXT PRIMARY KEY,
       user_id       TEXT NOT NULL,
       skill_name    TEXT NOT NULL,
       skill_level   TEXT,
       cached_at     TEXT NOT NULL,
-      FOREIGN KEY (user_id) REFERENCES users (user_id) ON DELETE CASCADE
+      FOREIGN KEY (user_id) REFERENCES cached_users (user_id) ON DELETE CASCADE
     )
   ''');
 
     // 9. Cached education
     await db.execute('''
-    CREATE TABLE IF NOT EXISTS education (
+    CREATE TABLE IF NOT EXISTS cached_education (
       education_id      TEXT PRIMARY KEY,
       user_id           TEXT NOT NULL,
       institution_name  TEXT NOT NULL,
@@ -173,13 +173,13 @@ class LocalDB {
       end_date          TEXT,
       description       TEXT,
       cached_at         TEXT NOT NULL,
-      FOREIGN KEY (user_id) REFERENCES users (user_id) ON DELETE CASCADE
+      FOREIGN KEY (user_id) REFERENCES cached_users (user_id) ON DELETE CASCADE
     )
   ''');
 
     // 10. Cached experience
     await db.execute('''
-    CREATE TABLE IF NOT EXISTS experience (
+    CREATE TABLE IF NOT EXISTS cached_experience (
       experience_id  TEXT PRIMARY KEY,
       user_id        TEXT NOT NULL,
       company_name   TEXT NOT NULL,
@@ -188,13 +188,13 @@ class LocalDB {
       end_date       TEXT,
       description    TEXT,
       cached_at      TEXT NOT NULL,
-      FOREIGN KEY (user_id) REFERENCES users (user_id) ON DELETE CASCADE
+      FOREIGN KEY (user_id) REFERENCES cached_users (user_id) ON DELETE CASCADE
     )
   ''');
 
     // 11. Cached resumes
     await db.execute('''
-    CREATE TABLE IF NOT EXISTS resumes (
+    CREATE TABLE IF NOT EXISTS cached_resumes (
       resume_id     TEXT PRIMARY KEY,
       user_id       TEXT NOT NULL,
       file_url      TEXT NOT NULL,
@@ -202,11 +202,34 @@ class LocalDB {
       uploaded_at   TEXT NOT NULL,
       is_default    INTEGER NOT NULL DEFAULT 0,
       cached_at     TEXT NOT NULL,
-      FOREIGN KEY (user_id) REFERENCES users (user_id) ON DELETE CASCADE
+      FOREIGN KEY (user_id) REFERENCES cached_users (user_id) ON DELETE CASCADE
     )
   ''');
 
-    //12.Cached branch
+    // 14. Cached job applications (from version 8)
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS cached_job_applications (
+        application_id    TEXT PRIMARY KEY,
+        user_id           TEXT NOT NULL,
+        job_id            TEXT NOT NULL,
+        job_title         TEXT NOT NULL,
+        company_name      TEXT NOT NULL,
+        company_logo      TEXT,
+        location          TEXT,
+        salary_min        REAL,
+        salary_max        REAL,
+        job_type          TEXT,
+        description       TEXT,
+        resume_url        TEXT NOT NULL,
+        status            TEXT NOT NULL DEFAULT 'pending',
+        applied_at        TEXT NOT NULL,
+        updated_at        TEXT NOT NULL,
+        cached_at         TEXT NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES cached_users (user_id) ON DELETE CASCADE
+      )
+    ''');
+
+    // 15. Company branches (from version 8)
     await db.execute('''
     CREATE TABLE IF NOT EXISTS company_branches (
       branch_id     TEXT PRIMARY KEY,
@@ -223,19 +246,68 @@ class LocalDB {
       created_at    TEXT NOT NULL,
       updated_at    TEXT NOT NULL,
       cached_at     TEXT NOT NULL,
-      FOREIGN KEY (company_id) REFERENCES company_profiles (company_id) ON DELETE CASCADE
+      FOREIGN KEY (company_id) REFERENCES cached_company_profiles (user_id) ON DELETE CASCADE
     )
   ''');
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // UPGRADE HANDLER - Preserves data when upgrading
+  // ═══════════════════════════════════════════════════════════════════════════
 
   static Future<void> _onUpgrade(Database db, int oldV, int newV) async {
-    for (final t in ['posts','comments','liked_posts','saved_posts','job_posts','saved_jobs',
-      'users','job_seeker_profiles','company_profiles',
-      'skills','education','experience','resumes']) {
-      await db.execute('DROP TABLE IF EXISTS $t');
+    // Handle version upgrades gracefully without dropping existing data
+    if (oldV < 8) {
+      // Add missing fullname column to cached_users if it doesn't exist
+      try {
+        await db.execute('ALTER TABLE cached_users ADD COLUMN fullname TEXT NOT NULL DEFAULT ""');
+      } catch (e) {
+        // Column might already exist
+      }
+
+      // Add missing tables when upgrading from version 7 to 8
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS cached_job_applications (
+          application_id    TEXT PRIMARY KEY,
+          user_id           TEXT NOT NULL,
+          job_id            TEXT NOT NULL,
+          job_title         TEXT NOT NULL,
+          company_name      TEXT NOT NULL,
+          company_logo      TEXT,
+          location          TEXT,
+          salary_min        REAL,
+          salary_max        REAL,
+          job_type          TEXT,
+          description       TEXT,
+          resume_url        TEXT NOT NULL,
+          status            TEXT NOT NULL DEFAULT 'pending',
+          applied_at        TEXT NOT NULL,
+          updated_at        TEXT NOT NULL,
+          cached_at         TEXT NOT NULL,
+          FOREIGN KEY (user_id) REFERENCES cached_users (user_id) ON DELETE CASCADE
+        )
+      ''');
+
+      await db.execute('''
+      CREATE TABLE IF NOT EXISTS company_branches (
+        branch_id     TEXT PRIMARY KEY,
+        company_id    TEXT NOT NULL,
+        branch_name   TEXT NOT NULL,
+        address       TEXT NOT NULL,
+        city          TEXT NOT NULL,
+        state         TEXT NOT NULL,
+        postal_code   TEXT,
+        country       TEXT NOT NULL DEFAULT 'Malaysia',
+        phone         TEXT,
+        email         TEXT,
+        is_head_office INTEGER NOT NULL DEFAULT 0,
+        created_at    TEXT NOT NULL,
+        updated_at    TEXT NOT NULL,
+        cached_at     TEXT NOT NULL,
+        FOREIGN KEY (company_id) REFERENCES cached_company_profiles (user_id) ON DELETE CASCADE
+      )
+    ''');
     }
-    await _onCreate(db, newV);
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -661,12 +733,12 @@ class LocalDB {
   // ══════════════════════════════════════════════════════════════════════════
   // USER PROFILES
   // ══════════════════════════════════════════════════════════════════════════
-  // cache invalidation trigger when user update profile (clearUserCache / logout / TTL expire(5 minutes))
-  static const int _userCacheTTLMinutes = 5; // Cache valid for 5 minutes
+
+  static const int _userCacheTTLMinutes = 5;
 
   static Future<void> cacheUser(Users user) async {
     final db = await LocalDB.db;
-    await db.insert('users', {
+    await db.insert('cached_users', {
       'user_id': user.userId,
       'role': user.role,
       'fullname': user.fullname,
@@ -682,7 +754,7 @@ class LocalDB {
   static Future<Users?> getCachedUser(String userId) async {
     final db = await LocalDB.db;
     final result = await db.query(
-      'users',
+      'cached_users',
       where: 'user_id = ?',
       whereArgs: [userId],
     );
@@ -706,7 +778,7 @@ class LocalDB {
 
   static Future<void> cacheJobSeekerProfile(String userId, Map<String, dynamic> profile) async {
     final db = await LocalDB.db;
-    await db.insert('job_seeker_profiles', {
+    await db.insert('cached_job_seeker_profiles', {
       'user_id': userId,
       'date_of_birth': profile['date_of_birth'],
       'gender': profile['gender'],
@@ -719,7 +791,7 @@ class LocalDB {
   static Future<Map<String, dynamic>?> getCachedJobSeekerProfile(String userId) async {
     final db = await LocalDB.db;
     final result = await db.query(
-      'job_seeker_profiles',
+      'cached_job_seeker_profiles',
       where: 'user_id = ?',
       whereArgs: [userId],
     );
@@ -729,7 +801,7 @@ class LocalDB {
 
   static Future<void> cacheCompanyProfile(String userId, Map<String, dynamic> profile) async {
     final db = await LocalDB.db;
-    await db.insert('company_profiles', {
+    await db.insert('cached_company_profiles', {
       'user_id': userId,
       'company_name': profile['company_name'] ?? '',
       'company_description': profile['company_description'],
@@ -744,7 +816,7 @@ class LocalDB {
   static Future<Map<String, dynamic>?> getCachedCompanyProfile(String userId) async {
     final db = await LocalDB.db;
     final result = await db.query(
-      'company_profiles',
+      'cached_company_profiles',
       where: 'user_id = ?',
       whereArgs: [userId],
     );
@@ -754,13 +826,12 @@ class LocalDB {
 
   static Future<void> cacheSkills(String userId, List<Map<String, dynamic>> skills) async {
     final db = await LocalDB.db;
-    // Delete old skills for this user first
-    await db.delete('skills', where: 'user_id = ?', whereArgs: [userId]);
+    await db.delete('cached_skills', where: 'user_id = ?', whereArgs: [userId]);
 
     final batch = db.batch();
     final now = DateTime.now().toIso8601String();
     for (final skill in skills) {
-      batch.insert('skills', {
+      batch.insert('cached_skills', {
         'skill_id': skill['skill_id'] as String,
         'user_id': userId,
         'skill_name': skill['skill_name'] as String,
@@ -774,7 +845,7 @@ class LocalDB {
   static Future<List<Map<String, dynamic>>> getCachedSkills(String userId) async {
     final db = await LocalDB.db;
     final result = await db.query(
-      'skills',
+      'cached_skills',
       where: 'user_id = ?',
       whereArgs: [userId],
     );
@@ -783,12 +854,12 @@ class LocalDB {
 
   static Future<void> cacheEducation(String userId, List<Map<String, dynamic>> education) async {
     final db = await LocalDB.db;
-    await db.delete('education', where: 'user_id = ?', whereArgs: [userId]);
+    await db.delete('cached_education', where: 'user_id = ?', whereArgs: [userId]);
 
     final batch = db.batch();
     final now = DateTime.now().toIso8601String();
     for (final edu in education) {
-      batch.insert('education', {
+      batch.insert('cached_education', {
         'education_id': edu['education_id'] as String,
         'user_id': userId,
         'institution_name': edu['institution_name'] as String,
@@ -806,7 +877,7 @@ class LocalDB {
   static Future<List<Map<String, dynamic>>> getCachedEducation(String userId) async {
     final db = await LocalDB.db;
     final result = await db.query(
-      'education',
+      'cached_education',
       where: 'user_id = ?',
       whereArgs: [userId],
       orderBy: 'start_date DESC',
@@ -816,12 +887,12 @@ class LocalDB {
 
   static Future<void> cacheExperience(String userId, List<Map<String, dynamic>> experience) async {
     final db = await LocalDB.db;
-    await db.delete('experience', where: 'user_id = ?', whereArgs: [userId]);
+    await db.delete('cached_experience', where: 'user_id = ?', whereArgs: [userId]);
 
     final batch = db.batch();
     final now = DateTime.now().toIso8601String();
     for (final exp in experience) {
-      batch.insert('experience', {
+      batch.insert('cached_experience', {
         'experience_id': exp['experience_id'] as String,
         'user_id': userId,
         'company_name': exp['company_name'] as String,
@@ -838,7 +909,7 @@ class LocalDB {
   static Future<List<Map<String, dynamic>>> getCachedExperience(String userId) async {
     final db = await LocalDB.db;
     final result = await db.query(
-      'experience',
+      'cached_experience',
       where: 'user_id = ?',
       whereArgs: [userId],
       orderBy: 'start_date DESC',
@@ -848,12 +919,12 @@ class LocalDB {
 
   static Future<void> cacheResumes(String userId, List<Map<String, dynamic>> resumes) async {
     final db = await LocalDB.db;
-    await db.delete('resumes', where: 'user_id = ?', whereArgs: [userId]);
+    await db.delete('cached_resumes', where: 'user_id = ?', whereArgs: [userId]);
 
     final batch = db.batch();
     final now = DateTime.now().toIso8601String();
     for (final resume in resumes) {
-      batch.insert('resumes', {
+      batch.insert('cached_resumes', {
         'resume_id': resume['resume_id'] as String,
         'user_id': userId,
         'file_url': resume['file_url'] as String,
@@ -869,12 +940,16 @@ class LocalDB {
   static Future<List<Map<String, dynamic>>> getCachedResumes(String userId) async {
     final db = await LocalDB.db;
     final result = await db.query(
-      'resumes',
+      'cached_resumes',
       where: 'user_id = ?',
       whereArgs: [userId],
     );
     return result;
   }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // COMPANY BRANCHES
+  // ══════════════════════════════════════════════════════════════════════════
 
   static Future<void> cacheBranches(String companyId, List<Map<String, dynamic>> branches) async {
     final db = await LocalDB.db;
@@ -914,25 +989,78 @@ class LocalDB {
     return result;
   }
 
-  // ── Utilities ─────────────────────────────────────────────────────────────
+  // ══════════════════════════════════════════════════════════════════════════
+  // UTILITIES
+  // ══════════════════════════════════════════════════════════════════════════
 
+// In local_db.dart, update the clearAllCaches method:
   static Future<void> clearAllCaches() async {
     final d = await db;
-    for (final t in ['posts','saved_posts','job_posts','saved_jobs','reference_table',
-      'users','job_seeker_profiles','company_profiles','skills',
-      'education','experience','resumes','company_branches']) {
-      await d.delete(t);
+
+    // List of tables that definitely exist
+    final tablesToClear = [
+      'posts',
+      'comments',
+      'liked_posts',
+      'saved_posts',
+      'job_posts',
+      'saved_jobs',
+      'cached_job_applications',
+       'users','job_seeker_profiles','company_profiles','skills',
+      'education','experience','resumes','company_branches',
+    ];
+
+    // Clear main tables
+    for (final table in tablesToClear) {
+      try {
+        await d.delete(table);
+        print('Cleared table: $table');
+      } catch (e) {
+        print('Error clearing table $table: $e');
+      }
+    }
+
+    // Try to clear company_branches if it exists
+    try {
+      await d.delete('company_branches');
+      print('Cleared table: company_branches');
+    } catch (e) {
+      print('Table company_branches does not exist yet: $e');
     }
   }
 
+// Also update clearUserCache method:
   static Future<void> clearUserCache(String userId) async {
     final db = await LocalDB.db;
-    await db.delete('users', where: 'user_id = ?', whereArgs: [userId]);
-    await db.delete('job_seeker_profiles', where: 'user_id = ?', whereArgs: [userId]);
-    await db.delete('company_profiles', where: 'user_id = ?', whereArgs: [userId]);
-    await db.delete('skills', where: 'user_id = ?', whereArgs: [userId]);
-    await db.delete('education', where: 'user_id = ?', whereArgs: [userId]);
-    await db.delete('experience', where: 'user_id = ?', whereArgs: [userId]);
-    await db.delete('resumes', where: 'user_id = ?', whereArgs: [userId]);
+
+    // Delete from main tables
+    await db.delete('cached_users', where: 'user_id = ?', whereArgs: [userId]);
+    await db.delete('cached_job_seeker_profiles', where: 'user_id = ?', whereArgs: [userId]);
+    await db.delete('cached_company_profiles', where: 'user_id = ?', whereArgs: [userId]);
+    await db.delete('cached_skills', where: 'user_id = ?', whereArgs: [userId]);
+    await db.delete('cached_education', where: 'user_id = ?', whereArgs: [userId]);
+    await db.delete('cached_experience', where: 'user_id = ?', whereArgs: [userId]);
+    await db.delete('cached_resumes', where: 'user_id = ?', whereArgs: [userId]);
+    await db.delete('cached_job_applications', where: 'user_id = ?', whereArgs: [userId]);
+
+    // Try to delete from company_branches
+    try {
+      await db.delete('company_branches', where: 'company_id = ?', whereArgs: [userId]);
+    } catch (e) {
+      // Table might not exist yet
+    }
+  }
+
+  static Future<void> resetDatabase() async {
+    try {
+      final dbPath = join(await getDatabasesPath(), 'jobify_v8.db');
+      await deleteDatabase(dbPath);
+      _db = null;
+      print('Database deleted successfully');
+      await db; // This will recreate the database with correct schema
+      print('Database recreated successfully');
+    } catch (e) {
+      print('Error resetting database: $e');
+    }
   }
 }

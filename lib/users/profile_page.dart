@@ -48,8 +48,10 @@ class _ProfilePageState extends State<ProfilePage> {
   String industry = '';
   String companySize = '';
   String? _companyId;
+  String location = '';
   String companyPhone = '';
   String companyEmail = '';
+  String websiteUrl = '';
 
   /// data collection
   List<Map<String, dynamic>> branches = [];
@@ -57,12 +59,23 @@ class _ProfilePageState extends State<ProfilePage> {
   List<Map<String, dynamic>> educationList = [];
   List<Map<String, dynamic>> workList = [];
 
+  /// Resumes
+  List<Map<String, dynamic>> resumes = [];
+
   /// Job categories for industry dropdown
   List<Map<String, dynamic>> _jobCategories = [];
   bool _isLoadingCategories = false;
 
   bool isLoading = true;
   bool isRefreshing = false;
+
+  // Industry options (from first file, with dynamic categories as fallback)
+  final List<String> fallbackIndustryOptions = [
+    'Technology', 'Healthcare', 'Finance', 'Marketing', 'Retail',
+    'Manufacturing', 'Education', 'Construction', 'Hospitality', 'Transportation',
+    'Real Estate', 'Consulting', 'Legal', 'Entertainment', 'Agriculture',
+    'Energy', 'Telecommunications', 'Other'
+  ];
 
   // Company size options
   final List<String> companySizeOptions = [

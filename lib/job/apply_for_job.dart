@@ -6,6 +6,7 @@ import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
 import 'package:jobify/data/applicantion_respository.dart';
+import 'applicantion_respository.dart';
 import 'resume_management_page.dart';
 
 class ApplyForJobPage extends StatefulWidget {
@@ -314,7 +315,7 @@ class _ApplyForJobPageState extends State<ApplyForJobPage> {
                 ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.blue.shade700,
-                  foregroundColor: Colors.white,
+                    foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),

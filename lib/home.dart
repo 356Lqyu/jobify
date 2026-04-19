@@ -5,11 +5,10 @@ import 'package:jobify/users/users.dart';
 import 'package:jobify/bottom_bar.dart';
 import 'package:jobify/job_post/create_job_post.dart';
 import 'package:jobify/job_post/job_post_management.dart';
-import 'package:jobify/users/profile_page.dart';
 import 'package:provider/provider.dart';
 import 'discovery/job_discovery.dart';
 import 'users/user_provider.dart';
-
+import 'package:jobify/job/my_applications.dart';
 class HomePage extends StatefulWidget {
   final Users user;
   const HomePage({super.key, required this.user});
@@ -118,14 +117,12 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     return WillPopScope(
       onWillPop: () async {
-        // Prevent going back to login screen
         if (selectedIndex != 0) {
           setState(() {
             selectedIndex = 0;
           });
           return false;
         }
-        // Show exit dialog if on home screen
         final shouldExit = await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
@@ -166,6 +163,6 @@ class AppliedScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(child: Text("Applied Screen"));
+    return const MyApplicationsPage();
   }
 }

@@ -17,8 +17,7 @@ class AuthGate extends StatelessWidget {
   Widget build(BuildContext context) {
     return StreamBuilder<AuthState>(
       stream: Supabase.instance.client.auth.onAuthStateChange,
-      // build page based on the auth state
-      builder: (context,snapshot) {
+      builder: (context, snapshot) {
         // Loading
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
@@ -31,7 +30,7 @@ class AuthGate extends StatelessWidget {
         // Check for errors
         if (snapshot.hasError) {
           debugPrint('Auth error: ${snapshot.error}');
-          return const WelcomePage();
+          return const AnimatedHomePage();  // Changed from WelcomePage to AnimatedHomePage
         }
 
         // Get session

@@ -11,6 +11,8 @@ import 'package:jobify/users/users.dart';
 import 'package:jobify/data/local_db.dart';
 import 'package:jobify/job_post/job_detail_employer.dart';
 import 'package:jobify/social/social_post_details.dart';
+import 'package:jobify/job/apply_for_job.dart';
+
 
 class SocialFeedPage extends StatefulWidget {
   final Users user;
@@ -298,14 +300,58 @@ class _FollowingTab extends StatelessWidget {
 }
 
 // FEED CARD
-class FeedCard extends StatelessWidget {
+// ─────────────────────────────────────────────────────────────────────────────
+
+// In social_feed.dart, update the _FeedCard class:
+
+class _FeedCard extends StatelessWidget {
   final FeedPost post;
   final Users currentUser;
-  const FeedCard({super.key, required this.post, required this.currentUser});
+  const _FeedCard({required this.post, required this.currentUser});
+
+  void _navigateToApplyJob(BuildContext context, JobPost job) {
+    // Check if user is job seeker before allowing apply
+    if (currentUser.role.toUpperCase() != 'JOB_SEEKER') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Only job seekers can apply for jobs.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    final jobMap = {
+      'job_id': job.jobId,
+      'job_title': job.jobTitle,
+      'description': job.description,
+      'location': job.location,
+      'salary_min': job.salaryMin,
+      'salary_max': job.salaryMax,
+      'job_type': job.jobType,
+      'company_name': job.companyName,
+      'company_profile': {
+        'company_name': job.companyName,
+        'logo_url': job.companyLogoUrl,
+      },
+    };
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ApplyForJobPage(
+          job: jobMap,
+          userId: currentUser.userId,
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final prov = context.read<SocialFeedProvider>();
+    // Check if user is job seeker
+    final isJobSeeker = currentUser.role.toUpperCase() == 'JOB_SEEKER';
 
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 4, 12, 4),
@@ -432,7 +478,22 @@ class FeedCard extends StatelessWidget {
                   _LinkedJobCard(job: post.linkedJob!),
               ],
             ),
-          ),
+
+          // ── Media ────────────────────────────────────────────────────
+          if (post.mediaUrls.isNotEmpty)
+            _MediaGrid(urls: post.mediaUrls),
+
+          // ── Linked job ───────────────────────────────────────────────
+          // Only show Apply button for Job Seekers
+          if (post.postType == PostType.job && post.linkedJob != null)
+            _LinkedJobCard(
+              job: post.linkedJob!,
+              userId: currentUser.userId,
+              showApplyButton: isJobSeeker,  // Only show for job seekers
+              onApply: isJobSeeker ? () => _navigateToApplyJob(context, post.linkedJob!) : null,
+            ),
+
+          // ── Action row ───────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(6, 4, 6, 6),
             child: Row(
@@ -526,7 +587,7 @@ class FeedCard extends StatelessWidget {
     );
   }
 }
-
+// ─────────────────────────────────────────────────────────────────────────────
 // COMMENT SHEET
 class _CommentSheet extends StatefulWidget {
   final FeedPost post;
@@ -923,7 +984,16 @@ class _MediaGrid extends StatelessWidget {
 
 class _LinkedJobCard extends StatelessWidget {
   final JobPost job;
-  const _LinkedJobCard({required this.job});
+  final String? userId;
+  final bool showApplyButton;  // Add this parameter
+  final VoidCallback? onApply;
+
+  const _LinkedJobCard({
+    required this.job,
+    this.userId,
+    this.showApplyButton = true,  // Default to true for backward compatibility
+    this.onApply,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -978,12 +1048,33 @@ class _LinkedJobCard extends StatelessWidget {
               _InlineChip(icon: Icons.access_time_outlined, label: job.jobType),
             ],
           ),
+          const SizedBox(height: 8),
+          // Only show Apply button if showApplyButton is true
+          if (showApplyButton)
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: onApply ?? () {},
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF2563EB),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  minimumSize: const Size(double.infinity, 32),
+                ),
+                child: const Text(
+                  'Apply Now',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ),
         ],
       ),
     );
   }
 }
-
 // ─────────────────────────────────────────────────────────────────────────────
 // SMALL REUSABLE WIDGETS
 // ─────────────────────────────────────────────────────────────────────────────

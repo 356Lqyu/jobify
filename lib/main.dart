@@ -6,11 +6,11 @@ import 'package:jobify/users/users.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:jobify/auth/registration.dart';
-import 'auth/forgot_password.dart';
-import 'auth/login.dart';
-import 'setting_page.dart';
-import 'home.dart';
-import 'data/user_repository.dart';
+import 'package:jobify/auth/forgot_password.dart';
+import 'package:jobify/auth/login.dart';
+import 'package:jobify/setting_page.dart';
+import 'package:jobify/home.dart';
+import 'package:jobify/data/user_repository.dart';
 
 const String supabaseUrl = 'https://nejlppdligklddlwvzub.supabase.co';
 const String supabaseKey = 'sb_secret_518COekCnlz8R_OAgQVCIw_2E9LVs8_';
@@ -18,6 +18,7 @@ const String supabaseKey = 'sb_secret_518COekCnlz8R_OAgQVCIw_2E9LVs8_';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Supabase setup
   await Supabase.initialize(
     url: supabaseUrl,
     anonKey: supabaseKey,
@@ -38,6 +39,8 @@ Future<void> main() async {
 }
 
 final supabase = Supabase.instance.client;
+
+// In main.dart, ensure you have these routes:
 
 class MainApp extends StatelessWidget {
   const MainApp({super.key});
@@ -64,7 +67,6 @@ class MainApp extends StatelessWidget {
     );
   }
 }
-
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
 
@@ -94,7 +96,7 @@ class AuthGate extends StatelessWidget {
 
               final user = userSnapshot.data;
               if (user == null) {
-                return const WelcomePage();
+                return const AnimatedHomePage();
               }
 
               return HomePage(user: user);
@@ -102,7 +104,7 @@ class AuthGate extends StatelessWidget {
           );
         }
 
-        return const WelcomePage();
+        return const AnimatedHomePage();
       },
     );
   }
@@ -127,13 +129,16 @@ class WelcomePage extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              /// Logo
-              Container(
-                width: 260,
-                height: 130,
-                child: Image.asset(
-                  'assets/images/logo3.png',
-                  fit: BoxFit.contain,
+              /// Logo with animation
+              ScaleTransition(
+                scale: _scaleAnimation,
+                child: Container(
+                  width: 260,
+                  height: 130,
+                  child: Image.asset(
+                    'assets/images/logo3.png',
+                    fit: BoxFit.contain,
+                  ),
                 ),
               ),
 
@@ -153,7 +158,7 @@ class WelcomePage extends StatelessWidget {
 
               const SizedBox(height: 40),
 
-              /// Job Button
+              /// Job Button - Looking for a job
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
@@ -169,7 +174,9 @@ class WelcomePage extends StatelessWidget {
                   onPressed: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (_) => const Login(selectedRole: 'JOB_SEEKER')),
+                      MaterialPageRoute(
+                        builder: (_) => const Login(selectedRole: 'JOB_SEEKER'),
+                      ),
                     );
                   },
                   child: Row(
@@ -185,7 +192,7 @@ class WelcomePage extends StatelessWidget {
 
               const SizedBox(height: 15),
 
-              /// Hiring Button
+              /// Hiring Button - I'm Hiring
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
@@ -202,7 +209,9 @@ class WelcomePage extends StatelessWidget {
                   onPressed: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (_) => const Login(selectedRole: 'POSTER')),
+                      MaterialPageRoute(
+                        builder: (_) => const Login(selectedRole: 'POSTER'),
+                      ),
                     );
                   },
                   child: Row(

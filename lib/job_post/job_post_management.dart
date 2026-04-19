@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:jobify/data/job_repository.dart';
 import 'package:jobify/job_post/create_job_post.dart';
 import 'package:jobify/job_post/job_detail_employer.dart';
+import 'package:jobify/job/applicant_list.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:jobify/data/local_db.dart';
 import 'package:jobify/job/applicant_list.dart';
@@ -14,7 +15,7 @@ class JobPostManagementPage extends StatefulWidget {
 }
 
 class JobPostManagementPageState extends State<JobPostManagementPage> {
-  final JobRepository _jobRepo = JobRepository();
+  final JobPostService _service = JobPostService();
   final supabase = Supabase.instance.client;
   List<Map<String, dynamic>> _jobs = [];
   bool _isLoading = true;
@@ -79,67 +80,58 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
 
     setState(() => _isLoading = true);
     try {
-      final fresh = await _jobRepo.fetchMyJobPosts(userId: _userId);
+      final data = await _service.fetchMyJobPosts(userId: _userId);
+
       final jobsWithCounts = <Map<String, dynamic>>[];
-      for (final job in fresh) {
-        final jobId = job['job_id'];
-        final totalCount = await _getJobApplicationCount(jobId);
-        final pendingCount = await _getPendingApplicationCount(jobId);
-        final flatJob = _flattenJobMap(job);
+      for (final job in data) {
+        final totalCount = await _getJobApplicationCount(job['job_id']);
+        final pendingCount = await _getPendingApplicationCount(job['job_id']);
         jobsWithCounts.add({
-          ...flatJob,
-          'application_count': totalCount,   // total applications (excluding withdrawn)
-          'pending_count': pendingCount,     // pending only
+          ...job,
+          'application_count': totalCount,
+          'pending_count': pendingCount,
         });
       }
-      setState(() => _jobs = jobsWithCounts);
-      await LocalDB.insertJobMaps(jobsWithCounts);
+
+      setState(() {
+        _jobs = jobsWithCounts;
+        _isLoading = false;
+      });
     } catch (e) {
-      print('Network error: $e');
-    } finally {
+      print('Error loading jobs: $e');
       setState(() => _isLoading = false);
     }
   }
 
-  Map<String, dynamic> _flattenJobMap(Map<String, dynamic> job) {
-    String getName(dynamic field) {
-      if (field == null) return '';
-      if (field is Map) return field['name']?.toString() ?? '';
-      return '';
+  Future<int> _getJobApplicationCount(String jobId) async {
+    try {
+      final response = await supabase
+          .from('job_application')
+          .select('application_id')
+          .eq('job_id', jobId)
+          .neq('status', 'withdrawn');
+
+      final List<dynamic> results = response as List<dynamic>;
+      return results.length;
+    } catch (e) {
+      print('Error getting count: $e');
+      return 0;
     }
-    return {
-      'job_id': job['job_id'],
-      'company_id': job['company_id'],
-      'created_by': job['created_by'],
-      'job_title': job['job_title'],
-      'description': job['description'],
-      'location': job['location'],
-      'remote_option': job['remote_option'] == true,
-      'salary_min': job['salary_min'],
-      'salary_max': job['salary_max'],
-      'job_type': getName(job['job_type_id']),
-      'job_category': getName(job['job_category_id']),
-      'experience_level': getName(job['experience_level_id']),
-      'vacancy_count': job['vacancy_count'],
-      'application_deadline': job['application_deadline'],
-      'status': job['status'],
-      'view_count': job['view_count'] ?? 0,
-      'application_count': job['application_count'] ?? 0,
-      'created_at': job['created_at'],
-      'image_urls': (() {
-        if (job['image_urls'] is String) {
-          final str = job['image_urls'] as String;
-          if (str.isEmpty) return [];
-          return str.split(',').where((url) => url.trim().isNotEmpty).toList();
-        }
-        return (job['image_urls'] as List?) ?? [];
-      })(),
-      'video_url': job['video_url'],
-      'company_name': job['company_name'] ?? '',
-      'company_logo_url': job['company_logo_url'],
-      'company_industry': job['company_industry'],
-      'is_saved': job['is_saved'] == true,
-    };
+  }
+
+  Future<int> _getPendingApplicationCount(String jobId) async {
+    try {
+      final response = await supabase
+          .from('job_application')
+          .select('application_id')
+          .eq('job_id', jobId)
+          .eq('status', 'pending');
+
+      final List<dynamic> results = response as List<dynamic>;
+      return results.length;
+    } catch (e) {
+      return 0;
+    }
   }
 
   Future<void> _toggleJobStatus(String jobId, bool isActive) async {
@@ -301,7 +293,10 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
                   final isActive = job['status'] == 'active';
                   final List<String> imageUrls = List<String>.from(job['image_urls'] ?? []);
                   final thumbnail = imageUrls.isNotEmpty ? imageUrls.first : null;
-                  return _buildJobCard(job, isActive, thumbnail);
+                  final applicationCount = job['application_count'] as int? ?? 0;
+                  final pendingCount = job['pending_count'] as int? ?? 0;
+
+                  return _buildJobCard(job, isActive, thumbnail, applicationCount, pendingCount);
                 },
               ),
             ),
@@ -346,8 +341,8 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
     );
   }
 
-  Widget _buildJobCard(Map<String, dynamic> job, bool isActive, String? thumbnail) {
-    final jobType = job['job_type'] ?? 'Full-time';
+  Widget _buildJobCard(Map<String, dynamic> job, bool isActive, String? thumbnail, int applicationCount, int pendingCount) {
+    final jobType = job['job_type_id']?['name'] ?? 'Full-time';
     final location = job['location'] ?? 'Unknown location';
     final pendingCount = job['pending_count'] as int? ?? 0;
     final hasApplications = (job['application_count'] ?? 0) > 0;
@@ -359,22 +354,21 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
       margin: const EdgeInsets.only(bottom: 12),
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Clickable content area (navigates to job detail)
-          GestureDetector(
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => JobDetailEmployer(job: job)),
-            ),
-            behavior: HitTestBehavior.opaque,
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                if (thumbnail != null)
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.network(thumbnail, width: 60, height: 60, fit: BoxFit.cover),
+                  ),
+                if (thumbnail != null) const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // Thumbnail (if any)
@@ -406,103 +400,52 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
-                            const SizedBox(height: 4),
-                            Row(
-                              children: [
-                                Icon(Icons.location_on_outlined, size: 14, color: Colors.grey.shade600),
-                                const SizedBox(width: 4),
-                                Expanded(
-                                  child: Text(
-                                    location,
-                                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Container(
-                                  width: 4,
-                                  height: 4,
-                                  decoration: const BoxDecoration(color: Colors.grey, shape: BoxShape.circle),
-                                ),
-                                const SizedBox(width: 8),
-                                Icon(Icons.work_outline, size: 14, color: Colors.grey.shade600),
-                                const SizedBox(width: 4),
-                                Flexible(
-                                  child: Text(
-                                    jobType,
-                                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                Icon(Icons.visibility, size: 14, color: Colors.grey.shade600),
-                                const SizedBox(width: 4),
-                                Text(
-                                  '${job['view_count'] ?? 0} views',
-                                  style: const TextStyle(fontSize: 12, color: Colors.grey),
-                                ),
-                                const SizedBox(width: 16),
-                                Icon(Icons.description, size: 14, color: Colors.grey.shade600),
-                                const SizedBox(width: 4),
-                                Text(
-                                  '${job['application_count'] ?? 0} applications',
-                                  style: const TextStyle(fontSize: 12, color: Colors.grey),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                      // Right column: status badge + pending badge
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                            decoration: BoxDecoration(
-                              color: isActive ? Colors.green.shade50 : Colors.grey.shade200,
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Text(
-                              isActive ? 'Active' : 'Closed',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: isActive ? Colors.green.shade700 : Colors.grey.shade700,
-                              ),
-                            ),
                           ),
-                          if (pendingCount > 0) ...[
-                            const SizedBox(height: 6),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: Colors.orange.shade50,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: Colors.orange.shade200),
-                              ),
-                              child: Text(
-                                '$pendingCount pending',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w500,
-                                  color: Colors.orange.shade700,
-                                ),
-                              ),
-                            ),
-                          ],
+                          const SizedBox(width: 8),
+                          Container(width: 4, height: 4, decoration: const BoxDecoration(color: Colors.grey, shape: BoxShape.circle)),
+                          const SizedBox(width: 8),
+                          Icon(Icons.work_outline, size: 14, color: Colors.grey.shade600),
+                          const SizedBox(width: 4),
+                          Text(jobType, style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
                         ],
                       ),
                     ],
                   ),
-                ],
-              ),
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: isActive ? Colors.green.shade50 : Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        isActive ? 'Active' : 'Closed',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: isActive ? Colors.green.shade700 : Colors.grey.shade700,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    if (pendingCount > 0)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          '$pendingCount pending',
+                          style: TextStyle(fontSize: 10, color: Colors.blue.shade700, fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
             ),
           ),
           const Divider(height: 1),
@@ -528,6 +471,15 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
                   },
                   color: Colors.blue,
                 ),
+                _actionButton(
+                  icon: Icons.visibility_outlined,
+                  label: 'Details',
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => JobDetailEmployer(job: job)),
+                  ),
+                  color: Colors.blueGrey,
+                ),
                 if (isActive)
                   _actionButton(
                     icon: Icons.close,
@@ -542,29 +494,6 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
                     onTap: () => _toggleJobStatus(job['job_id'], false),
                     color: Colors.green,
                   ),
-                _actionButton(
-                  icon: Icons.edit_outlined,
-                  label: 'Edit',
-                  onTap: hasApplications
-                      ? null
-                      : () async {
-                    final fullJob = await _jobRepo.fetchJobPostById(job['job_id']);
-                    if (fullJob != null && mounted) {
-                      final result = await Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => CreateJobPost(existingJob: fullJob)),
-                      );
-                      if (result == true) loadJobs();
-                    } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Failed to load job details'),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
-                    }
-                  },
-                  color: hasApplications ? Colors.grey : Colors.blue,
-                ),
                 _actionButton(
                   icon: Icons.delete_outline,
                   label: 'Delete',
@@ -613,9 +542,15 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
           const SizedBox(height: 16),
           Text('No job posts yet', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.grey.shade700)),
           const SizedBox(height: 8),
-          Text('Tap the “Post a Job” button to create your first listing.', style: TextStyle(fontSize: 14, color: Colors.grey.shade500), textAlign: TextAlign.center),
+          Text(
+            'Tap the "Post a Job" button to create your first listing.',
+            style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
+            textAlign: TextAlign.center,
+          ),
         ],
       ),
     );
   }
+
+
 }

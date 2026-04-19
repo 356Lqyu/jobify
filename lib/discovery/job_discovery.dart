@@ -7,6 +7,8 @@ import 'package:jobify/social/social_feed_provider.dart';
 import 'package:jobify/data/job_repository.dart';
 import 'package:jobify/users/users.dart';
 import 'package:jobify/discovery/job_details.dart';
+import 'dart:async';
+import '/data/event_bus.dart';
 
 class DiscoveryJob extends StatefulWidget {
   final Users user;
@@ -16,7 +18,8 @@ class DiscoveryJob extends StatefulWidget {
   State<DiscoveryJob> createState() => _DiscoveryJobState();
 }
 
-class _DiscoveryJobState extends State<DiscoveryJob> {
+class _DiscoveryJobState extends State<DiscoveryJob>{
+  StreamSubscription<String>? _jobSavedSub;
   late final JobProvider _provider;
   final _searchCtrl = TextEditingController();
 
@@ -26,12 +29,19 @@ class _DiscoveryJobState extends State<DiscoveryJob> {
     _provider = JobProvider(
       repository: JobRepository(),
       userId: widget.user.userId,
+
     );
     WidgetsBinding.instance.addPostFrameCallback((_) => _provider.init());
+    _jobSavedSub = EventBus().onJobSavedChanged.listen((jobId) {
+      _provider.refresh();
+    });
   }
+
+
 
   @override
   void dispose() {
+    _jobSavedSub?.cancel();
     _searchCtrl.dispose();
     _provider.dispose();
     super.dispose();
@@ -49,12 +59,20 @@ class _DiscoveryJobState extends State<DiscoveryJob> {
     );
   }
 
+
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider.value(
       value: _provider,
       child: Scaffold(
         backgroundColor: const Color(0xFFF1F5F9),
+        appBar: AppBar(
+          title: const Text('Jobs Discovery'),
+          backgroundColor: Colors.blue,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          automaticallyImplyLeading: false,
+        ),
         body: SafeArea(
           bottom: false,
           child: Column(

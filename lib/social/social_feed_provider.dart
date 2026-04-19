@@ -8,33 +8,31 @@ class SocialFeedProvider extends ChangeNotifier {
   final FeedRepository _repository;
   final String userId;
 
-  SocialFeedProvider({
-    required FeedRepository repository,
-    required this.userId,
-  }) : _repository = repository;
+  SocialFeedProvider({required FeedRepository repository, required this.userId})
+    : _repository = repository;
 
   //State
-  List<FeedPost> _forYouPosts    = [];
+  List<FeedPost> _forYouPosts = [];
   List<FeedPost> _followingPosts = [];
-  bool _isLoadingForYou          = false;
-  bool _isLoadingFollowing       = false;
-  bool _hasMoreForYou            = true;
-  bool _hasMoreFollowing         = true;
+  bool _isLoadingForYou = false;
+  bool _isLoadingFollowing = false;
+  bool _hasMoreForYou = true;
+  bool _hasMoreFollowing = true;
   String? _error;
-  String _activeFilter           = 'All';
-  int _forYouOffset              = 0;
-  int _followingOffset           = 0;
-  static const int _pageSize     = 20;
+  String _activeFilter = 'All';
+  int _forYouOffset = 0;
+  int _followingOffset = 0;
+  static const int _pageSize = 20;
 
   //getter
-  List<FeedPost> get forYouPosts     => _forYouPosts;
-  List<FeedPost> get followingPosts  => _followingPosts;
-  bool   get isLoadingForYou         => _isLoadingForYou;
-  bool   get isLoadingFollowing      => _isLoadingFollowing;
-  bool   get hasMoreForYou           => _hasMoreForYou;
-  bool   get hasMoreFollowing        => _hasMoreFollowing;
-  String? get error                  => _error;
-  String get activeFilter            => _activeFilter;
+  List<FeedPost> get forYouPosts => _forYouPosts;
+  List<FeedPost> get followingPosts => _followingPosts;
+  bool get isLoadingForYou => _isLoadingForYou;
+  bool get isLoadingFollowing => _isLoadingFollowing;
+  bool get hasMoreForYou => _hasMoreForYou;
+  bool get hasMoreFollowing => _hasMoreFollowing;
+  String? get error => _error;
+  String get activeFilter => _activeFilter;
 
   //init and refresh
   Future<void> init() async {
@@ -55,25 +53,25 @@ class SocialFeedProvider extends ChangeNotifier {
 
   Future<void> refreshForYou() async {
     _isLoadingForYou = true;
-    _forYouOffset    = 0;
-    _hasMoreForYou   = true;
-    _error           = null;
+    _forYouOffset = 0;
+    _hasMoreForYou = true;
+    _error = null;
     notifyListeners();
 
     try {
       final posts = await _repository.fetchPosts(
         postTypeFilter: _activeFilter == 'All' ? null : _activeFilter,
-        limit:          _pageSize,
-        offset:         0,
+        limit: _pageSize,
+        offset: 0,
       );
-      _forYouPosts  = posts;
+      _forYouPosts = posts;
       _forYouOffset = posts.length;
       _hasMoreForYou = posts.length == _pageSize;
     } catch (e) {
       _error = 'Could not refresh feed. Showing cached data.';
       final cached = await LocalDB.getCachedPosts(
         postType: _activeFilter == 'All' ? null : _activeFilter,
-        limit:    _pageSize,
+        limit: _pageSize,
       );
       _forYouPosts = cached;
     } finally {
@@ -90,10 +88,10 @@ class SocialFeedProvider extends ChangeNotifier {
     try {
       final posts = await _repository.fetchPosts(
         postTypeFilter: _activeFilter == 'All' ? null : _activeFilter,
-        limit:          _pageSize,
-        offset:         _forYouOffset,
+        limit: _pageSize,
+        offset: _forYouOffset,
       );
-      _forYouPosts  = [..._forYouPosts, ...posts];
+      _forYouPosts = [..._forYouPosts, ...posts];
       _forYouOffset += posts.length;
       _hasMoreForYou = posts.length == _pageSize;
     } finally {
@@ -104,17 +102,18 @@ class SocialFeedProvider extends ChangeNotifier {
 
   Future<void> refreshFollowing() async {
     _isLoadingFollowing = true;
-    _followingOffset    = 0;
-    _hasMoreFollowing   = true;
+    _followingOffset = 0;
+    _hasMoreFollowing = true;
     notifyListeners();
 
     try {
       final posts = await _repository.fetchPosts(
         followingOnly: true,
-        limit:         _pageSize,
-        offset:        0,
+        followingUsersOnly: true,
+        limit: _pageSize,
+        offset: 0,
       );
-      _followingPosts  = posts;
+      _followingPosts = posts;
       _followingOffset = posts.length;
       _hasMoreFollowing = posts.length == _pageSize;
     } finally {
@@ -131,10 +130,11 @@ class SocialFeedProvider extends ChangeNotifier {
     try {
       final posts = await _repository.fetchPosts(
         followingOnly: true,
-        limit:         _pageSize,
-        offset:        _followingOffset,
+        followingUsersOnly: true,
+        limit: _pageSize,
+        offset: _followingOffset,
       );
-      _followingPosts  = [..._followingPosts, ...posts];
+      _followingPosts = [..._followingPosts, ...posts];
       _followingOffset += posts.length;
       _hasMoreFollowing = posts.length == _pageSize;
     } finally {
@@ -145,24 +145,29 @@ class SocialFeedProvider extends ChangeNotifier {
 
   //interactions
   void _updateInLists(String postId, void Function(FeedPost p) fn) {
-    for (final p in _forYouPosts)    { if (p.postId == postId) fn(p); }
-    for (final p in _followingPosts) { if (p.postId == postId) fn(p); }
+    for (final p in _forYouPosts) {
+      if (p.postId == postId) fn(p);
+    }
+    for (final p in _followingPosts) {
+      if (p.postId == postId) fn(p);
+    }
   }
 
   Future<void> toggleLike(FeedPost post) async {
     // Optimistic update
     final wasLiked = post.isLiked;
+    final newLiked = !wasLiked;
     _updateInLists(post.postId, (p) {
-      p.isLiked   = !p.isLiked;
-      p.likeCount = p.isLiked ? p.likeCount + 1 : p.likeCount - 1;
+      p.isLiked = newLiked;
+      p.likeCount = newLiked ? p.likeCount + 1 : p.likeCount - 1;
     });
     notifyListeners();
 
     final serverResult = await _repository.toggleLike(post.postId, wasLiked);
-    if (serverResult == wasLiked) {
-      // Server revert (same as original → toggle failed)
+    if (serverResult != newLiked) {
+      // Server failed → revert optimistic update
       _updateInLists(post.postId, (p) {
-        p.isLiked   = wasLiked;
+        p.isLiked = wasLiked;
         p.likeCount = wasLiked ? p.likeCount + 1 : p.likeCount - 1;
       });
       notifyListeners();
@@ -174,7 +179,10 @@ class SocialFeedProvider extends ChangeNotifier {
     _updateInLists(post.postId, (p) => p.isSaved = !p.isSaved);
     notifyListeners();
 
-    final serverResult = await _repository.toggleSavePost(post.postId, wasSaved);
+    final serverResult = await _repository.toggleSavePost(
+      post.postId,
+      wasSaved,
+    );
     if (serverResult == wasSaved) {
       // Revert
       _updateInLists(post.postId, (p) => p.isSaved = wasSaved);
@@ -182,13 +190,16 @@ class SocialFeedProvider extends ChangeNotifier {
     }
   }
 
+  // Follow the author's user ID
   Future<void> toggleFollow(FeedPost post) async {
-    if (post.companyId == null) return;
+    final targetUserId =
+        post.userId; // Author's user ID (POSTER account for companies)
     final wasFollowing = post.isFollowing;
+
     _updateInLists(post.postId, (p) => p.isFollowing = !p.isFollowing);
     notifyListeners();
 
-    await _repository.toggleFollowCompany(post.companyId!, wasFollowing);
+    await _repository.toggleFollowUser(targetUserId, wasFollowing);
   }
 
   Future<FeedPost?> createPost({
@@ -200,13 +211,13 @@ class SocialFeedProvider extends ChangeNotifier {
     String? jobId,
   }) async {
     final post = await _repository.createPost(
-      userId:    userId,
+      userId: userId,
       companyId: companyId,
-      content:   content,
-      postType:  postType,
-      hashtags:  hashtags,
+      content: content,
+      postType: postType,
+      hashtags: hashtags,
       mediaUrls: mediaUrls,
-      jobId:     jobId,
+      jobId: jobId,
     );
     if (post != null) {
       _forYouPosts = [post, ..._forYouPosts];
@@ -218,8 +229,10 @@ class SocialFeedProvider extends ChangeNotifier {
   Future<bool> deletePost(String postId) async {
     final ok = await _repository.deletePost(postId);
     if (ok) {
-      _forYouPosts    = _forYouPosts.where((p)    => p.postId != postId).toList();
-      _followingPosts = _followingPosts.where((p) => p.postId != postId).toList();
+      _forYouPosts = _forYouPosts.where((p) => p.postId != postId).toList();
+      _followingPosts = _followingPosts
+          .where((p) => p.postId != postId)
+          .toList();
       notifyListeners();
     }
     return ok;
@@ -245,40 +258,40 @@ class JobProvider extends ChangeNotifier {
   final String userId;
 
   JobProvider({required JobRepository repository, required this.userId})
-      : _repository = repository;
+    : _repository = repository;
 
-  List<JobPost> _jobs        = [];
-  bool _isLoading            = false;
-  bool _hasMore              = true;
+  List<JobPost> _jobs = [];
+  bool _isLoading = false;
+  bool _hasMore = true;
   String? _error;
-  int _offset                = 0;
+  int _offset = 0;
   static const int _pageSize = 20;
 
   // Filters
-  String  _keyword        = '';
-  String  _jobTypeFilter  = 'All';
-  String  _expLevelFilter = 'All';
-  String  _locationFilter = '';
+  String _keyword = '';
+  String _jobTypeFilter = 'All';
+  String _expLevelFilter = 'All';
+  String _locationFilter = '';
   double? _salaryMin;
-  bool    _remoteOnly     = false;
+  bool _remoteOnly = false;
 
-  List<JobPost> get jobs          => _jobs;
-  bool          get isLoading     => _isLoading;
-  bool          get hasMore       => _hasMore;
-  String?       get error         => _error;
-  String        get keyword       => _keyword;
-  String        get jobTypeFilter => _jobTypeFilter;
-  String        get expLevelFilter=> _expLevelFilter;
-  String        get locationFilter=> _locationFilter;
-  double?       get salaryMin     => _salaryMin;
-  bool          get remoteOnly    => _remoteOnly;
+  List<JobPost> get jobs => _jobs;
+  bool get isLoading => _isLoading;
+  bool get hasMore => _hasMore;
+  String? get error => _error;
+  String get keyword => _keyword;
+  String get jobTypeFilter => _jobTypeFilter;
+  String get expLevelFilter => _expLevelFilter;
+  String get locationFilter => _locationFilter;
+  double? get salaryMin => _salaryMin;
+  bool get remoteOnly => _remoteOnly;
 
   bool get hasActiveFilters =>
-      _jobTypeFilter  != 'All' ||
-          _expLevelFilter != 'All' ||
-          _locationFilter.isNotEmpty ||
-          _salaryMin != null ||
-          _remoteOnly;
+      _jobTypeFilter != 'All' ||
+      _expLevelFilter != 'All' ||
+      _locationFilter.isNotEmpty ||
+      _salaryMin != null ||
+      _remoteOnly;
 
   Future<void> init() async {
     final cached = await LocalDB.getCachedJobs(limit: _pageSize);
@@ -291,34 +304,34 @@ class JobProvider extends ChangeNotifier {
 
   Future<void> refresh() async {
     _isLoading = true;
-    _offset    = 0;
-    _hasMore   = true;
-    _error     = null;
+    _offset = 0;
+    _hasMore = true;
+    _error = null;
     notifyListeners();
 
     try {
       final jobs = await _repository.fetchJobs(
-        keyword:         _keyword.isEmpty ? null : _keyword,
-        jobType:         _jobTypeFilter  == 'All' ? null : _jobTypeFilter,
+        keyword: _keyword.isEmpty ? null : _keyword,
+        jobType: _jobTypeFilter == 'All' ? null : _jobTypeFilter,
         experienceLevel: _expLevelFilter == 'All' ? null : _expLevelFilter,
-        location:        _locationFilter.isEmpty  ? null : _locationFilter,
-        salaryMin:       _salaryMin,
-        remoteOnly:      _remoteOnly,
-        limit:           _pageSize,
-        offset:          0,
+        location: _locationFilter.isEmpty ? null : _locationFilter,
+        salaryMin: _salaryMin,
+        remoteOnly: _remoteOnly,
+        limit: _pageSize,
+        offset: 0,
       );
-      _jobs   = jobs;
+      _jobs = jobs;
       _offset = jobs.length;
       _hasMore = jobs.length == _pageSize;
     } catch (e) {
       _error = 'Could not load jobs.';
-      _jobs  = await LocalDB.getCachedJobs(
-        jobType:         _jobTypeFilter  == 'All' ? null : _jobTypeFilter,
+      _jobs = await LocalDB.getCachedJobs(
+        jobType: _jobTypeFilter == 'All' ? null : _jobTypeFilter,
         experienceLevel: _expLevelFilter == 'All' ? null : _expLevelFilter,
-        salaryMin:       _salaryMin,
-        keyword:         _keyword.isEmpty ? null : _keyword,
-        remoteOnly:      _remoteOnly,
-        limit:           _pageSize,
+        salaryMin: _salaryMin,
+        keyword: _keyword.isEmpty ? null : _keyword,
+        remoteOnly: _remoteOnly,
+        limit: _pageSize,
       );
     } finally {
       _isLoading = false;
@@ -333,37 +346,60 @@ class JobProvider extends ChangeNotifier {
 
     try {
       final jobs = await _repository.fetchJobs(
-        keyword:         _keyword.isEmpty ? null : _keyword,
-        jobType:         _jobTypeFilter  == 'All' ? null : _jobTypeFilter,
+        keyword: _keyword.isEmpty ? null : _keyword,
+        jobType: _jobTypeFilter == 'All' ? null : _jobTypeFilter,
         experienceLevel: _expLevelFilter == 'All' ? null : _expLevelFilter,
-        location:        _locationFilter.isEmpty  ? null : _locationFilter,
-        salaryMin:       _salaryMin,
-        remoteOnly:      _remoteOnly,
-        limit:           _pageSize,
-        offset:          _offset,
+        location: _locationFilter.isEmpty ? null : _locationFilter,
+        salaryMin: _salaryMin,
+        remoteOnly: _remoteOnly,
+        limit: _pageSize,
+        offset: _offset,
       );
-      _jobs    = [..._jobs, ...jobs];
+      _jobs = [..._jobs, ...jobs];
       _offset += jobs.length;
-      _hasMore  = jobs.length == _pageSize;
+      _hasMore = jobs.length == _pageSize;
     } finally {
       _isLoading = false;
       notifyListeners();
     }
   }
 
-  void search(String q)       { _keyword        = q; refresh(); }
-  void setJobType(String t)   { _jobTypeFilter  = t; refresh(); }
-  void setExpLevel(String l)  { _expLevelFilter = l; refresh(); }
-  void setLocation(String l)  { _locationFilter = l; refresh(); }
-  void setSalaryMin(double? v){ _salaryMin       = v; refresh(); }
-  void setRemoteOnly(bool v)  { _remoteOnly      = v; refresh(); }
+  void search(String q) {
+    _keyword = q;
+    refresh();
+  }
+
+  void setJobType(String t) {
+    _jobTypeFilter = t;
+    refresh();
+  }
+
+  void setExpLevel(String l) {
+    _expLevelFilter = l;
+    refresh();
+  }
+
+  void setLocation(String l) {
+    _locationFilter = l;
+    refresh();
+  }
+
+  void setSalaryMin(double? v) {
+    _salaryMin = v;
+    refresh();
+  }
+
+  void setRemoteOnly(bool v) {
+    _remoteOnly = v;
+    refresh();
+  }
 
   void clearFilters() {
-    _jobTypeFilter  = 'All';
+    _jobTypeFilter = 'All';
     _expLevelFilter = 'All';
     _locationFilter = '';
-    _salaryMin      = null;
-    _remoteOnly     = false;
+    _salaryMin = null;
+    _remoteOnly = false;
     refresh();
   }
 

@@ -6,6 +6,7 @@ import 'package:jobify/users/user_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'auth/change_password.dart';
+import 'package:jobify/job/resume_management_page.dart';
 
 class SettingPage extends StatefulWidget {
   const SettingPage({super.key});
@@ -371,7 +372,12 @@ class _SettingPageState extends State<SettingPage> {
                           await _refreshProfileData();
                         }),
                         if (isJobSeeker)
-                          buildListItem(Icons.work, 'My Resume', () {}),
+                          buildListItem(Icons.work, 'My Resume', () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const ResumeManagementPage()),
+                            ).then((_) => _refreshProfileData());
+                          }),
                       ],
                     ),
                   ),

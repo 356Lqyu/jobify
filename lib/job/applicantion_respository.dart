@@ -1,5 +1,4 @@
-
-// lib/job/application_repository.dart
+// lib/job/applicantion_respository.dart (keep your filename)
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:jobify/data/local_db.dart';
@@ -10,7 +9,7 @@ class ApplicationRepository {
   String? get _uid => _sb.auth.currentUser?.id;
 
   // ============================================================================
-  // CHECK EXISTING APPLICATION (excluding withdrawn)
+  // CHECK EXISTING APPLICATION
   // ============================================================================
 
   Future<bool> checkExistingApplication(String jobId, String userId) async {
@@ -20,7 +19,7 @@ class ApplicationRepository {
           .select()
           .eq('job_id', jobId)
           .eq('user_id', userId)
-          .neq('status', 'withdrawn')  // Exclude withdrawn applications
+          .neq('status', 'withdrawn')
           .maybeSingle();
       return existing != null;
     } catch (e) {
@@ -37,6 +36,7 @@ class ApplicationRepository {
     required String jobId,
     required String userId,
     required String resumeUrl,
+    String? resumeFileName,
     String? coverLetter,
   }) async {
     try {
@@ -50,6 +50,7 @@ class ApplicationRepository {
         'job_id': jobId,
         'user_id': userId,
         'resume_url': resumeUrl,
+        'resume_file_name': resumeFileName ?? 'Resume.pdf',
         'status': 'pending',
         'applied_at': now,
         'updated_at': now,
@@ -65,13 +66,54 @@ class ApplicationRepository {
           .select()
           .single();
 
-      await LocalDB.cacheJobApplication(response as Map<String, dynamic>, userId);
+      // Get job details for caching
+      final jobDetails = await _getJobDetails(jobId);
+
+      final applicationWithJob = {
+        ...response as Map<String, dynamic>,
+        'job_title': jobDetails?['job_title'] ?? 'Unknown Position',
+        'company_name': jobDetails?['company_profile']?['company_name'] ?? 'Unknown Company',
+        'company_logo': jobDetails?['company_profile']?['logo_url'],
+        'location': jobDetails?['location'] ?? 'Not specified',
+        'salary_min': jobDetails?['salary_min'],
+        'salary_max': jobDetails?['salary_max'],
+        'job_type': jobDetails?['job_type']?['name'] ?? 'Not specified',
+        'description': jobDetails?['description'] ?? '',
+      };
+
+      await LocalDB.cacheJobApplication(applicationWithJob, userId);
 
       debugPrint('Application submitted successfully for job: $jobId');
-      return response;
+      return applicationWithJob;
     } catch (e) {
       debugPrint('Error applying for job: $e');
       rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>?> _getJobDetails(String jobId) async {
+    try {
+      final response = await _sb
+          .from('job_post')
+          .select('''
+            job_id,
+            job_title,
+            description,
+            location,
+            salary_min,
+            salary_max,
+            job_type!job_post_job_type_id_fkey (name),
+            company_profile!job_post_company_id_fkey (
+              company_name,
+              logo_url
+            )
+          ''')
+          .eq('job_id', jobId)
+          .maybeSingle();
+      return response;
+    } catch (e) {
+      debugPrint('Error fetching job details: $e');
+      return null;
     }
   }
 
@@ -114,7 +156,7 @@ class ApplicationRepository {
             )
           ''')
           .eq('user_id', userId)
-          .neq('status', 'withdrawn')  // Don't show withdrawn applications
+          .neq('status', 'withdrawn')
           .order('applied_at', ascending: false);
 
       final applications = List<Map<String, dynamic>>.from(response);
@@ -161,7 +203,7 @@ class ApplicationRepository {
   }
 
   // ============================================================================
-  // WITHDRAW APPLICATION (soft delete - set status to withdrawn)
+  // WITHDRAW APPLICATION (Soft delete - set status to withdrawn)
   // ============================================================================
 
   Future<bool> withdrawApplication(String applicationId) async {
@@ -176,7 +218,7 @@ class ApplicationRepository {
         throw Exception('Cannot withdraw application that is already ${current['status']}');
       }
 
-      // Soft delete - update status to withdrawn instead of deleting
+      // Soft delete - update status to withdrawn
       await _sb
           .from('job_application')
           .update({
@@ -187,7 +229,7 @@ class ApplicationRepository {
 
       final userId = _uid;
       if (userId != null) {
-        // Remove from cache so it doesn't show in list
+        // Remove from cache
         await LocalDB.deleteCachedJobApplication(applicationId, userId);
       }
 
@@ -286,10 +328,7 @@ class ApplicationRepository {
           .update(updates)
           .eq('application_id', applicationId);
 
-      final userId = _uid;
-      if (userId != null) {
-        await LocalDB.updateCachedApplicationStatus(applicationId, newStatus);
-      }
+      await LocalDB.updateCachedApplicationStatus(applicationId, newStatus);
 
       debugPrint('Application $applicationId status updated to: $newStatus');
       return true;

@@ -7,6 +7,8 @@ import 'package:jobify/social/social_feed_provider.dart';
 import 'package:jobify/social/social_post_bottom_sheet.dart';
 import 'package:jobify/data/feed_repository.dart';
 import 'package:jobify/users/users.dart';
+import 'package:jobify/job/apply_for_job.dart';
+
 
 class SocialFeedPage extends StatefulWidget {
   final Users user;
@@ -441,6 +443,34 @@ class _FeedCard extends StatelessWidget {
   final Users     currentUser;
   const _FeedCard({required this.post, required this.currentUser});
 
+  void _navigateToApplyJob(BuildContext context, JobPost job) {
+    // Convert JobPost to Map for ApplyForJobPage
+    final jobMap = {
+      'job_id': job.jobId,
+      'job_title': job.jobTitle,
+      'description': job.description,
+      'location': job.location,
+      'salary_min': job.salaryMin,
+      'salary_max': job.salaryMax,
+      'job_type': job.jobType,
+      'company_name': job.companyName,
+      'company_profile': {
+        'company_name': job.companyName,
+        'logo_url': job.companyLogoUrl,
+      },
+    };
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) =>
+            ApplyForJobPage(
+              job: jobMap,
+              userId: currentUser.userId,
+            ),
+      ),
+    );
+  }
   @override
   Widget build(BuildContext context) {
     final prov = context.read<SocialFeedProvider>();
@@ -569,7 +599,11 @@ class _FeedCard extends StatelessWidget {
 
           // ── Linked job ───────────────────────────────────────────────
           if (post.postType == PostType.job && post.linkedJob != null)
-            _LinkedJobCard(job: post.linkedJob!),
+            _LinkedJobCard(
+              job: post.linkedJob!,
+              userId: currentUser.userId,  // Pass userId
+              onApply: () => _navigateToApplyJob(context, post.linkedJob!),
+            ),
 
           // ── Action row ───────────────────────────────────────────────
           Padding(
@@ -1054,9 +1088,18 @@ class _MediaGrid extends StatelessWidget {
 // LINKED JOB CARD
 // ─────────────────────────────────────────────────────────────────────────────
 
+// In social_feed.dart, replace the _LinkedJobCard class
+
 class _LinkedJobCard extends StatelessWidget {
   final JobPost job;
-  const _LinkedJobCard({required this.job});
+  final String? userId;  // Add this parameter
+  final VoidCallback? onApply;  // Add this parameter
+
+  const _LinkedJobCard({
+    required this.job,
+    this.userId,
+    this.onApply,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1106,12 +1149,32 @@ class _LinkedJobCard extends StatelessWidget {
                   label: job.jobType),
             ],
           ),
+          const SizedBox(height: 8),
+          // ADD APPLY BUTTON
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: onApply ?? () {},
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF2563EB),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                minimumSize: const Size(double.infinity, 32),
+              ),
+              child: const Text(
+                'Apply Now',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ),
         ],
       ),
     );
   }
 }
-
 // ─────────────────────────────────────────────────────────────────────────────
 // SMALL REUSABLE WIDGETS
 // ─────────────────────────────────────────────────────────────────────────────

@@ -605,16 +605,6 @@ class LocalDB {
     return result;
   }
 
-  static Future<void> deleteCachedJobApplication(
-      String applicationId, String userId) async {
-    final db = await LocalDB.db;
-    await db.delete(
-      'cached_job_applications',
-      where: 'application_id = ? AND user_id = ?',
-      whereArgs: [applicationId, userId],
-    );
-  }
-
   static Future<void> updateCachedApplicationStatus(
       String applicationId, String newStatus) async {
     final db = await LocalDB.db;
@@ -626,6 +616,16 @@ class LocalDB {
       },
       where: 'application_id = ?',
       whereArgs: [applicationId],
+    );
+  }
+
+  static Future<void> deleteCachedJobApplication(
+      String applicationId, String userId) async {
+    final db = await LocalDB.db;
+    await db.delete(
+      'cached_job_applications',
+      where: 'application_id = ? AND user_id = ?',
+      whereArgs: [applicationId, userId],
     );
   }
 

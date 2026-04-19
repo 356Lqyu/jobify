@@ -1,3 +1,4 @@
+// lib/job/apply_for_job.dart
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -5,6 +6,7 @@ import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
 import 'applicantion_respository.dart';
+import 'resume_management_page.dart';
 
 class ApplyForJobPage extends StatefulWidget {
   final Map<String, dynamic> job;
@@ -90,12 +92,9 @@ class _ApplyForJobPageState extends State<ApplyForJobPage> {
     }
   }
 
-  // Fixed URL handling - trim whitespace and encode properly
-  Future<void> _previewResumeInDialog(String url, String fileName) async {
-    // Clean the URL - trim whitespace and ensure it's valid
-    String cleanUrl = url.trim();
+  Future<void> _previewResume(String url, String fileName) async {
+    final cleanUrl = url.trim();
 
-    // Check if URL is valid
     if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Invalid resume URL format')),
@@ -127,6 +126,7 @@ class _ApplyForJobPageState extends State<ApplyForJobPage> {
         jobId: widget.job['job_id'],
         userId: widget.userId,
         resumeUrl: _selectedResumeUrl!.trim(),
+        resumeFileName: _selectedResumeName,
         coverLetter: _coverLetterCtrl.text.trim().isEmpty
             ? null
             : _coverLetterCtrl.text.trim(),
@@ -153,6 +153,13 @@ class _ApplyForJobPageState extends State<ApplyForJobPage> {
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
+  }
+
+  void _navigateToResumeManagement() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const ResumeManagementPage()),
+    ).then((_) => _loadUserResumes());
   }
 
   @override
@@ -230,43 +237,28 @@ class _ApplyForJobPageState extends State<ApplyForJobPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Job Details Card with Collapsible Description
             _buildJobDetailsCard(),
-
             const SizedBox(height: 20),
-
-            // Resume Selection Section
             const Text(
               'Select Resume',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
-
             if (_userResumes.isEmpty)
               _buildNoResumesWidget()
             else
               _buildResumeList(),
-
             const SizedBox(height: 24),
-
-            // Cover Letter Section
             const Text(
               'Cover Letter (Optional)',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
             _buildCoverLetterField(),
-
             const SizedBox(height: 32),
-
-            // Submit Button
             _buildSubmitButton(),
-
             const SizedBox(height: 16),
-
-            // Info Note
             _buildInfoNote(),
-
             const SizedBox(height: 20),
           ],
         ),
@@ -276,7 +268,7 @@ class _ApplyForJobPageState extends State<ApplyForJobPage> {
 
   Widget _buildJobDetailsCard() {
     final description = widget.job['description'] ?? '';
-    final hasLongDescription = description.length > 150;
+    final companyData = widget.job['company_profile'] as Map<String, dynamic>?;
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -321,7 +313,7 @@ class _ApplyForJobPageState extends State<ApplyForJobPage> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      widget.job['company_name'] ?? 'Company',
+                      companyData?['company_name'] ?? widget.job['company_name'] ?? 'Company',
                       style: TextStyle(
                         color: Colors.grey.shade600,
                         fontSize: 14,
@@ -335,8 +327,6 @@ class _ApplyForJobPageState extends State<ApplyForJobPage> {
           const SizedBox(height: 20),
           const Divider(),
           const SizedBox(height: 16),
-
-          // Basic Info - Always visible
           _buildDetailRow(Icons.location_on, 'Location', widget.job['location'] ?? 'Not specified'),
           const SizedBox(height: 12),
           _buildDetailRow(Icons.attach_money, 'Salary', _formatSalary(
@@ -345,8 +335,6 @@ class _ApplyForJobPageState extends State<ApplyForJobPage> {
           )),
           const SizedBox(height: 12),
           _buildDetailRow(Icons.access_time, 'Job Type', widget.job['job_type'] ?? 'Full-time'),
-
-          // Description - Collapsible
           if (description.isNotEmpty) ...[
             const SizedBox(height: 12),
             const Divider(),
@@ -476,7 +464,7 @@ class _ApplyForJobPageState extends State<ApplyForJobPage> {
                     ),
                     child: IconButton(
                       icon: Icon(Icons.visibility, color: const Color(0xFF2563EB), size: 20),
-                      onPressed: () => _previewResumeInDialog(resume['file_url'], resume['file_name']),
+                      onPressed: () => _previewResume(resume['file_url'], resume['file_name']),
                       tooltip: 'Preview Resume',
                     ),
                   ),
@@ -512,9 +500,9 @@ class _ApplyForJobPageState extends State<ApplyForJobPage> {
           ),
           const SizedBox(height: 16),
           ElevatedButton.icon(
-            onPressed: () => Navigator.pop(context),
-            icon: const Icon(Icons.person, size: 18),
-            label: const Text('Go to Profile'),
+            onPressed: _navigateToResumeManagement,
+            icon: const Icon(Icons.upload_file, size: 18),
+            label: const Text('Manage Resumes'),
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF2563EB),
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
@@ -604,9 +592,9 @@ class _ApplyForJobPageState extends State<ApplyForJobPage> {
     );
   }
 
-  Widget _buildDetailRow(IconData icon, String label, String value, {bool isMultiline = false}) {
+  Widget _buildDetailRow(IconData icon, String label, String value) {
     return Row(
-      crossAxisAlignment: isMultiline ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Icon(icon, size: 18, color: Colors.grey.shade500),
         const SizedBox(width: 12),
@@ -659,7 +647,7 @@ class _ApplyForJobPageState extends State<ApplyForJobPage> {
   }
 }
 
-// Resume Preview Dialog - Fixed URL handling
+// Resume Preview Dialog
 class ResumePreviewDialog extends StatefulWidget {
   final String resumeUrl;
   final String fileName;

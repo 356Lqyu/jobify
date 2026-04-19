@@ -79,7 +79,6 @@ class _SettingPageState extends State<SettingPage> {
     if (role?.toUpperCase() == 'POSTER') {
       final authUserId = supabase.auth.currentUser?.id;
       if (authUserId != null) {
-        // Fetch fresh company profile from Supabase
         final companyProfile = await supabase
             .from('company_profile')
             .select()

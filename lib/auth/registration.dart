@@ -20,7 +20,6 @@ class _RegistrationState extends State<Registration> {
   String? confirmPasswordError;
   String? emailError;
   String? companyNameError;
-  String? locationError;
   String? fullnameError;
   String? phoneError;
   String? companyPhoneError;
@@ -32,7 +31,6 @@ class _RegistrationState extends State<Registration> {
   final passwordCtrl = TextEditingController();
   final confirmPasswordCtrl = TextEditingController();
   final companyNameCtrl = TextEditingController();
-  final locationCtrl = TextEditingController();
   final fullnameCtrl = TextEditingController();
   final phoneCtrl = TextEditingController();
   final companyPhoneCtrl = TextEditingController();
@@ -54,7 +52,6 @@ class _RegistrationState extends State<Registration> {
       passwordError = null;
       confirmPasswordError = null;
       companyNameError = null;
-      locationError = null;
       fullnameError = null;
       phoneError = null;
     });
@@ -65,9 +62,9 @@ class _RegistrationState extends State<Registration> {
     String password = passwordCtrl.text;
     String confirmPassword = confirmPasswordCtrl.text;
     String companyName = companyNameCtrl.text.trim();
-    String location = locationCtrl.text.trim();
     String fullname = fullnameCtrl.text.trim();
     String phone = phoneCtrl.text.trim();
+    String companyPhone = companyPhoneCtrl.text.trim();
 
     /// Email validation
     String emailPattern = r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$';
@@ -111,7 +108,7 @@ class _RegistrationState extends State<Registration> {
       if (phone.isEmpty) {
         phoneError = "Phone number is required";
         isValid = false;
-      } else if (!RegExp(r'^[0-9+\-\s()]+$').hasMatch(phone)) {
+      } else if (!RegExp(r'^[\+]?[0-9][0-9\s\-\(\)]{8,20}$').hasMatch(phone)) {
         phoneError = "Please enter a valid phone number";
         isValid = false;
       }
@@ -123,16 +120,15 @@ class _RegistrationState extends State<Registration> {
         companyNameError = "Company name is required";
         isValid = false;
       }
-      if (location.isEmpty) {
-        locationError = "Company location is required";
+
+      if (companyPhone.isEmpty) {
+        companyPhoneError = "Phone number is required";
+        isValid = false;
+      } else if (!RegExp(r'^[0-9+\-\s()]+$').hasMatch(companyPhone)) {
+        companyPhoneError = "Please enter a valid phone number";
         isValid = false;
       }
-      if (companyPhoneCtrl.text.trim().isNotEmpty) {
-        if (!RegExp(r'^[0-9+\-\s()]+$').hasMatch(companyPhoneCtrl.text.trim())) {
-          companyPhoneError = "Please enter a valid phone number";
-          isValid = false;
-        }
-      }
+
     }
 
     setState(() {});
@@ -166,7 +162,6 @@ class _RegistrationState extends State<Registration> {
           'updated_at': DateTime.now().toIso8601String(),
         });
       } else {
-
         await supabase.from('users').insert({
           'user_id': user.id,
           'role': 'POSTER',
@@ -188,21 +183,19 @@ class _RegistrationState extends State<Registration> {
           'bio': null,
         });
       } else {
-        // For employer, company_name and location are required
+        // For employer, company_name and phone are required
         await supabase.from('company_profile').insert({
           'user_id': user.id,
           'company_name': companyName,
-          'location': location,
           'company_description': '',
           'industry': '',
           'company_size': '',
         });
       }
 
-      //Please check your email to confirm your account before logging in.
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("Registration successful! Please log in to continue.",),
+          content: Text("Registration successful! Please check your email to confirm your account before logging in.",),
           duration: Duration(seconds: 5),
           backgroundColor: Colors.green,
         )
@@ -237,7 +230,6 @@ class _RegistrationState extends State<Registration> {
     passwordCtrl.dispose();
     confirmPasswordCtrl.dispose();
     companyNameCtrl.dispose();
-    locationCtrl.dispose();
     fullnameCtrl.dispose();
     phoneCtrl.dispose();
     super.dispose();
@@ -490,13 +482,6 @@ class _RegistrationState extends State<Registration> {
                               child: Text(phoneError!,
                                   style: const TextStyle(color: Colors.red, fontSize: 14)),
                             ),
-                          const Padding(
-                            padding: EdgeInsets.only(top: 4, left: 12),
-                            child: Text(
-                              'Include country code for international numbers',
-                              style: TextStyle(color: Colors.blueGrey, fontSize: 12),
-                            ),
-                          ),
                         ],
 
                         // Poster info section
@@ -550,36 +535,9 @@ class _RegistrationState extends State<Registration> {
                           if (companyPhoneError  != null)
                             Padding(
                               padding: const EdgeInsets.only(top: 4),
-                              child: Text(phoneError!,
+                              child: Text(companyPhoneError!,
                                   style: const TextStyle(color: Colors.red, fontSize: 14)),
                             ),
-                        ],
-
-                        // Optional note for Job Seekers
-                        if (selectedRole == "jobseeker") ...[
-                          const SizedBox(height: 20),
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.blue.shade50,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(Icons.info_outline, color: Colors.blue.shade700, size: 20),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    "You can add other details in your profile after registration.",
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.blue.shade700,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
                         ],
 
                         const SizedBox(height: 30),

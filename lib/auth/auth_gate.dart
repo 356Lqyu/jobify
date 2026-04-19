@@ -16,7 +16,6 @@ class AuthGate extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<AuthState>(
-      // listen auth state change
       stream: Supabase.instance.client.auth.onAuthStateChange,
       // build page based on the auth state
       builder: (context,snapshot) {
@@ -58,7 +57,7 @@ class AuthGate extends StatelessWidget {
           );
         }
 
-        // Not logged in - show welcome page
+        // Not logged in then show welcome page
         return const WelcomePage();
       },
     );

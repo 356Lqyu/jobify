@@ -6,6 +6,7 @@ import 'package:jobify/users/user_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'auth/change_password.dart';
+import 'users/view_profile_page.dart';
 
 class SettingPage extends StatefulWidget {
   const SettingPage({super.key});
@@ -22,6 +23,8 @@ class _SettingPageState extends State<SettingPage> {
   String? userName;
   String? companyName;
   String? profileImageUrl;
+  String? userId;
+  String? companyId;
 
   bool showLogoutDialog = false;
 
@@ -65,24 +68,46 @@ class _SettingPageState extends State<SettingPage> {
         role = user.role.toLowerCase();
         userName = user.fullname;
         profileImageUrl = user.profileImageUrl;
+        userId = user.userId;
       });
 
       // Load stats after getting user info
       await _loadStats();
     }
 
-    // Fetch company name if employer (from cache)
+    // Fetch company name and ID if employer
     if (role?.toUpperCase() == 'POSTER') {
-      final userId = supabase.auth.currentUser?.id;
-      if (userId != null) {
-        final companyProfile = await LocalDB.getCachedCompanyProfile(userId);
+      final authUserId = supabase.auth.currentUser?.id;
+      if (authUserId != null) {
+        // Fetch fresh company profile from Supabase
+        final companyProfile = await supabase
+            .from('company_profile')
+            .select()
+            .eq('user_id', authUserId)
+            .maybeSingle();
+
         if (companyProfile != null && mounted) {
           setState(() {
             companyName = companyProfile['company_name'];
+            companyId = companyProfile['company_id'];
             if (companyProfile['logo_url'] != null && companyProfile['logo_url'].isNotEmpty) {
               profileImageUrl = companyProfile['logo_url'];
             }
           });
+          // Update cache
+          await LocalDB.cacheCompanyProfile(authUserId, companyProfile);
+        } else {
+          // Try from cache as fallback
+          final cachedProfile = await LocalDB.getCachedCompanyProfile(authUserId);
+          if (cachedProfile != null && mounted) {
+            setState(() {
+              companyName = cachedProfile['company_name'];
+              companyId = cachedProfile['company_id'];
+              if (cachedProfile['logo_url'] != null && cachedProfile['logo_url'].isNotEmpty) {
+                profileImageUrl = cachedProfile['logo_url'];
+              }
+            });
+          }
         }
       }
     }
@@ -92,17 +117,17 @@ class _SettingPageState extends State<SettingPage> {
     setState(() => _isLoadingStats = true);
 
     try {
-      final userId = supabase.auth.currentUser?.id;
-      if (userId == null) return;
+      final authUserId = supabase.auth.currentUser?.id;
+      if (authUserId == null) return;
 
       final bool isJobSeeker = role?.toUpperCase() == 'JOB_SEEKER';
 
       if (isJobSeeker) {
         // Load job seeker stats
-        await _loadJobSeekerStats(userId);
+        await _loadJobSeekerStats(authUserId);
       } else if (role?.toUpperCase() == 'POSTER') {
         // Load employer stats
-        await _loadEmployerStats(userId);
+        await _loadEmployerStats(authUserId);
       }
     } catch (e) {
       debugPrint('Error loading stats: $e');
@@ -111,34 +136,34 @@ class _SettingPageState extends State<SettingPage> {
     }
   }
 
-  Future<void> _loadJobSeekerStats(String userId) async {
+  Future<void> _loadJobSeekerStats(String authUserId) async {
     try {
       // Count posts by user
       final postsResult = await supabase
           .from('post')
           .select('post_id')
-          .eq('user_id', userId);
+          .eq('user_id', authUserId);
       _userPostsCount = (postsResult as List).length;
 
       // Count saved jobs
       final savedJobsResult = await supabase
           .from('saved_jobs')
           .select('job_id')
-          .eq('user_id', userId);
+          .eq('user_id', authUserId);
       _savedJobsCount = (savedJobsResult as List).length;
 
       // Count following (users/companies the current user follows)
       final followingResult = await supabase
           .from('follows')
           .select('follow_id')
-          .eq('follower_id', userId);
+          .eq('follower_id', authUserId);
       _followingCount = (followingResult as List).length;
 
       // Count job applications
       final applicationsResult = await supabase
           .from('job_application')
           .select('application_id')
-          .eq('user_id', userId);
+          .eq('user_id', authUserId);
       _applicationsCount = (applicationsResult as List).length;
 
       debugPrint('Job Seeker Stats - Posts: $_userPostsCount, Saved Jobs: $_savedJobsCount, Following: $_followingCount, Applications: $_applicationsCount');
@@ -149,37 +174,44 @@ class _SettingPageState extends State<SettingPage> {
     }
   }
 
-  Future<void> _loadEmployerStats(String userId) async {
+  Future<void> _loadEmployerStats(String authUserId) async {
     try {
       // First get company profile
       final companyProfile = await supabase
           .from('company_profile')
           .select('company_id')
-          .eq('user_id', userId)
+          .eq('user_id', authUserId)
           .maybeSingle();
 
       if (companyProfile != null) {
-        final companyId = companyProfile['company_id'];
+        final compId = companyProfile['company_id'];
+
+        // Update companyId if not set
+        if (companyId == null && mounted) {
+          setState(() {
+            companyId = compId;
+          });
+        }
 
         // Count job posts
         final jobPostsResult = await supabase
             .from('job_post')
             .select('job_id')
-            .eq('company_id', companyId);
+            .eq('company_id', compId);
         _jobPostsCount = (jobPostsResult as List).length;
 
         // Count company followers
         final followersResult = await supabase
             .from('follows')
             .select('follow_id')
-            .eq('following_id', companyId);
+            .eq('following_id', compId);
         _companyFollowersCount = (followersResult as List).length;
 
         // Count applications received for company's jobs
         final jobsResult = await supabase
             .from('job_post')
             .select('job_id')
-            .eq('company_id', companyId);
+            .eq('company_id', compId);
 
         final jobIds = (jobsResult as List).map((j) => j['job_id'] as String).toList();
 
@@ -204,10 +236,10 @@ class _SettingPageState extends State<SettingPage> {
 
   // Method to refresh profile data when returning from ProfilePage
   Future<void> _refreshProfileData() async {
-    final userId = supabase.auth.currentUser?.id;
-    if (userId != null) {
+    final authUserId = supabase.auth.currentUser?.id;
+    if (authUserId != null) {
       // Force clear cache to get fresh data
-      await LocalDB.clearUserCache(userId);
+      await LocalDB.clearUserCache(authUserId);
 
       // Force refresh from server
       final userProvider = Provider.of<UserProvider>(context, listen: false);
@@ -220,6 +252,7 @@ class _SettingPageState extends State<SettingPage> {
           role = updatedUser.role.toLowerCase();
           userName = updatedUser.fullname;
           profileImageUrl = updatedUser.profileImageUrl;
+          userId = updatedUser.userId;
         });
       }
 
@@ -229,18 +262,19 @@ class _SettingPageState extends State<SettingPage> {
         final companyData = await supabase
             .from('company_profile')
             .select()
-            .eq('user_id', userId)
+            .eq('user_id', authUserId)
             .maybeSingle();
 
         if (companyData != null && mounted) {
           setState(() {
             companyName = companyData['company_name'];
+            companyId = companyData['company_id'];
             if (companyData['logo_url'] != null && companyData['logo_url'].isNotEmpty) {
               profileImageUrl = companyData['logo_url'];
             }
           });
           // Update cache
-          await LocalDB.cacheCompanyProfile(userId, companyData);
+          await LocalDB.cacheCompanyProfile(authUserId, companyData);
         }
       }
 
@@ -251,9 +285,9 @@ class _SettingPageState extends State<SettingPage> {
 
   void handleLogout() async {
     // Clear user cache on logout
-    final userId = supabase.auth.currentUser?.id;
-    if (userId != null) {
-      await LocalDB.clearUserCache(userId);
+    final authUserId = supabase.auth.currentUser?.id;
+    if (authUserId != null) {
+      await LocalDB.clearUserCache(authUserId);
     }
 
     // Clear UserProvider state
@@ -489,6 +523,109 @@ class _SettingPageState extends State<SettingPage> {
     );
   }
 
+  // Method to navigate to dashboard
+  void _navigateToDashboard() async {
+    final bool isJobSeeker = role == 'job_seeker';
+
+    // Show loading indicator
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      if (isJobSeeker) {
+        // For Job Seeker - use userId
+        final targetUserId = userId ?? supabase.auth.currentUser?.id;
+
+        if (targetUserId != null) {
+          Navigator.pop(context); // Close loading dialog
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ViewProfilePage(
+                userId: targetUserId,
+                companyId: null,
+                name: userName,
+                avatarUrl: profileImageUrl,
+                isCompany: false,
+              ),
+            ),
+          );
+          await _refreshProfileData();
+        } else {
+          Navigator.pop(context); // Close loading dialog
+          _showErrorDialog('Unable to load dashboard. User ID not found.');
+        }
+      } else if (role == 'poster') {
+        // For Employer - need companyId
+        String? targetCompanyId = companyId;
+
+        // If companyId is null, fetch it
+        if (targetCompanyId == null) {
+          final authUserId = supabase.auth.currentUser?.id;
+          if (authUserId != null) {
+            final companyProfile = await supabase
+                .from('company_profile')
+                .select('company_id')
+                .eq('user_id', authUserId)
+                .maybeSingle();
+
+            if (companyProfile != null) {
+              targetCompanyId = companyProfile['company_id'];
+              setState(() {
+                companyId = targetCompanyId;
+              });
+            }
+          }
+        }
+
+        Navigator.pop(context); // Close loading dialog
+
+        if (targetCompanyId != null && userId != null) {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ViewProfilePage(
+                userId: userId!,
+                companyId: targetCompanyId,
+                name: companyName,
+                avatarUrl: profileImageUrl,
+                isCompany: true,
+              ),
+            ),
+          );
+          await _refreshProfileData();
+        } else {
+          _showErrorDialog('Unable to load dashboard. Company information not found.');
+        }
+      } else {
+        Navigator.pop(context); // Close loading dialog
+        _showErrorDialog('Unable to load dashboard. Please try again.');
+      }
+    } catch (e) {
+      Navigator.pop(context); // Close loading dialog
+      _showErrorDialog('Error loading dashboard: ${e.toString()}');
+    }
+  }
+
+  void _showErrorDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Error'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final bool isJobSeeker = role == 'job_seeker';
@@ -530,12 +667,16 @@ class _SettingPageState extends State<SettingPage> {
                       children: [
                         buildSectionHeader('Profile'),
                         buildListItem(Icons.person_outline, 'My Profile', () async {
-                          final result = await Navigator.push(
+                          await Navigator.push(
                             context,
                             MaterialPageRoute(
                                 builder: (_) => const ProfilePage()),
                           );
                           await _refreshProfileData();
+                        }),
+                        // New Dashboard item
+                        buildListItem(Icons.dashboard_outlined, 'My Dashboard', () {
+                          _navigateToDashboard();
                         }),
                         if (isJobSeeker)
                           buildListItem(Icons.work, 'My Resume', () {}),

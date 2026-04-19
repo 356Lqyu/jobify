@@ -3,7 +3,8 @@ import 'package:carousel_slider/carousel_slider.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 import 'package:jobify/data/job_repository.dart';
 import 'package:jobify/job_post/create_job_post.dart';
-import 'package:jobify/data/local_db.dart';   // added for cache
+import 'package:jobify/data/local_db.dart';
+import 'package:jobify/job/applicant_list.dart'; // added import
 
 class JobDetailEmployer extends StatefulWidget {
   final Map<String, dynamic> job;
@@ -24,8 +25,8 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
     super.initState();
     _job = Map.from(widget.job);
     _initYoutubePlayer();
-    _loadFromCache();   // show cached data instantly
-    _refresh();         // fetch fresh from Supabase
+    _loadFromCache();
+    _refresh();
   }
 
   void _initYoutubePlayer() {
@@ -67,7 +68,8 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
     await _refresh();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Job ${newStatus == 'active' ? 'reopened' : 'closed'}')),
+        SnackBar(content: Text('Job ${newStatus == 'active' ? 'reopened' : 'closed'}'),
+          backgroundColor: Colors.green,),
       );
     }
   }
@@ -154,8 +156,6 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
                   ],
                 ),
               ),
-
-              // Main card
               Card(
                 elevation: 2,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -164,14 +164,11 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Job title
                       Text(
                         _job['job_title'] ?? 'Untitled',
                         style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 8),
-
-                      // Company & location row
                       Row(
                         children: [
                           Icon(Icons.business, size: 16, color: Colors.grey.shade600),
@@ -195,8 +192,6 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
                         ],
                       ),
                       const SizedBox(height: 16),
-
-                      // Info chips
                       Wrap(
                         spacing: 8,
                         runSpacing: 8,
@@ -210,8 +205,6 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
                         ],
                       ),
                       const SizedBox(height: 20),
-
-                      // Stats row
                       Container(
                         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
                         decoration: BoxDecoration(
@@ -224,13 +217,25 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
                           children: [
                             _statItem(Icons.visibility, '$viewCount', 'Views'),
                             Container(width: 1, height: 30, color: Colors.grey.shade300),
-                            _statItem(Icons.description, '$appCount', 'Applications'),
+                            // Make Applications clickable
+                            GestureDetector(
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => ApplicantListPage(
+                                      jobId: _job['job_id'],
+                                      jobTitle: _job['job_title'] ?? 'Position',
+                                    ),
+                                  ),
+                                );
+                              },
+                              child: _statItem(Icons.description, '$appCount', 'Applications'),
+                            ),
                           ],
                         ),
                       ),
                       const SizedBox(height: 20),
-
-                      // Description
                       const Text('Job Description', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 8),
                       Text(
@@ -238,8 +243,6 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
                         style: const TextStyle(height: 1.5),
                       ),
                       const SizedBox(height: 20),
-
-                      // Images
                       if (imageUrls.isNotEmpty) ...[
                         const Text('Images', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                         const SizedBox(height: 8),
@@ -262,18 +265,13 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
                         ),
                         const SizedBox(height: 16),
                       ],
-
-                      // Video
                       if (hasVideo) ...[
                         const Text('Video', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                         const SizedBox(height: 8),
                         YoutubePlayer(controller: _youtubeController!),
                         const SizedBox(height: 16),
                       ],
-
                       const Divider(height: 32),
-
-                      // Action buttons
                       Row(
                         children: [
                           Expanded(

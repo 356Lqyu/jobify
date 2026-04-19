@@ -1,5 +1,3 @@
-
-
 // lib/job/applicant_list.dart
 import 'package:flutter/material.dart';
 import 'applicantion_respository.dart';

@@ -570,8 +570,7 @@ class LocalDB {
     await batch.commit(noResult: true);
   }
 
-  static Future<void> cacheJobApplication(
-      Map<String, dynamic> application, String userId) async {
+  static Future<void> cacheJobApplication(Map<String, dynamic> application, String userId) async {
     final db = await LocalDB.db;
     await db.insert('cached_job_applications', {
       'application_id': application['application_id'] as String,
@@ -896,8 +895,45 @@ class LocalDB {
   // UTILITIES
   // ══════════════════════════════════════════════════════════════════════════
 
+// In local_db.dart, update the clearAllCaches method:
+  static Future<void> clearAllCaches() async {
+    final d = await db;
+
+    // List of tables that definitely exist
+    final tablesToClear = [
+      'posts',
+      'comments',
+      'liked_posts',
+      'saved_posts',
+      'job_posts',
+      'saved_jobs',
+      'cached_job_applications',
+    ];
+
+    // Clear main tables
+    for (final table in tablesToClear) {
+      try {
+        await d.delete(table);
+        print('Cleared table: $table');
+      } catch (e) {
+        print('Error clearing table $table: $e');
+      }
+    }
+
+    // Try to clear company_branches if it exists
+    try {
+      await d.delete('company_branches');
+      print('Cleared table: company_branches');
+    } catch (e) {
+      print('Table company_branches does not exist yet: $e');
+    }
+  }
+
+// Also update clearUserCache method:
   static Future<void> clearUserCache(String userId) async {
     final db = await LocalDB.db;
+
+    // Delete from main tables
     await db.delete('cached_users', where: 'user_id = ?', whereArgs: [userId]);
     await db.delete('cached_job_seeker_profiles', where: 'user_id = ?', whereArgs: [userId]);
     await db.delete('cached_company_profiles', where: 'user_id = ?', whereArgs: [userId]);
@@ -906,21 +942,25 @@ class LocalDB {
     await db.delete('cached_experience', where: 'user_id = ?', whereArgs: [userId]);
     await db.delete('cached_resumes', where: 'user_id = ?', whereArgs: [userId]);
     await db.delete('cached_job_applications', where: 'user_id = ?', whereArgs: [userId]);
+
+    // Try to delete from company_branches
+    try {
+      await db.delete('company_branches', where: 'company_id = ?', whereArgs: [userId]);
+    } catch (e) {
+      // Table might not exist yet
+    }
   }
 
-  static Future<void> clearAllCaches() async {
-    final d = await db;
-    for (final t in [
-      'posts',
-      'comments',
-      'liked_posts',
-      'saved_posts',
-      'job_posts',
-      'saved_jobs',
-      'cached_job_applications',
-      'company_branches'
-    ]) {
-      await d.delete(t);
+  static Future<void> resetDatabase() async {
+    try {
+      final dbPath = join(await getDatabasesPath(), 'jobify_v8.db');
+      await deleteDatabase(dbPath);
+      _db = null;
+      print('Database deleted successfully');
+      await db; // This will recreate the database with correct schema
+      print('Database recreated successfully');
+    } catch (e) {
+      print('Error resetting database: $e');
     }
   }
 }

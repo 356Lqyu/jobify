@@ -41,6 +41,8 @@ Future<void> main() async {
 
 final supabase = Supabase.instance.client;
 
+// In main.dart, ensure you have these routes:
+
 class MainApp extends StatelessWidget {
   const MainApp({super.key});
 
@@ -66,7 +68,6 @@ class MainApp extends StatelessWidget {
     );
   }
 }
-
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
 

@@ -1,6 +1,4 @@
-
-
-// lib/job/applicant_detail.dart
+// lib/job/applicant_details.dart
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'applicantion_respository.dart';

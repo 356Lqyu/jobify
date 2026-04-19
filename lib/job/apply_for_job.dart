@@ -29,7 +29,6 @@ class _ApplyForJobPageState extends State<ApplyForJobPage> {
   bool _isLoading = true;
   bool _isSubmitting = false;
   bool _hasApplied = false;
-  bool _isDescriptionExpanded = false;
   bool _isJobSeeker = false;
   String? _selectedResumeId;
   String? _selectedResumeUrl;
@@ -62,6 +61,7 @@ class _ApplyForJobPageState extends State<ApplyForJobPage> {
       final role = userData?['role'] as String?;
 
       if (role != 'JOB_SEEKER') {
+        // If not job seeker, just show access denied without loading data
         if (mounted) {
           setState(() {
             _isJobSeeker = false;
@@ -176,9 +176,13 @@ class _ApplyForJobPageState extends State<ApplyForJobPage> {
       }
     } catch (e) {
       if (mounted) {
+        String errorMessage = e.toString();
+        if (errorMessage.contains('already applied')) {
+          errorMessage = 'You have already applied for this position.';
+        }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error: ${e.toString()}'),
+            content: Text(errorMessage),
             backgroundColor: Colors.red,
           ),
         );
@@ -203,7 +207,7 @@ class _ApplyForJobPageState extends State<ApplyForJobPage> {
       );
     }
 
-    // Access denied for posters
+    // Access denied for posters - show error and prevent access
     if (!_isJobSeeker) {
       return Scaffold(
         backgroundColor: const Color(0xFFF8FAFC),
@@ -212,6 +216,7 @@ class _ApplyForJobPageState extends State<ApplyForJobPage> {
           backgroundColor: Colors.red,
           elevation: 0,
           foregroundColor: Colors.white,
+          automaticallyImplyLeading: true,
         ),
         body: Center(
           child: Padding(
@@ -277,6 +282,7 @@ class _ApplyForJobPageState extends State<ApplyForJobPage> {
           backgroundColor: Colors.white,
           elevation: 0,
           foregroundColor: Colors.black87,
+          automaticallyImplyLeading: true,
         ),
         body: Center(
           child: Column(
@@ -330,6 +336,7 @@ class _ApplyForJobPageState extends State<ApplyForJobPage> {
         backgroundColor: Colors.white,
         elevation: 0,
         foregroundColor: Colors.black87,
+        automaticallyImplyLeading: true,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -438,42 +445,14 @@ class _ApplyForJobPageState extends State<ApplyForJobPage> {
             const SizedBox(height: 12),
             const Divider(),
             const SizedBox(height: 8),
-            Row(
-              children: [
-                const Icon(Icons.description, size: 18, color: Colors.grey),
-                const SizedBox(width: 8),
-                const Text(
-                  'Job Description',
-                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                ),
-                const Spacer(),
-                TextButton.icon(
-                  onPressed: () => setState(() => _isDescriptionExpanded = !_isDescriptionExpanded),
-                  icon: Icon(_isDescriptionExpanded ? Icons.expand_less : Icons.expand_more, size: 18),
-                  label: Text(_isDescriptionExpanded ? 'Show Less' : 'Show More'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: const Color(0xFF2563EB),
-                    padding: EdgeInsets.zero,
-                  ),
-                ),
-              ],
+            const Text(
+              'Job Description',
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
             ),
             const SizedBox(height: 8),
-            AnimatedCrossFade(
-              firstChild: Text(
-                description,
-                style: const TextStyle(fontSize: 13, height: 1.5),
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-              ),
-              secondChild: Text(
-                description,
-                style: const TextStyle(fontSize: 13, height: 1.5),
-              ),
-              crossFadeState: _isDescriptionExpanded
-                  ? CrossFadeState.showSecond
-                  : CrossFadeState.showFirst,
-              duration: const Duration(milliseconds: 200),
+            Text(
+              description,
+              style: const TextStyle(fontSize: 13, height: 1.5),
             ),
           ],
         ],
@@ -775,8 +754,6 @@ class _ResumePreviewDialogState extends State<ResumePreviewDialog> {
   Future<void> _downloadResume() async {
     try {
       final cleanUrl = widget.resumeUrl.trim();
-      debugPrint('Downloading resume from: $cleanUrl');
-
       final response = await http.get(Uri.parse(cleanUrl));
       if (response.statusCode == 200) {
         final tempDir = await getTemporaryDirectory();

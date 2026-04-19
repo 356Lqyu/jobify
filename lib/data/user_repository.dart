@@ -3,11 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:jobify/users/users.dart';
 import 'package:jobify/data/local_db.dart';
 
-/// Handle read and write user data to supabase & manage local SQLite cache
-/// CRUD user profile, skill, education, experience, resumes, and branches
-/// Try cache first (unless force refresh)
-/// if forceRefresh = false, then will check local cache
-/// else, fetch from supabase, then cache and return
+
 class UserRepository {
   final SupabaseClient _sb = Supabase.instance.client;
   String? get _uid => _sb.auth.currentUser?.id; // get the current authenticated user id
@@ -23,14 +19,14 @@ class UserRepository {
     if (!forceRefresh) {
       final cached = await LocalDB.getCachedUser(userId);
       if (cached != null) {
-        debugPrint('✅ Using cached user data for: $userId');
+        debugPrint('Using cached user data for: $userId');
         return cached;
       }
     }
 
     // Fetch from Supabase
     try {
-      debugPrint('🔄 Fetching user data from Supabase for: $userId');
+      debugPrint('Fetching user data from Supabase for: $userId');
       final data = await _sb
           .from('users')
           .select('user_id, role, profile_image_url, created_at, updated_at, email, fullname, phone')
@@ -45,7 +41,7 @@ class UserRepository {
 
       return user;
     } catch (e) {
-      debugPrint('❌ Error fetching user: $e');
+      debugPrint('Error fetching user: $e');
       // If error, fallback to expired cache (local db)
       return await LocalDB.getCachedUser(userId);
     }
@@ -360,6 +356,8 @@ class UserRepository {
 
   // ==================== BRANCH CRUD ====================
 
+  // In user_repository.dart, update addBranch method:
+
   Future<void> addBranch(String companyId, Map<String, dynamic> branchData) async {
     final userId = _uid;
     if (userId == null) return;
@@ -384,9 +382,9 @@ class UserRepository {
       debugPrint('Adding branch with cleaned data: $cleanedData');
 
       await _sb.from('company_branch').insert({
-        'branch_id': DateTime.now().millisecondsSinceEpoch.toString(),
+        'branch_id': _sb.rpc('gen_random_uuid'), // Let Supabase generate UUID
         'company_id': companyId,
-        ...branchData,
+        ...cleanedData,
         'created_at': DateTime.now().toIso8601String(),
         'updated_at': DateTime.now().toIso8601String(),
       });
@@ -468,9 +466,9 @@ class UserRepository {
     try {
       debugPrint('📦 Caching full profile for user: $userId');
       await _fetchFreshProfile(userId);
-      debugPrint('✅ Full profile cached successfully');
+      debugPrint('Full profile cached successfully');
     } catch (e) {
-      debugPrint('❌ Error caching full profile: $e');
+      debugPrint('Error caching full profile: $e');
     }
   }
 }

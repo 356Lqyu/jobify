@@ -7,6 +7,9 @@ import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'auth/change_password.dart';
 import 'package:jobify/job/resume_management_page.dart';
+import 'package:jobify/job/applicantion_respository.dart';
+import 'package:jobify/main.dart';
+import 'job_post/job_post_management.dart';
 
 class SettingPage extends StatefulWidget {
   const SettingPage({super.key});
@@ -23,6 +26,7 @@ class _SettingPageState extends State<SettingPage> {
   String? userName;
   String? companyName;
   String? profileImageUrl;
+  int _jobPostsCount = 0;  // Add this to store job posts count
 
   bool showLogoutDialog = false;
 
@@ -35,7 +39,6 @@ class _SettingPageState extends State<SettingPage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Refresh when coming back from ProfilePage
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _refreshProfileData();
@@ -43,8 +46,50 @@ class _SettingPageState extends State<SettingPage> {
     });
   }
 
+  Future<int> _getTotalApplicationsForEmployer() async {
+    final userId = supabase.auth.currentUser?.id;
+    if (userId == null) return 0;
+
+    try {
+      // Get all jobs created by this employer
+      final jobsResponse = await supabase
+          .from('job_post')
+          .select('job_id')
+          .eq('created_by', userId);
+
+      final jobIds = List<String>.from(jobsResponse.map((job) => job['job_id'] as String));
+
+      // Update job posts count
+      setState(() {
+        _jobPostsCount = jobIds.length;
+      });
+
+      if (jobIds.isEmpty) return 0;
+
+      // Get total applications for all jobs
+      final applicationsResponse = await supabase
+          .from('job_application')
+          .select('application_id')
+          .inFilter('job_id', jobIds)
+          .neq('status', 'withdrawn');
+
+      final List<dynamic> results = applicationsResponse as List<dynamic>;
+      return results.length;
+    } catch (e) {
+      debugPrint('Error getting total applications: $e');
+      return 0;
+    }
+  }
+
+  Future<int> _getApplicationCount() async {
+    final userId = supabase.auth.currentUser?.id;
+    if (userId == null) return 0;
+
+    final appRepo = ApplicationRepository();
+    return await appRepo.getUserApplicationCount(userId);
+  }
+
   Future<void> fetchUserInfo() async {
-    // Get current user from provider or cache
     final userProvider = Provider.of<UserProvider>(context, listen: false);
     final user = userProvider.currentUser ?? await _userRepo.getCurrentUser();
 
@@ -56,7 +101,6 @@ class _SettingPageState extends State<SettingPage> {
       });
     }
 
-    // Fetch company name if employer (from cache)
     if (role?.toUpperCase() == 'POSTER') {
       final userId = supabase.auth.currentUser?.id;
       if (userId != null) {
@@ -69,22 +113,19 @@ class _SettingPageState extends State<SettingPage> {
             }
           });
         }
+        // Also fetch job posts count
+        await _getTotalApplicationsForEmployer();
       }
     }
   }
 
-  // Method to refresh profile data when returning from ProfilePage
   Future<void> _refreshProfileData() async {
     final userId = supabase.auth.currentUser?.id;
     if (userId != null) {
-      // Force clear cache to get fresh data
       await LocalDB.clearUserCache(userId);
-
-      // Force refresh from server
       final userProvider = Provider.of<UserProvider>(context, listen: false);
       await userProvider.refreshUser();
 
-      // Update local state
       final updatedUser = userProvider.currentUser;
       if (updatedUser != null && mounted) {
         setState(() {
@@ -94,9 +135,7 @@ class _SettingPageState extends State<SettingPage> {
         });
       }
 
-      // Also refresh company profile if employer
       if (role?.toUpperCase() == 'POSTER') {
-        // Fetch fresh company profile from Supabase
         final companyData = await supabase
             .from('company_profile')
             .select()
@@ -110,30 +149,48 @@ class _SettingPageState extends State<SettingPage> {
               profileImageUrl = companyData['logo_url'];
             }
           });
-          // Update cache
           await LocalDB.cacheCompanyProfile(userId, companyData);
         }
+        // Refresh job posts count
+        await _getTotalApplicationsForEmployer();
       }
     }
   }
 
   Future<void> handleLogout() async {
-    // Clear user cache on logout
-    final userId = supabase.auth.currentUser?.id;
-    if (userId != null) {
-      await LocalDB.clearUserCache(userId);
-    }
-    await LocalDB.clearAllCaches();
-    final userProvider = Provider.of<UserProvider>(context, listen: false);
-    userProvider.clearUser();
-    await supabase.auth.signOut();
-
     if (mounted) {
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (context) => const WelcomePage()),
-            (route) => false,
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Logging out...')),
       );
+    }
+
+    try {
+      final userId = supabase.auth.currentUser?.id;
+      if (userId != null) {
+        await LocalDB.clearUserCache(userId);
+      }
+
+      await LocalDB.clearAllCaches();
+
+      final userProvider = Provider.of<UserProvider>(context, listen: false);
+      userProvider.clearUser();
+
+      await supabase.auth.signOut();
+
+      if (mounted) {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (context) => const AnimatedHomePage()),
+              (route) => false,
+        );
+      }
+    } catch (e) {
+      debugPrint('Logout error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error during logout: $e'), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
@@ -258,63 +315,77 @@ class _SettingPageState extends State<SettingPage> {
   }
 
   Widget buildJobSeekerStats() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      margin: const EdgeInsets.symmetric(vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 6),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Your Activity',
-              style: TextStyle(fontWeight: FontWeight.w500, fontSize: 15)),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              buildStatItem('0', 'Applications'),
-              buildStatItem('0', 'Saved Jobs'),
-              buildStatItem('0', 'Following'),
-              buildStatItem('0', 'Posts'),
+    return FutureBuilder<int>(
+      future: _getApplicationCount(),
+      builder: (context, snapshot) {
+        final applicationCount = snapshot.data ?? 0;
+
+        return Container(
+          padding: const EdgeInsets.all(16),
+          margin: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 6),
             ],
-          )
-        ],
-      ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Your Activity',
+                  style: TextStyle(fontWeight: FontWeight.w500, fontSize: 15)),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  buildStatItem(applicationCount.toString(), 'Applications'),
+                  buildStatItem('0', 'Saved Jobs'),
+                  buildStatItem('0', 'Following'),
+                  buildStatItem('0', 'Posts'),
+                ],
+              )
+            ],
+          ),
+        );
+      },
     );
   }
 
   Widget buildEmployerStats() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      margin: const EdgeInsets.symmetric(vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 6),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Company Activity',
-              style: TextStyle(fontWeight: FontWeight.w500, fontSize: 15)),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              buildStatItem('0', 'Job Posts'),
-              buildStatItem('0', 'Followers'),
-              buildStatItem('0', 'Applications'),
+    return FutureBuilder<int>(
+      future: _getTotalApplicationsForEmployer(),
+      builder: (context, snapshot) {
+        final totalApplications = snapshot.data ?? 0;
+
+        return Container(
+          padding: const EdgeInsets.all(16),
+          margin: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 6),
             ],
-          )
-        ],
-      ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Company Activity',
+                  style: TextStyle(fontWeight: FontWeight.w500, fontSize: 15)),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  buildStatItem(_jobPostsCount.toString(), 'Job Posts'),
+                  buildStatItem('0', 'Followers'),
+                  buildStatItem(totalApplications.toString(), 'Applications'),
+                ],
+              )
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -345,7 +416,6 @@ class _SettingPageState extends State<SettingPage> {
       ),
       body: Stack(
         children: [
-          // Main content
           RefreshIndicator(
             onRefresh: _refreshProfileData,
             child: SingleChildScrollView(
@@ -385,7 +455,13 @@ class _SettingPageState extends State<SettingPage> {
                             );
                           }),
                         if (role == 'poster')
-                          buildListItem(Icons.dashboard, 'My Dashboard', () {}),
+                          buildListItem(Icons.dashboard, 'My Dashboard', () {
+                            // Navigate to JobPostManagementPage
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const JobPostManagementPage()),
+                            );
+                          }),
                       ],
                     ),
                   ),
@@ -531,32 +607,6 @@ class _SettingPageState extends State<SettingPage> {
               ),
             ),
         ],
-      ),
-    );
-  }
-}
-
-// Welcome Page for logout
-class WelcomePage extends StatelessWidget {
-  const WelcomePage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Text('Welcome to Jobify', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pushReplacementNamed(context, '/login');
-              },
-              child: const Text('Login Again'),
-            ),
-          ],
-        ),
       ),
     );
   }

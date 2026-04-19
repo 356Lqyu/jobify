@@ -438,13 +438,25 @@ class _FollowingTab extends StatelessWidget {
 // FEED CARD
 // ─────────────────────────────────────────────────────────────────────────────
 
+// In social_feed.dart, update the _FeedCard class:
+
 class _FeedCard extends StatelessWidget {
   final FeedPost post;
-  final Users     currentUser;
+  final Users currentUser;
   const _FeedCard({required this.post, required this.currentUser});
 
   void _navigateToApplyJob(BuildContext context, JobPost job) {
-    // Convert JobPost to Map for ApplyForJobPage
+    // Check if user is job seeker before allowing apply
+    if (currentUser.role.toUpperCase() != 'JOB_SEEKER') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Only job seekers can apply for jobs.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
     final jobMap = {
       'job_id': job.jobId,
       'job_title': job.jobTitle,
@@ -463,17 +475,19 @@ class _FeedCard extends StatelessWidget {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) =>
-            ApplyForJobPage(
-              job: jobMap,
-              userId: currentUser.userId,
-            ),
+        builder: (context) => ApplyForJobPage(
+          job: jobMap,
+          userId: currentUser.userId,
+        ),
       ),
     );
   }
+
   @override
   Widget build(BuildContext context) {
     final prov = context.read<SocialFeedProvider>();
+    // Check if user is job seeker
+    final isJobSeeker = currentUser.role.toUpperCase() == 'JOB_SEEKER';
 
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 4, 12, 4),
@@ -598,11 +612,13 @@ class _FeedCard extends StatelessWidget {
             _MediaGrid(urls: post.mediaUrls),
 
           // ── Linked job ───────────────────────────────────────────────
+          // Only show Apply button for Job Seekers
           if (post.postType == PostType.job && post.linkedJob != null)
             _LinkedJobCard(
               job: post.linkedJob!,
-              userId: currentUser.userId,  // Pass userId
-              onApply: () => _navigateToApplyJob(context, post.linkedJob!),
+              userId: currentUser.userId,
+              showApplyButton: isJobSeeker,  // Only show for job seekers
+              onApply: isJobSeeker ? () => _navigateToApplyJob(context, post.linkedJob!) : null,
             ),
 
           // ── Action row ───────────────────────────────────────────────
@@ -666,7 +682,6 @@ class _FeedCard extends StatelessWidget {
     );
   }
 }
-
 // ─────────────────────────────────────────────────────────────────────────────
 // COMMENT SHEET
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1088,16 +1103,16 @@ class _MediaGrid extends StatelessWidget {
 // LINKED JOB CARD
 // ─────────────────────────────────────────────────────────────────────────────
 
-// In social_feed.dart, replace the _LinkedJobCard class
-
 class _LinkedJobCard extends StatelessWidget {
   final JobPost job;
-  final String? userId;  // Add this parameter
-  final VoidCallback? onApply;  // Add this parameter
+  final String? userId;
+  final bool showApplyButton;  // Add this parameter
+  final VoidCallback? onApply;
 
   const _LinkedJobCard({
     required this.job,
     this.userId,
+    this.showApplyButton = true,  // Default to true for backward compatibility
     this.onApply,
   });
 
@@ -1150,26 +1165,27 @@ class _LinkedJobCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          // ADD APPLY BUTTON
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: onApply ?? () {},
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF2563EB),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+          // Only show Apply button if showApplyButton is true
+          if (showApplyButton)
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: onApply ?? () {},
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF2563EB),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  minimumSize: const Size(double.infinity, 32),
                 ),
-                minimumSize: const Size(double.infinity, 32),
-              ),
-              child: const Text(
-                'Apply Now',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                child: const Text(
+                  'Apply Now',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                ),
               ),
             ),
-          ),
         ],
       ),
     );

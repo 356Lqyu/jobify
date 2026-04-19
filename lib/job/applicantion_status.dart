@@ -1,4 +1,3 @@
-
 // lib/job/application_status.dart
 import 'package:flutter/material.dart';
 
@@ -179,84 +178,4 @@ class ApplicationStatusTimeline extends StatelessWidget {
       ],
     );
   }
-}
-
-class ApplicationStatusChip extends StatelessWidget {
-  final String status;
-
-  const ApplicationStatusChip({super.key, required this.status});
-
-  @override
-  Widget build(BuildContext context) {
-    final config = _getStatusConfig(status);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: config.backgroundColor,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(config.icon, size: 14, color: config.textColor),
-          const SizedBox(width: 4),
-          Text(
-            config.label,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: config.textColor,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  _StatusConfig _getStatusConfig(String status) {
-    switch (status.toLowerCase()) {
-      case 'pending':
-        return _StatusConfig(
-          label: 'Pending',
-          icon: Icons.access_time,
-          backgroundColor: Colors.amber.shade100,
-          textColor: Colors.amber.shade800,
-        );
-      case 'accepted':
-        return _StatusConfig(
-          label: 'Accepted',
-          icon: Icons.check_circle,
-          backgroundColor: Colors.green.shade100,
-          textColor: Colors.green.shade800,
-        );
-      case 'rejected':
-        return _StatusConfig(
-          label: 'Rejected',
-          icon: Icons.cancel,
-          backgroundColor: Colors.red.shade100,
-          textColor: Colors.red.shade800,
-        );
-      default:
-        return _StatusConfig(
-          label: status,
-          icon: Icons.help_outline,
-          backgroundColor: Colors.grey.shade200,
-          textColor: Colors.grey.shade700,
-        );
-    }
-  }
-}
-
-class _StatusConfig {
-  final String label;
-  final IconData icon;
-  final Color backgroundColor;
-  final Color textColor;
-
-  _StatusConfig({
-    required this.label,
-    required this.icon,
-    required this.backgroundColor,
-    required this.textColor,
-  });
 }

@@ -1,4 +1,4 @@
-// lib/job/applicantion_respository.dart (keep your filename)
+// lib/job/applicantion_respository.dart
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:jobify/data/local_db.dart';
@@ -40,6 +40,7 @@ class ApplicationRepository {
     String? coverLetter,
   }) async {
     try {
+      // Check if already applied
       final existing = await checkExistingApplication(jobId, userId);
       if (existing) {
         throw Exception('You have already applied for this job');
@@ -51,14 +52,11 @@ class ApplicationRepository {
         'user_id': userId,
         'resume_url': resumeUrl,
         'resume_file_name': resumeFileName ?? 'Resume.pdf',
+        'cover_letter': coverLetter,
         'status': 'pending',
         'applied_at': now,
         'updated_at': now,
       };
-
-      if (coverLetter != null && coverLetter.isNotEmpty) {
-        data['cover_letter'] = coverLetter;
-      }
 
       final response = await _sb
           .from('job_application')
@@ -66,25 +64,46 @@ class ApplicationRepository {
           .select()
           .single();
 
-      // Get job details for caching
+      // Increment application count on job post
+      try {
+        final jobData = await _sb
+            .from('job_post')
+            .select('application_count')
+            .eq('job_id', jobId)
+            .maybeSingle();
+
+        final currentCount = (jobData?['application_count'] as int?) ?? 0;
+
+        await _sb
+            .from('job_post')
+            .update({'application_count': currentCount + 1})
+            .eq('job_id', jobId);
+      } catch (e) {
+        debugPrint('Error updating application count: $e');
+      }
+
+      // Get job details for the response
       final jobDetails = await _getJobDetails(jobId);
 
-      final applicationWithJob = {
-        ...response as Map<String, dynamic>,
-        'job_title': jobDetails?['job_title'] ?? 'Unknown Position',
-        'company_name': jobDetails?['company_profile']?['company_name'] ?? 'Unknown Company',
-        'company_logo': jobDetails?['company_profile']?['logo_url'],
-        'location': jobDetails?['location'] ?? 'Not specified',
-        'salary_min': jobDetails?['salary_min'],
-        'salary_max': jobDetails?['salary_max'],
-        'job_type': jobDetails?['job_type']?['name'] ?? 'Not specified',
-        'description': jobDetails?['description'] ?? '',
-      };
+      if (jobDetails != null) {
+        final applicationWithJob = {
+          ...response as Map<String, dynamic>,
+          'job_title': jobDetails['job_title'] ?? 'Unknown Position',
+          'company_name': jobDetails['company_profile']?['company_name'] ??
+              jobDetails['company_name'] ?? 'Unknown Company',
+          'company_logo': jobDetails['company_profile']?['logo_url'],
+          'location': jobDetails['location'] ?? 'Not specified',
+          'salary_min': jobDetails['salary_min'],
+          'salary_max': jobDetails['salary_max'],
+          'job_type': jobDetails['job_type']?['name'] ?? 'Not specified',
+          'description': jobDetails['description'] ?? '',
+        };
 
-      await LocalDB.cacheJobApplication(applicationWithJob, userId);
+        await LocalDB.cacheJobApplication(applicationWithJob, userId);
+        return applicationWithJob;
+      }
 
-      debugPrint('Application submitted successfully for job: $jobId');
-      return applicationWithJob;
+      return response;
     } catch (e) {
       debugPrint('Error applying for job: $e');
       rethrow;
@@ -102,8 +121,8 @@ class ApplicationRepository {
             location,
             salary_min,
             salary_max,
-            job_type!job_post_job_type_id_fkey (name),
-            company_profile!job_post_company_id_fkey (
+            job_type:job_type_id(name),
+            company_profile:company_id(
               company_name,
               logo_url
             )
@@ -127,6 +146,7 @@ class ApplicationRepository {
     final userId = _uid;
     if (userId == null) return [];
 
+    // Try cache first
     if (!forceRefresh) {
       final cached = await LocalDB.getCachedJobApplications(userId);
       if (cached.isNotEmpty) {
@@ -139,19 +159,28 @@ class ApplicationRepository {
       final response = await _sb
           .from('job_application')
           .select('''
-            *,
-            job_post!job_application_job_id_fkey (
+            application_id,
+            job_id,
+            user_id,
+            resume_url,
+            resume_file_name,
+            cover_letter,
+            status,
+            applied_at,
+            updated_at,
+            job_post:job_id (
               job_id,
               job_title,
               description,
               location,
               salary_min,
               salary_max,
-              job_type!job_post_job_type_id_fkey (name),
-              company_profile!job_post_company_id_fkey (
+              job_type:job_type_id (
+                name
+              ),
+              company_profile:company_id (
                 company_name,
-                logo_url,
-                location as company_location
+                logo_url
               )
             )
           ''')
@@ -159,85 +188,157 @@ class ApplicationRepository {
           .neq('status', 'withdrawn')
           .order('applied_at', ascending: false);
 
-      final applications = List<Map<String, dynamic>>.from(response);
-      final processedApps = <Map<String, dynamic>>[];
+      debugPrint('Raw response from Supabase: ${response.length} records');
 
-      for (final app in applications) {
-        final processed = _processApplicationWithJob(app);
-        processedApps.add(processed);
+      final List<Map<String, dynamic>> applications = [];
+
+      for (final app in response) {
+        final jobData = app['job_post'] as Map<String, dynamic>?;
+
+        if (jobData == null) {
+          debugPrint('Warning: No job data found for application ${app['application_id']}');
+          continue;
+        }
+
+        final companyData = jobData['company_profile'] as Map<String, dynamic>?;
+        final jobTypeData = jobData['job_type'] as Map<String, dynamic>?;
+
+        final processedApp = {
+          'application_id': app['application_id'],
+          'job_id': app['job_id'],
+          'user_id': app['user_id'],
+          'resume_url': app['resume_url'],
+          'resume_file_name': app['resume_file_name'],
+          'cover_letter': app['cover_letter'],
+          'status': app['status'],
+          'applied_at': app['applied_at'],
+          'updated_at': app['updated_at'],
+          'job_title': jobData['job_title'] ?? 'Unknown Position',
+          'company_name': companyData?['company_name'] ?? 'Unknown Company',
+          'company_logo': companyData?['logo_url'],
+          'location': jobData['location'] ?? 'Not specified',
+          'salary_min': jobData['salary_min'],
+          'salary_max': jobData['salary_max'],
+          'job_type': jobTypeData?['name'] ?? 'Not specified',
+          'description': jobData['description'] ?? '',
+        };
+
+        debugPrint('Processed application: ${processedApp['job_title']} - ${processedApp['status']}');
+        applications.add(processedApp);
       }
 
-      await LocalDB.cacheJobApplications(processedApps, userId);
-      debugPrint('Fetched ${processedApps.length} applications from server');
-      return processedApps;
+      await LocalDB.cacheJobApplications(applications, userId);
+      debugPrint('Fetched ${applications.length} applications from server');
+
+      return applications;
     } catch (e) {
       debugPrint('Error fetching applications: $e');
       return LocalDB.getCachedJobApplications(userId);
     }
   }
 
-  Map<String, dynamic> _processApplicationWithJob(Map<String, dynamic> app) {
-    final jobData = app['job_post'] as Map<String, dynamic>?;
-    final companyData = jobData?['company_profile'] as Map<String, dynamic>?;
-    final jobTypeData = jobData?['job_type'] as Map<String, dynamic>?;
-
-    return {
-      'application_id': app['application_id'],
-      'job_id': app['job_id'],
-      'user_id': app['user_id'],
-      'resume_url': app['resume_url'],
-      'resume_file_name': app['resume_file_name'],
-      'cover_letter': app['cover_letter'],
-      'status': app['status'],
-      'applied_at': app['applied_at'],
-      'updated_at': app['updated_at'],
-      'job_title': jobData?['job_title'] ?? 'Unknown Position',
-      'company_name': companyData?['company_name'] ?? 'Unknown Company',
-      'company_logo': companyData?['logo_url'],
-      'location': jobData?['location'] ?? companyData?['company_location'] ?? 'Not specified',
-      'salary_min': jobData?['salary_min'],
-      'salary_max': jobData?['salary_max'],
-      'job_type': jobTypeData?['name'] ?? 'Not specified',
-      'description': jobData?['description'] ?? '',
-    };
-  }
-
   // ============================================================================
-  // WITHDRAW APPLICATION (Soft delete - set status to withdrawn)
+  // WITHDRAW APPLICATION - HARD DELETE
   // ============================================================================
 
   Future<bool> withdrawApplication(String applicationId) async {
     try {
-      final current = await _sb
-          .from('job_application')
-          .select('status')
-          .eq('application_id', applicationId)
-          .single();
+      debugPrint('=== WITHDRAW APPLICATION STARTED ===');
+      debugPrint('Application ID: $applicationId');
 
-      if (current['status'] != 'pending') {
-        throw Exception('Cannot withdraw application that is already ${current['status']}');
+      // First, check if application exists and get its status
+      final existingApp = await _sb
+          .from('job_application')
+          .select('application_id, status, job_id')
+          .eq('application_id', applicationId)
+          .maybeSingle();
+
+      debugPrint('Existing application: $existingApp');
+
+      if (existingApp == null) {
+        debugPrint('Application not found in database');
+        return false;
       }
 
-      // Soft delete - update status to withdrawn
+      if (existingApp['status'] != 'pending') {
+        debugPrint('Cannot withdraw application with status: ${existingApp['status']}');
+        return false;
+      }
+
+      final jobId = existingApp['job_id'];
+      debugPrint('Job ID: $jobId');
+
+      // HARD DELETE - Remove from database completely
       await _sb
           .from('job_application')
-          .update({
-        'status': 'withdrawn',
-        'updated_at': DateTime.now().toIso8601String(),
-      })
+          .delete()
           .eq('application_id', applicationId);
 
-      final userId = _uid;
-      if (userId != null) {
-        // Remove from cache
-        await LocalDB.deleteCachedJobApplication(applicationId, userId);
+      debugPrint('Delete request sent to Supabase');
+
+      // Verify deletion
+      final verifyDelete = await _sb
+          .from('job_application')
+          .select('application_id')
+          .eq('application_id', applicationId)
+          .maybeSingle();
+
+      debugPrint('After deletion check: $verifyDelete');
+
+      // Update application count on job post
+      try {
+        final jobData = await _sb
+            .from('job_post')
+            .select('application_count')
+            .eq('job_id', jobId)
+            .maybeSingle();
+
+        final currentCount = (jobData?['application_count'] as int?) ?? 0;
+        final newCount = currentCount > 0 ? currentCount - 1 : 0;
+
+        await _sb
+            .from('job_post')
+            .update({'application_count': newCount})
+            .eq('job_id', jobId);
+
+        debugPrint('Updated application count from $currentCount to $newCount');
+      } catch (e) {
+        debugPrint('Error updating application count: $e');
       }
 
-      debugPrint('Application withdrawn: $applicationId');
+      // Clear local cache
+      final userId = _uid;
+      if (userId != null) {
+        await LocalDB.deleteCachedJobApplication(applicationId, userId);
+        debugPrint('Removed from local cache');
+      }
+
+      debugPrint('=== APPLICATION WITHDRAWN SUCCESSFULLY ===');
       return true;
+
     } catch (e) {
-      debugPrint('Error withdrawing application: $e');
+      debugPrint('Error in withdrawApplication: $e');
       return false;
+    }
+  }
+
+  // ============================================================================
+  // GET USER APPLICATION COUNT
+  // ============================================================================
+
+  Future<int> getUserApplicationCount(String userId) async {
+    try {
+      final response = await _sb
+          .from('job_application')
+          .select('application_id')
+          .eq('user_id', userId)
+          .neq('status', 'withdrawn');
+
+      final List<dynamic> results = response as List<dynamic>;
+      return results.length;
+    } catch (e) {
+      debugPrint('Error getting application count: $e');
+      return 0;
     }
   }
 
@@ -270,38 +371,37 @@ class ApplicationRepository {
           .order('applied_at', ascending: false);
 
       final applicants = List<Map<String, dynamic>>.from(response);
-      return applicants.map((app) => _processApplicantData(app)).toList();
+
+      return applicants.map((app) {
+        final userData = app['users'] as Map<String, dynamic>?;
+        final profileData = userData?['job_seeker_profile'] as Map<String, dynamic>?;
+
+        return {
+          'application_id': app['application_id'],
+          'job_id': app['job_id'],
+          'status': app['status'],
+          'applied_at': app['applied_at'],
+          'updated_at': app['updated_at'],
+          'resume_url': app['resume_url'],
+          'resume_file_name': app['resume_file_name'],
+          'cover_letter': app['cover_letter'],
+          'user': {
+            'user_id': userData?['user_id'],
+            'fullname': userData?['fullname'] ?? 'Unknown',
+            'email': userData?['email'] ?? '',
+            'phone': userData?['phone'] ?? 'Not provided',
+            'profile_image_url': userData?['profile_image_url'],
+            'bio': profileData?['bio'] ?? 'No bio provided',
+            'address': profileData?['address'] ?? 'Not specified',
+            'date_of_birth': profileData?['date_of_birth'],
+            'gender': profileData?['gender'],
+          },
+        };
+      }).toList();
     } catch (e) {
       debugPrint('Error fetching applicants: $e');
       return [];
     }
-  }
-
-  Map<String, dynamic> _processApplicantData(Map<String, dynamic> app) {
-    final userData = app['users'] as Map<String, dynamic>?;
-    final profileData = userData?['job_seeker_profile'] as Map<String, dynamic>?;
-
-    return {
-      'application_id': app['application_id'],
-      'job_id': app['job_id'],
-      'status': app['status'],
-      'applied_at': app['applied_at'],
-      'updated_at': app['updated_at'],
-      'resume_url': app['resume_url'],
-      'resume_file_name': app['resume_file_name'],
-      'cover_letter': app['cover_letter'],
-      'user': {
-        'user_id': userData?['user_id'],
-        'fullname': userData?['fullname'] ?? 'Unknown',
-        'email': userData?['email'] ?? '',
-        'phone': userData?['phone'] ?? 'Not provided',
-        'profile_image_url': userData?['profile_image_url'],
-        'bio': profileData?['bio'] ?? 'No bio provided',
-        'address': profileData?['address'] ?? 'Not specified',
-        'date_of_birth': profileData?['date_of_birth'],
-        'gender': profileData?['gender'],
-      },
-    };
   }
 
   // ============================================================================

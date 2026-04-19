@@ -7,7 +7,7 @@ import 'package:jobify/job_post/create_job_post.dart';
 import 'package:jobify/job_post/job_post_management.dart';
 import 'package:provider/provider.dart';
 import 'users/user_provider.dart';
-
+import 'package:jobify/job/my_applications.dart';
 class HomePage extends StatefulWidget {
   final Users user;
   const HomePage({super.key, required this.user});
@@ -171,6 +171,6 @@ class AppliedScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(child: Text("Applied Screen"));
+    return const MyApplicationsPage();
   }
 }

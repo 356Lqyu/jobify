@@ -205,7 +205,21 @@ class JobRepository {
   }
 
   Future<void> incrementViewCount(String jobId) async {
-    await _sb.rpc('increment_view_count', params: {'job_id_param': jobId});
+    try {
+      await _sb.rpc('increment_view_count', params: {'job_id_param': jobId});
+    } catch (e) {
+      print('RPC failed, using direct update: $e');
+      final current = await _sb
+          .from('job_post')
+          .select('view_count')
+          .eq('job_id', jobId)
+          .maybeSingle();
+      int newCount = (current?['view_count'] as int? ?? 0) + 1;
+      await _sb
+          .from('job_post')
+          .update({'view_count': newCount})
+          .eq('job_id', jobId);
+    }
   }
 
   Future<void> incrementApplicationCount(String jobId) async {
@@ -335,18 +349,54 @@ class JobRepository {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // SAVE JOB (LOCAL ONLY – can be extended to remote)
+  // SAVE JOB (remote post_saved table)
   // ══════════════════════════════════════════════════════════════════════════
-
   Future<bool> toggleSaveJob(String jobId, bool currentlySaved) async {
     if (_uid == null) return currentlySaved;
-    final newSaved = !currentlySaved;
-    try {
-      await LocalDB.setJobSaved(jobId, newSaved, _uid!);
-      return newSaved;
-    } catch (e) {
-      debugPrint('toggleSaveJob error: $e');
+
+    // 1. Find the associated social post for this job
+    final postId = await _findPostIdForJob(jobId);
+    if (postId == null) {
+      debugPrint('No linked post found for job $jobId');
       return currentlySaved;
+    }
+
+    // 2. Use the unified save mechanism (remote)
+    final feedRepo = FeedRepository();
+    final newSaved = await feedRepo.toggleSavePost(postId, currentlySaved);
+
+    // 3. Update in‑memory JobPost object if needed (caller will handle UI)
+    return newSaved;
+  }
+
+  Future<String?> _findPostIdForJob(String jobId) async {
+    try {
+      final resp = await _sb
+          .from('post')
+          .select('post_id')
+          .eq('job_id', jobId)
+          .maybeSingle();
+      return resp?['post_id'] as String?;
+    } catch (e) {
+      debugPrint('Error finding post for job: $e');
+      return null;
+    }
+  }
+
+  Future<bool> isJobSaved(String jobId) async {
+    if (_uid == null) return false;
+    try {
+      final postId = await _findPostIdForJob(jobId);
+      if (postId == null) return false;
+      final resp = await _sb
+          .from('post_saved')
+          .select()
+          .eq('post_id', postId)
+          .eq('user_id', _uid!)
+          .maybeSingle();
+      return resp != null;
+    } catch (e) {
+      return false;
     }
   }
 }

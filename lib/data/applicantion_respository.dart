@@ -2,9 +2,11 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:jobify/data/local_db.dart';
+import 'package:jobify/data/job_repository.dart';
 
 class ApplicationRepository {
   final SupabaseClient _sb = Supabase.instance.client;
+  final JobRepository _jobRepo = JobRepository();
 
   String? get _uid => _sb.auth.currentUser?.id;
 
@@ -63,22 +65,7 @@ class ApplicationRepository {
           .select()
           .single();
 
-      try {
-        final jobData = await _sb
-            .from('job_post')
-            .select('application_count')
-            .eq('job_id', jobId)
-            .maybeSingle();
-
-        final currentCount = (jobData?['application_count'] as int?) ?? 0;
-
-        await _sb
-            .from('job_post')
-            .update({'application_count': currentCount + 1})
-            .eq('job_id', jobId);
-      } catch (e) {
-        debugPrint('Error updating application count: $e');
-      }
+      await _jobRepo.incrementApplicationCount(jobId);
 
       final jobDetails = await _getJobDetails(jobId);
 

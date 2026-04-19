@@ -269,6 +269,35 @@ class JobPost {
     return '${d.inMinutes}m ago';
   }
 
+  Map<String, dynamic> toMap() {
+    return {
+      'job_id': jobId,
+      'company_id': companyId,
+      'created_by': createdBy,
+      'job_title': jobTitle,
+      'description': description,
+      'location': location,
+      'remote_option': remoteOption,
+      'salary_min': salaryMin,
+      'salary_max': salaryMax,
+      'job_type': jobType,
+      'job_category': jobCategory,
+      'experience_level': experienceLevel,
+      'vacancy_count': vacancyCount,
+      'application_deadline': applicationDeadline?.toIso8601String(),
+      'status': status,
+      'view_count': viewCount,
+      'application_count': applicationCount,
+      'created_at': createdAt.toIso8601String(),
+      'image_urls': imageUrls,  // already List<String>
+      'video_url': videoUrl,
+      'company_name': companyName,
+      'company_logo_url': companyLogoUrl,
+      'company_industry': companyIndustry,
+      'is_saved': isSaved,
+    };
+  }
+
   // ── Supabase deserialization ───────────────────────────────────────────────
 
   factory JobPost.fromSupabase(Map<String, dynamic> json, {

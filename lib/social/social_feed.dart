@@ -8,7 +8,7 @@ import 'package:jobify/social/social_post_bottom_sheet.dart';
 import 'package:jobify/data/feed_repository.dart';
 import 'package:jobify/users/users.dart';
 import 'package:jobify/data/local_db.dart';
-//import 'package:jobify/job_post/job_detail.dart'; // job seeker detail page
+import 'package:jobify/discovery/job_details.dart';
 import 'package:jobify/job_post/job_detail_employer.dart';
 
 class SocialFeedPage extends StatefulWidget {
@@ -630,40 +630,31 @@ class _FeedCard extends StatelessWidget {
   }
 
   // Navigation helper
-  void _navigateToDetail(BuildContext context) async {  // note: async
+  void _navigateToDetail(BuildContext context) {
     if (post.postType == PostType.job && post.linkedJob != null) {
-      final jobId = post.linkedJob!.jobId;
-
-      // Try to get the latest job map from cache
-      Map<String, dynamic>? jobMap = await LocalDB.getCachedJobMapById(jobId);
-
-      // Fallback: build a minimal map from the linkedJob if cache miss
-      jobMap ??= {
-        'job_id': jobId,
-        'job_title': post.linkedJob!.jobTitle,
-        'company_name': post.linkedJob!.companyName,
-        'location': post.linkedJob!.location,
-        'description': post.linkedJob!.description,
-        'job_type': post.linkedJob!.jobType,
-        'job_category': post.linkedJob!.jobCategory,
-        'experience_level': post.linkedJob!.experienceLevel,
-        'remote_option': post.linkedJob!.remoteOption,
-        'salary_min': post.linkedJob!.salaryMin,
-        'salary_max': post.linkedJob!.salaryMax,
-        'view_count': post.linkedJob!.viewCount,
-        'application_count': post.linkedJob!.applicationCount,
-        'image_urls': post.linkedJob!.imageUrls,
-        'video_url': post.linkedJob!.videoUrl,
-        'status': post.linkedJob!.status,
-      };
+      final job = post.linkedJob!;
 
       if (post.userId == currentUser.userId) {
-        Navigator.push(context, MaterialPageRoute(builder: (_) => JobDetailEmployer(job: jobMap!)));
+        // Employer viewing their own job – need a map for JobDetailEmployer
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => JobDetailEmployer(job: job.toMap()),
+          ),
+        );
       } else {
-        //Navigator.push(context, MaterialPageRoute(builder: (_) => JobDetailPage(job: jobMap!)));
+        // Job seeker – pass JobPost directly
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => JobDetailPage(job: job, currentUser: currentUser),
+          ),
+        );
       }
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Post details coming soon')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Post details coming soon')),
+      );
     }
   }
 

@@ -7,7 +7,9 @@ import 'package:jobify/job_post/create_job_post.dart';
 import 'package:jobify/job_post/job_post_management.dart';
 import 'package:jobify/users/profile_page.dart';
 import 'package:provider/provider.dart';
-import 'users/user_provider.dart';
+import 'package:jobify/users/user_provider.dart';
+import 'package:jobify/job/my_applications.dart';
+import 'package:jobify/job/company_jobs_screen.dart';
 
 class HomePage extends StatefulWidget {
   final Users user;
@@ -40,9 +42,8 @@ class _HomePageState extends State<HomePage> {
     if (_isJobSeeker) {
       _screens = [
         SocialFeedPage(user: widget.user),
-        //DiscoverScreen(user:widget.user),
         const DiscoverScreen(),
-        const AppliedScreen(),
+        const MyApplicationsPage(),  // Using MyApplicationsPage from second file
         const SettingPage(),
       ];
 
@@ -65,24 +66,23 @@ class _HomePageState extends State<HomePage> {
         BottomBarItem(
           icon: Icons.person_outline,
           activeIcon: Icons.person,
-          label: 'Account',
+          label: 'Profile',
         ),
       ];
     } else {
       _screens = [
         SocialFeedPage(user: widget.user),
-        //DiscoverScreen(user:widget.user),
-        const DiscoverScreen(),
-        JobPostManagementPage(key: _jobsPageKey),
+        const TalentScreen(),
+        JobPostManagementPage(key: _jobsPageKey),  // My Jobs management from first file
         CreateJobPost(
           onPostSuccess: () {
             _jobsPageKey.currentState?.loadJobs();
             setState(() {
-              selectedIndex = 1;
+              selectedIndex = 2;  // Switch to My Jobs tab after posting
             });
           },
         ),
-        const SettingPage(),
+        CompanyJobsScreen(userId: widget.user.userId),  // Company jobs from second file
       ];
 
       _items = const [
@@ -92,9 +92,9 @@ class _HomePageState extends State<HomePage> {
           label: 'Home',
         ),
         BottomBarItem(
-          icon: Icons.search_outlined,
-          activeIcon: Icons.search,
-          label: 'Discover',
+          icon: Icons.people_outline,
+          activeIcon: Icons.people,
+          label: 'Talent',
         ),
         BottomBarItem(
           icon: Icons.work_outline,
@@ -109,43 +109,45 @@ class _HomePageState extends State<HomePage> {
         BottomBarItem(
           icon: Icons.business_outlined,
           activeIcon: Icons.business,
-          label: 'Account',
+          label: 'Company',
         ),
       ];
     }
   }
 
+  Future<bool> _onWillPop() async {
+    // Prevent going back to login screen
+    if (selectedIndex != 0) {
+      setState(() {
+        selectedIndex = 0;
+      });
+      return false;
+    }
+    // Show exit dialog if on home screen
+    final shouldExit = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Exit App'),
+        content: const Text('Do you want to exit the app?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Exit'),
+          ),
+        ],
+      ),
+    );
+    return shouldExit ?? false;
+  }
+
   @override
   Widget build(BuildContext context) {
     return WillPopScope(
-      onWillPop: () async {
-        // Prevent going back to login screen
-        if (selectedIndex != 0) {
-          setState(() {
-            selectedIndex = 0;
-          });
-          return false;
-        }
-        // Show exit dialog if on home screen
-        final shouldExit = await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Exit App'),
-            content: const Text('Do you want to exit the app?'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('Exit'),
-              ),
-            ],
-          ),
-        );
-        return shouldExit ?? false;
-      },
+      onWillPop: _onWillPop,
       child: Scaffold(
         body: IndexedStack(
           index: selectedIndex,
@@ -162,6 +164,7 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
+// ==================== DISCOVER SCREEN ====================
 class DiscoverScreen extends StatelessWidget {
   const DiscoverScreen({super.key});
 
@@ -171,11 +174,12 @@ class DiscoverScreen extends StatelessWidget {
   }
 }
 
-class AppliedScreen extends StatelessWidget {
-  const AppliedScreen({super.key});
+// ==================== TALENT SCREEN (for Employers) ====================
+class TalentScreen extends StatelessWidget {
+  const TalentScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return const Center(child: Text("Applied Screen"));
+    return const Center(child: Text("Talent Screen"));
   }
 }

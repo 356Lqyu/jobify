@@ -16,10 +16,8 @@ class AuthGate extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<AuthState>(
-      // listen auth state change
       stream: Supabase.instance.client.auth.onAuthStateChange,
-      // build page based on the auth state
-      builder: (context,snapshot) {
+      builder: (context, snapshot) {
         // Loading
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
@@ -32,7 +30,7 @@ class AuthGate extends StatelessWidget {
         // Check for errors
         if (snapshot.hasError) {
           debugPrint('Auth error: ${snapshot.error}');
-          return const WelcomePage();
+          return const AnimatedHomePage();  // Changed from WelcomePage to AnimatedHomePage
         }
 
         // Get session
@@ -58,8 +56,8 @@ class AuthGate extends StatelessWidget {
           );
         }
 
-        // Not logged in - show welcome page
-        return const WelcomePage();
+        // Not logged in - show animated home page
+        return const AnimatedHomePage();  // Changed from WelcomePage to AnimatedHomePage
       },
     );
   }

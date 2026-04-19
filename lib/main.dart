@@ -6,11 +6,11 @@ import 'package:jobify/users/users.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:jobify/auth/registration.dart';
-import 'auth/forgot_password.dart';
-import 'auth/login.dart';
-import 'setting_page.dart';
-import 'home.dart';
-import 'data/user_repository.dart';
+import 'package:jobify/auth/forgot_password.dart';
+import 'package:jobify/auth/login.dart';
+import 'package:jobify/setting_page.dart';
+import 'package:jobify/home.dart';
+import 'package:jobify/data/user_repository.dart';
 
 const String supabaseUrl = 'https://nejlppdligklddlwvzub.supabase.co';
 const String supabaseKey = 'sb_secret_518COekCnlz8R_OAgQVCIw_2E9LVs8_';
@@ -18,6 +18,7 @@ const String supabaseKey = 'sb_secret_518COekCnlz8R_OAgQVCIw_2E9LVs8_';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Supabase setup
   await Supabase.initialize(
     url: supabaseUrl,
     anonKey: supabaseKey,
@@ -103,7 +104,7 @@ class AuthGate extends StatelessWidget {
 
               final user = userSnapshot.data;
               if (user == null) {
-                return const WelcomePage();
+                return const AnimatedHomePage();
               }
 
               return HomePage(user: user);
@@ -111,7 +112,7 @@ class AuthGate extends StatelessWidget {
           );
         }
 
-        return const WelcomePage();
+        return const AnimatedHomePage();
       },
     );
   }
@@ -130,9 +131,41 @@ class AuthGate extends StatelessWidget {
   }
 }
 
-// Welcome Page (the original home page with login/hiring buttons)
-class WelcomePage extends StatelessWidget {
-  const WelcomePage({super.key});
+// Animated Home Page / Welcome Page (combined version with animation)
+class AnimatedHomePage extends StatefulWidget {
+  const AnimatedHomePage({super.key});
+
+  @override
+  State<AnimatedHomePage> createState() => _AnimatedHomePageState();
+}
+
+class _AnimatedHomePageState extends State<AnimatedHomePage>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 4),
+    );
+
+    _scaleAnimation = Tween<double>(
+      begin: 0.95,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+
+    _controller.repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -143,13 +176,16 @@ class WelcomePage extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              /// Logo
-              Container(
-                width: 260,
-                height: 130,
-                child: Image.asset(
-                  'assets/images/logo3.png',
-                  fit: BoxFit.contain,
+              /// Logo with animation
+              ScaleTransition(
+                scale: _scaleAnimation,
+                child: Container(
+                  width: 260,
+                  height: 130,
+                  child: Image.asset(
+                    'assets/images/logo3.png',
+                    fit: BoxFit.contain,
+                  ),
                 ),
               ),
 
@@ -169,7 +205,7 @@ class WelcomePage extends StatelessWidget {
 
               const SizedBox(height: 40),
 
-              /// Job Button
+              /// Job Button - Looking for a job
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
@@ -185,7 +221,9 @@ class WelcomePage extends StatelessWidget {
                   onPressed: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (_) => const Login(selectedRole: 'JOB_SEEKER')),
+                      MaterialPageRoute(
+                        builder: (_) => const Login(selectedRole: 'JOB_SEEKER'),
+                      ),
                     );
                   },
                   child: Row(
@@ -201,7 +239,7 @@ class WelcomePage extends StatelessWidget {
 
               const SizedBox(height: 15),
 
-              /// Hiring Button
+              /// Hiring Button - I'm Hiring
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
@@ -218,7 +256,9 @@ class WelcomePage extends StatelessWidget {
                   onPressed: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (_) => const Login(selectedRole: 'POSTER')),
+                      MaterialPageRoute(
+                        builder: (_) => const Login(selectedRole: 'POSTER'),
+                      ),
                     );
                   },
                   child: Row(

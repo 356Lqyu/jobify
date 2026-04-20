@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 class Users {
   final String userId;
-  final String role;     // JOV_SEEKER or POSTER
+  final String role;     // JOB_SEEKER or POSTER
   final String fullname;
   final String? phone;
   final String? profileImageUrl;
@@ -36,7 +36,7 @@ class Users {
   }
 
   // convert the users object to JSON map fro db operation
-  // use when insert/update record in supabase/ caching user data in SQLite/pass user data between app component
+  // use when insert/update record in supabase & caching user data in SQLite & pass user data between app component
   Map<String, dynamic> toJson() {
     return {
       'user_id': userId,

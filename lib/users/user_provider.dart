@@ -7,8 +7,7 @@ import 'package:jobify/data/user_repository.dart';
 class UserProvider extends ChangeNotifier {
   // get current authenticated user data
   Users? _currentUser;
-  // this repository will handle all supabase and cache interaction
-  final UserRepository _userRepo = UserRepository();
+  final UserRepository _userRepo = UserRepository();     // this repository will handle all supabase and cache interaction
   bool _isLoading = false;
 
   Users? get currentUser => _currentUser;
@@ -17,13 +16,13 @@ class UserProvider extends ChangeNotifier {
   // load current user from cache / server
   Future<void> loadUser({String? userId, bool forceRefresh = false}) async {
     _isLoading = true;
-    notifyListeners();    // UI shows loading
+    notifyListeners();
 
     try {
       _currentUser = await _userRepo.getCurrentUser(forceRefresh: forceRefresh);
     } finally {
       _isLoading = false;
-      notifyListeners();   // Ui updates with loaded data or null if failed
+      notifyListeners();
     }
   }
 

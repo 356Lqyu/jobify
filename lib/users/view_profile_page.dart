@@ -1,8 +1,6 @@
-// view_profile_page.dart
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:jobify/users/users.dart';
 import 'package:jobify/data/user_repository.dart';
 
 class ViewProfilePage extends StatefulWidget {
@@ -32,8 +30,13 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
   bool _isLoading = true;
   bool _isFollowing = false;
 
-  // Selected tab for content section
-  int _selectedTabIndex = 0; // 0: Posts, 1: Branches, 2: Followers
+  // Selected tab for content section (for company view)
+  int _selectedTabIndex = 0; // 0: Posts, 1: Jobs, 2: Branches, 3: Followers
+
+  // For job seeker - expanded sections
+  bool _showExperience = true;
+  bool _showEducation = true;
+  bool _showSkills = true;
 
   // User data
   String? _fullname;
@@ -56,15 +59,19 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
 
   // Stats
   int _postsCount = 0;
+  int _jobPostsCount = 0;
   int _followersCount = 0;
   int _followingCount = 0;
   int _branchesCount = 0;
 
   // Lists
   List<Map<String, dynamic>> _recentPosts = [];
+  List<Map<String, dynamic>> _jobPosts = [];
   List<Map<String, dynamic>> _branches = [];
   List<Map<String, dynamic>> _followers = [];
   List<Map<String, dynamic>> _skills = [];
+  List<Map<String, dynamic>> _education = [];
+  List<Map<String, dynamic>> _experience = [];
 
   String? _currentUserId;
 
@@ -75,10 +82,14 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
     _loadProfile();
     _loadStats();
     _loadRecentPosts();
+    _loadJobPosts();
     _loadBranches();
     _loadFollowers();
     _loadHeadOffice();
     _checkFollowStatus();
+    if (!widget.isCompany) {
+      _loadJobSeekerDetails();
+    }
   }
 
   Future<void> _getCurrentUser() async {
@@ -109,6 +120,42 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
       }
     } catch (e) {
       debugPrint('Error loading head office: $e');
+    }
+  }
+
+  Future<void> _loadJobSeekerDetails() async {
+    try {
+      // Load skills
+      final skillsData = await supabase
+          .from('skills')
+          .select()
+          .eq('user_id', widget.userId)
+          .order('skill_name');
+      setState(() {
+        _skills = List<Map<String, dynamic>>.from(skillsData);
+      });
+
+      // Load education
+      final educationData = await supabase
+          .from('education')
+          .select()
+          .eq('user_id', widget.userId)
+          .order('start_date', ascending: false);
+      setState(() {
+        _education = List<Map<String, dynamic>>.from(educationData);
+      });
+
+      // Load experience
+      final experienceData = await supabase
+          .from('experience')
+          .select()
+          .eq('user_id', widget.userId)
+          .order('start_date', ascending: false);
+      setState(() {
+        _experience = List<Map<String, dynamic>>.from(experienceData);
+      });
+    } catch (e) {
+      debugPrint('Error loading job seeker details: $e');
     }
   }
 
@@ -167,18 +214,6 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
             _phone = userData['phone'];
           });
         }
-
-        // Load skills for job seekers
-        if (!widget.isCompany) {
-          final skillsData = await supabase
-              .from('skills')
-              .select()
-              .eq('user_id', widget.userId)
-              .order('skill_name');
-          setState(() {
-            _skills = List<Map<String, dynamic>>.from(skillsData);
-          });
-        }
       }
     } catch (e) {
       debugPrint('Error loading profile: $e');
@@ -197,7 +232,14 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
             .eq('company_id', widget.companyId!);
         _postsCount = (postsResult as List).length;
 
-        // Count followers (using following_id column)
+        // Count job posts
+        final jobPostsResult = await supabase
+            .from('job_post')
+            .select('job_id')
+            .eq('company_id', widget.companyId!);
+        _jobPostsCount = (jobPostsResult as List).length;
+
+        // Count followers
         final followersResult = await supabase
             .from('follows')
             .select('follow_id')
@@ -211,9 +253,9 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
             .eq('company_id', widget.companyId!);
         _branchesCount = (branchesResult as List).length;
 
-        debugPrint('Stats - Posts: $_postsCount, Followers: $_followersCount, Branches: $_branchesCount');
+        debugPrint('Stats - Posts: $_postsCount, Job Posts: $_jobPostsCount, Followers: $_followersCount, Branches: $_branchesCount');
       } else {
-        // For user profile
+        // For user profile - only show posts and followers count
         final postsResult = await supabase
             .from('post')
             .select('post_id')
@@ -242,7 +284,6 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
 
   Future<void> _loadRecentPosts() async {
     try {
-      // First get posts
       final posts = await supabase
           .from('post')
           .select('''
@@ -304,6 +345,65 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
     }
   }
 
+  Future<void> _loadJobPosts() async {
+    if (!widget.isCompany || widget.companyId == null) return;
+
+    try {
+      final jobPosts = await supabase
+          .from('job_post')
+          .select('''
+            job_id,
+            job_title,
+            description,
+            location,
+            remote_option,
+            salary_min,
+            salary_max,
+            job_type_id!inner (name),
+            experience_level_id!inner (name),
+            status,
+            created_at
+          ''')
+          .eq('company_id', widget.companyId!)
+          .eq('status', 'active')
+          .order('created_at', ascending: false);
+
+      if (mounted) {
+        final jobList = List<Map<String, dynamic>>.from(jobPosts);
+
+        // Process each job to extract nested data
+        for (final job in jobList) {
+          final jobTypeData = job['job_type_id'];
+          if (jobTypeData is List && jobTypeData.isNotEmpty) {
+            job['job_type'] = jobTypeData[0]['name'];
+          } else if (jobTypeData is Map) {
+            job['job_type'] = jobTypeData['name'];
+          } else {
+            job['job_type'] = 'Not specified';
+          }
+
+          final expLevelData = job['experience_level_id'];
+          if (expLevelData is List && expLevelData.isNotEmpty) {
+            job['experience_level'] = expLevelData[0]['name'];
+          } else if (expLevelData is Map) {
+            job['experience_level'] = expLevelData['name'];
+          } else {
+            job['experience_level'] = 'Not specified';
+          }
+
+          job.remove('job_type_id');
+          job.remove('experience_level_id');
+        }
+
+        setState(() {
+          _jobPosts = jobList;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading job posts: $e');
+    }
+  }
+
   Future<void> _loadBranches() async {
     if (!widget.isCompany || widget.companyId == null) return;
 
@@ -330,13 +430,11 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
       late final List<dynamic> followersData;
 
       if (widget.isCompany && widget.companyId != null) {
-        // Get follower IDs
         followersData = await supabase
             .from('follows')
             .select('follower_id')
             .eq('following_id', widget.companyId!);
       } else {
-        // Get follower IDs
         followersData = await supabase
             .from('follows')
             .select('follower_id')
@@ -447,7 +545,7 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        elevation: 0,
+
         actions: [
           if (!isOwnProfile)
             Padding(
@@ -477,8 +575,12 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
           await _loadProfile();
           await _loadStats();
           await _loadRecentPosts();
+          await _loadJobPosts();
           await _loadBranches();
           await _loadFollowers();
+          if (!widget.isCompany) {
+            await _loadJobSeekerDetails();
+          }
         },
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -488,7 +590,10 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
               if (widget.isCompany) _buildCompanyInfoSection(),
               _buildAboutSection(),
               _buildStatsRow(),
-              _buildContentSection(),
+              if (widget.isCompany)
+                _buildCompanyContentSection()
+              else
+                _buildJobSeekerContentSection(),
               const SizedBox(height: 20),
             ],
           ),
@@ -641,80 +746,483 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
   }
 
   Widget _buildStatsRow() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
+    if (widget.isCompany) {
+      return Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 8,
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            _buildStatItem(_postsCount, 'Posts', 0),
+            _buildStatItem(_jobPostsCount, 'Jobs', 1),
+            _buildStatItem(_branchesCount, 'Branches', 2),
+            _buildStatItem(_followersCount, 'Followers', 3),
+          ],
+        ),
+      );
+    } else {
+      // For job seeker - only show Posts and Followers in stats row
+      return Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 8,
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            _buildStatItem(_postsCount, 'Posts', -1),
+            _buildStatItem(_followingCount, 'Following', -1),
+          ],
+        ),
+      );
+    }
+  }
+
+  Widget _buildStatItem(int count, String label, int index) {
+    return Expanded(
+      child: Column(
         children: [
-          _buildStatItem(_postsCount, 'Posts', 0),
-          if (widget.isCompany)
-            _buildStatItem(_branchesCount, 'Branches', 1),
-          _buildStatItem(_followersCount, 'Followers', 2),
+          Text(
+            count.toString(),
+            style: const TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: Colors.blue,
+            ),
+          ),
+
         ],
       ),
     );
   }
 
-  Widget _buildStatItem(int count, String label, int index) {
+  // Company content section with tabs
+  Widget _buildCompanyContentSection() {
+    return Column(
+      children: [
+        _buildCompanyTabs(),
+        if (_selectedTabIndex == 0)
+          _buildPostsContent()
+        else if (_selectedTabIndex == 1)
+          _buildJobPostsContent()
+        else if (_selectedTabIndex == 2)
+            _buildBranchesContent()
+          else if (_selectedTabIndex == 3)
+              _buildFollowersContent(),
+      ],
+    );
+  }
+
+  Widget _buildCompanyTabs() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _buildTabButton('Posts', 0),
+          _buildTabButton('Jobs', 1),
+          _buildTabButton('Branches', 2),
+          _buildTabButton('Followers', 3),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTabButton(String label, int index) {
+    final isSelected = _selectedTabIndex == index;
     return Expanded(
-      child: InkWell(
-        onTap: () {
+      child: TextButton(
+        onPressed: () {
           setState(() {
             _selectedTabIndex = index;
           });
         },
-        child: Column(
-          children: [
-            Text(
-              count.toString(),
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-                color: _selectedTabIndex == index ? Colors.blue : Colors.black87,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 13,
-                color: _selectedTabIndex == index ? Colors.blue : Colors.grey,
-                fontWeight: _selectedTabIndex == index ? FontWeight.w600 : FontWeight.normal,
-              ),
-            ),
-            if (_selectedTabIndex == index)
-              Container(
-                margin: const EdgeInsets.only(top: 8),
-                height: 2,
-                width: 30,
-                color: Colors.blue,
-              ),
-          ],
+        style: TextButton.styleFrom(
+          foregroundColor: isSelected ? Colors.blue : Colors.grey,
+          backgroundColor: isSelected ? Colors.blue.shade50 : Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildContentSection() {
-    if (_selectedTabIndex == 0) {
-      return _buildPostsContent();
-    } else if (_selectedTabIndex == 1 && widget.isCompany) {
-      return _buildBranchesContent();
-    } else if (_selectedTabIndex == 2) {
-      return _buildFollowersContent();
+  // Job Seeker content section with expandable sections
+  Widget _buildJobSeekerContentSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Posts Section
+        _buildSectionHeader('Posts', Icons.post_add_outlined),
+        _buildPostsContent(),
+
+        const SizedBox(height: 16),
+
+        // Experience Section
+        _buildExpandableSection(
+          title: 'Work Experience',
+          icon: Icons.work_outline,
+          isExpanded: _showExperience,
+          onToggle: () => setState(() => _showExperience = !_showExperience),
+          content: _buildExperienceContent(),
+          itemCount: _experience.length,
+        ),
+
+        const SizedBox(height: 16),
+
+        // Education Section
+        _buildExpandableSection(
+          title: 'Education',
+          icon: Icons.school_outlined,
+          isExpanded: _showEducation,
+          onToggle: () => setState(() => _showEducation = !_showEducation),
+          content: _buildEducationContent(),
+          itemCount: _education.length,
+        ),
+
+        const SizedBox(height: 16),
+
+        // Skills Section
+        _buildExpandableSection(
+          title: 'Skills',
+          icon: Icons.code_outlined,
+          isExpanded: _showSkills,
+          onToggle: () => setState(() => _showSkills = !_showSkills),
+          content: _buildSkillsContent(),
+          itemCount: _skills.length,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSectionHeader(String title, IconData icon) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: Colors.blue),
+          const SizedBox(width: 8),
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildExpandableSection({
+    required String title,
+    required IconData icon,
+    required bool isExpanded,
+    required VoidCallback onToggle,
+    required Widget content,
+    required int itemCount,
+  }) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 4,
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          ListTile(
+            leading: Icon(icon, color: Colors.blue),
+            title: Text(
+              title,
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (itemCount > 0)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade100,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '$itemCount',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue.shade700,
+                      ),
+                    ),
+                  ),
+                const SizedBox(width: 8),
+                Icon(
+                  isExpanded ? Icons.expand_less : Icons.expand_more,
+                  color: Colors.grey,
+                ),
+              ],
+            ),
+            onTap: onToggle,
+          ),
+          if (isExpanded) content,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildExperienceContent() {
+    if (_experience.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(16),
+        child: Center(
+          child: Text(
+            'No work experience added yet',
+            style: TextStyle(color: Colors.grey),
+          ),
+        ),
+      );
     }
-    return const SizedBox.shrink();
+
+    return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: _experience.length,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      itemBuilder: (context, index) {
+        final exp = _experience[index];
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade50,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.grey.shade200),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                exp['job_title'] ?? 'Unknown Position',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                exp['company_name'] ?? 'Unknown Company',
+                style: TextStyle(color: Colors.grey.shade700, fontSize: 14),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                _formatDateRange(exp['start_date'], exp['end_date']),
+                style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+              ),
+              if (exp['description'] != null && exp['description'].toString().isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  exp['description'],
+                  style: const TextStyle(fontSize: 13),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildEducationContent() {
+    if (_education.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(16),
+        child: Center(
+          child: Text(
+            'No education added yet',
+            style: TextStyle(color: Colors.grey),
+          ),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: _education.length,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      itemBuilder: (context, index) {
+        final edu = _education[index];
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade50,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.grey.shade200),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                edu['institution_name'] ?? 'Unknown Institution',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                edu['qualification'] ?? 'Unknown Qualification',
+                style: TextStyle(color: Colors.grey.shade700, fontSize: 14),
+              ),
+              if (edu['field_of_study'] != null && edu['field_of_study'].toString().isNotEmpty) ...[
+                const SizedBox(height: 2),
+                Text(
+                  edu['field_of_study'],
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                ),
+              ],
+              const SizedBox(height: 4),
+              Text(
+                _formatDateRange(edu['start_date'], edu['end_date']),
+                style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+              ),
+              if (edu['description'] != null && edu['description'].toString().isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  edu['description'],
+                  style: const TextStyle(fontSize: 13),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildSkillsContent() {
+    if (_skills.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(16),
+        child: Center(
+          child: Text(
+            'No skills added yet',
+            style: TextStyle(color: Colors.grey),
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: _skills.map((skill) {
+          final skillLevel = skill['skill_level'];
+          Color levelColor = Colors.blue;
+          if (skillLevel == 'Beginner') levelColor = Colors.green;
+          else if (skillLevel == 'Intermediate') levelColor = Colors.orange;
+          else if (skillLevel == 'Advanced') levelColor = Colors.red;
+
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: levelColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: levelColor.withOpacity(0.3)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  skill['skill_name'] ?? 'Unknown',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w500,
+                    color: levelColor,
+                  ),
+                ),
+                if (skillLevel != null && skillLevel.isNotEmpty) ...[
+                  const SizedBox(width: 6),
+                  Container(
+                    width: 4,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: levelColor,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    skillLevel,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: levelColor,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  String _formatDateRange(String? startDate, String? endDate) {
+    final start = startDate != null ? _formatShortDate(startDate) : '';
+    final end = endDate != null && endDate.isNotEmpty ? _formatShortDate(endDate) : 'Present';
+    if (start.isEmpty) return end;
+    return '$start - $end';
+  }
+
+  String _formatShortDate(String dateString) {
+    if (dateString.isEmpty) return '';
+    try {
+      final date = DateTime.parse(dateString);
+      return '${date.year}-${date.month.toString().padLeft(2, '0')}';
+    } catch (e) {
+      return dateString;
+    }
   }
 
   Widget _buildPostsContent() {
@@ -861,6 +1369,159 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
         );
       },
     );
+  }
+
+  Widget _buildJobPostsContent() {
+    if (_jobPosts.isEmpty) {
+      return Container(
+        margin: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(32),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: const Center(
+          child: Text('No active job posts'),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: _jobPosts.length,
+      itemBuilder: (context, index) {
+        final job = _jobPosts[index];
+
+        // Format salary display
+        String salaryDisplay = 'Not specified';
+        final salaryMin = job['salary_min'];
+        final salaryMax = job['salary_max'];
+        if (salaryMin != null && salaryMax != null) {
+          salaryDisplay = 'RM ${_formatSalary(salaryMin)} - RM ${_formatSalary(salaryMax)}';
+        } else if (salaryMin != null) {
+          salaryDisplay = 'From RM ${_formatSalary(salaryMin)}';
+        } else if (salaryMax != null) {
+          salaryDisplay = 'Up to RM ${_formatSalary(salaryMax)}';
+        }
+
+        final remoteOption = job['remote_option'] == true;
+        final jobType = job['job_type'] ?? 'Not specified';
+        final experienceLevel = job['experience_level'] ?? 'Not specified';
+        final location = job['location'] ?? 'Location not specified';
+
+        return Container(
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 4,
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                job['job_title'] ?? 'Untitled Position',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.blue,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Icon(Icons.location_on_outlined, size: 16, color: Colors.grey.shade600),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      location,
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(Icons.work_outline, size: 16, color: Colors.grey.shade600),
+                  const SizedBox(width: 8),
+                  Text(
+                    jobType,
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              if (remoteOption) ...[
+                Row(
+                  children: [
+                    Icon(Icons.wifi, size: 16, color: Colors.grey.shade600),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'Remote',
+                      style: TextStyle(fontSize: 13),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+              ],
+              Row(
+                children: [
+                  Icon(Icons.trending_up, size: 16, color: Colors.grey.shade600),
+                  const SizedBox(width: 8),
+                  Text(
+                    experienceLevel,
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(Icons.attach_money, size: 16, color: Colors.green.shade700),
+                  const SizedBox(width: 8),
+                  Text(
+                    salaryDisplay,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.green.shade700,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(Icons.access_time, size: 14, color: Colors.grey.shade500),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Posted ${_formatDate(job['created_at'])}',
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  String _formatSalary(dynamic salary) {
+    if (salary == null) return '0';
+    final num = salary is int ? salary : (salary as double).toInt();
+    if (num >= 1000) {
+      return '${(num / 1000).toStringAsFixed(0)}k';
+    }
+    return num.toString();
   }
 
   Widget _buildBranchesContent() {

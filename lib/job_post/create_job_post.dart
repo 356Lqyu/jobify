@@ -1,10 +1,13 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:jobify/data/job_repository.dart';
 import 'package:jobify/data/feed_repository.dart';
 import 'package:jobify/social/social_post_bottom_sheet.dart';
+
+import '../social/social_feed_provider.dart';
 
 class CreateJobPost extends StatefulWidget {
   final Map<String, dynamic>? existingJob;
@@ -606,29 +609,64 @@ class _CreateJobPostState extends State<CreateJobPost> {
             children: [
               const Icon(Icons.business_center, size: 64, color: Colors.blue),
               const SizedBox(height: 16),
-              const Text('Company Update', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              const Text('Company Update',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
-              const Text('Share news, announcements, or updates about your company.', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
+              const Text(
+                'Share news, announcements, or updates about your company.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey),
+              ),
               const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
                   onPressed: () async {
-                    await showModalBottomSheet(
+                    // Ensure user is logged in and company profile exists
+                    if (_userId == null || _companyProfile == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('User or company profile not loaded.'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                      return;
+                    }
+
+                    // Show bottom sheet with its own provider
+                    final result = await showModalBottomSheet<bool>(
                       context: context,
                       isScrollControlled: true,
                       backgroundColor: Colors.transparent,
-                      builder: (_) => SocialPostBottomSheet(
-                        userId: _userId!,
-                        authorName: _companyProfile?['company_name'] ?? 'Company',
-                        authorAvatarUrl: _companyProfile?['logo_url'],
+                      builder: (_) => ChangeNotifierProvider(
+                        create: (_) => SocialFeedProvider(
+                          repository: FeedRepository(),
+                          userId: _userId!,
+                        ),
+                        child: SocialPostBottomSheet(
+                          userId: _userId!,
+                          companyId: _companyProfile!['company_id'],
+                          authorName: _companyProfile!['company_name'] ?? 'Company',
+                          authorAvatarUrl: _companyProfile!['logo_url'],
+                        ),
                       ),
                     );
-                    if (widget.onPostSuccess != null) widget.onPostSuccess!();
+
+                    // Only trigger success callback if post was actually published
+                    if (result == true && widget.onPostSuccess != null) {
+                      widget.onPostSuccess!();
+                    }
                   },
                   icon: const Icon(Icons.edit_note),
                   label: const Text('Create Company Update'),
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
                 ),
               ),
             ],

@@ -145,12 +145,12 @@ class JobRepository {
       return await _sb
           .from('job_post')
           .select('''
-          *,
-          job_category_id(name, job_category_id),
-          job_type_id(name, job_type_id),
-          experience_level_id(name, experience_level_id),
-          company_id(company_name, company_description, logo_url)
-        ''')
+            *,
+            job_category_id(name, job_category_id),
+            job_type_id(name, job_type_id),
+            experience_level_id(name, experience_level_id),
+            company_id(company_name, location, company_description, logo_url)
+          ''')
           .eq('job_id', jobId)
           .maybeSingle();
     } catch (e) {
@@ -205,21 +205,7 @@ class JobRepository {
   }
 
   Future<void> incrementViewCount(String jobId) async {
-    try {
-      await _sb.rpc('increment_view_count', params: {'job_id_param': jobId});
-    } catch (e) {
-      print('RPC failed, using direct update: $e');
-      final current = await _sb
-          .from('job_post')
-          .select('view_count')
-          .eq('job_id', jobId)
-          .maybeSingle();
-      int newCount = (current?['view_count'] as int? ?? 0) + 1;
-      await _sb
-          .from('job_post')
-          .update({'view_count': newCount})
-          .eq('job_id', jobId);
-    }
+    await _sb.rpc('increment_view_count', params: {'job_id_param': jobId});
   }
 
   Future<void> incrementApplicationCount(String jobId) async {
@@ -354,18 +340,16 @@ class JobRepository {
   Future<bool> toggleSaveJob(String jobId, bool currentlySaved) async {
     if (_uid == null) return currentlySaved;
 
-    // 1. Find the associated social post for this job
     final postId = await _findPostIdForJob(jobId);
     if (postId == null) {
-      debugPrint('No linked post found for job $jobId');
       return currentlySaved;
     }
 
-    // 2. Use the unified save mechanism (remote)
     final feedRepo = FeedRepository();
     final newSaved = await feedRepo.toggleSavePost(postId, currentlySaved);
 
-    // 3. Update in‑memory JobPost object if needed (caller will handle UI)
+    await LocalDB.setJobSaved(jobId, newSaved, _uid!);
+
     return newSaved;
   }
 

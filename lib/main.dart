@@ -29,7 +29,6 @@ Future<void> main() async {
     // Check if this is a stale recovery session
     final userMetadata = session.user?.userMetadata;
     if (userMetadata != null && userMetadata['reset_password'] == true) {
-      // Sign out to clear the stale recovery session
       await Supabase.instance.client.auth.signOut();
       print('Cleared stale password recovery session');
     }
@@ -82,14 +81,6 @@ class AuthGate extends StatelessWidget {
 
         final session = snapshot.data?.session;
 
-        // Only show reset password page if explicitly requested via deep link
-        // Check if we're in password recovery mode via the current page route
-        final isRecoveryFlow = _isPasswordRecoveryFlow();
-
-        if (session != null && isRecoveryFlow) {
-          return const ResetPasswordPage();
-        }
-
         if (session != null) {
           // User is logged in, load user data
           return FutureBuilder(
@@ -116,13 +107,6 @@ class AuthGate extends StatelessWidget {
     );
   }
 
-  bool _isPasswordRecoveryFlow() {
-    // Check if we're in a password recovery flow by looking at the current route
-    // This is a simple implementation - you might want to use a more sophisticated approach
-    // like passing a flag through navigation
-    return false; // Default to false, only true when coming from forgot password
-  }
-
   Future<Users?> _loadUserData(BuildContext context) async {
     final userProvider = Provider.of<UserProvider>(context, listen: false);
     await userProvider.loadUser();
@@ -130,7 +114,7 @@ class AuthGate extends StatelessWidget {
   }
 }
 
-// Welcome Page (the original home page with login/hiring buttons)
+// Welcome Page
 class WelcomePage extends StatelessWidget {
   const WelcomePage({super.key});
 

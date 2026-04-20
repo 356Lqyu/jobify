@@ -12,6 +12,8 @@ import 'package:jobify/data/local_db.dart';
 import 'package:jobify/job_post/job_detail_employer.dart';
 import 'package:jobify/social/social_post_details.dart';
 
+import '../users/view_profile_page.dart';
+
 class SocialFeedPage extends StatefulWidget {
   final Users user;
   const SocialFeedPage({super.key, required this.user});
@@ -328,34 +330,41 @@ class FeedCard extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _FeedAvatar(name: post.authorName, url: post.authorAvatar),
+                GestureDetector(
+                  onTap: () => _navigateToProfile(context, post),
+                  child: _FeedAvatar(name: post.authorName, url: post.authorAvatar),
+                ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          Flexible(
-                            child: Text(
-                              post.authorName,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
+                      // Author name row - make it clickable
+                      GestureDetector(
+                        onTap: () => _navigateToProfile(context, post),
+                        child: Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                post.authorName,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
                             ),
-                          ),
-                          if (post.isVerified) ...[
-                            const SizedBox(width: 4),
-                            const Icon(
-                              Icons.verified,
-                              size: 14,
-                              color: Color(0xFF2563EB),
-                            ),
+                            if (post.isVerified) ...[
+                              const SizedBox(width: 4),
+                              const Icon(
+                                Icons.verified,
+                                size: 14,
+                                color: Color(0xFF2563EB),
+                              ),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
                       if (post.authorSubtitle.isNotEmpty)
                         Text(
@@ -474,6 +483,24 @@ class FeedCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  void _navigateToProfile(BuildContext context, FeedPost post) {
+    // Determine if the post author is a company (has companyId) or a user
+    final bool isCompany = post.companyId != null;
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ViewProfilePage(
+          userId: post.userId,
+          companyId: post.companyId,
+          name: post.authorName,
+          avatarUrl: post.authorAvatar,
+          isCompany: isCompany,
+        ),
       ),
     );
   }

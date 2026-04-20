@@ -339,7 +339,6 @@ class FeedCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Author name row - make it clickable
                       GestureDetector(
                         onTap: () => _navigateToProfile(context, post),
                         child: Row(
@@ -386,8 +385,9 @@ class FeedCard extends StatelessWidget {
                 ),
                 _TypeBadge(type: post.postType),
                 const SizedBox(width: 4),
-                if (post.companyId != null)
-                  _FollowBtn(
+                // Show follow button for any user/company that is not the current user
+                if (post.userId != currentUser.userId)
+                  FollowBtn(
                     isFollowing: post.isFollowing,
                     onTap: () => prov.toggleFollow(post),
                   ),
@@ -1059,10 +1059,13 @@ class _TypeBadge extends StatelessWidget {
   );
 }
 
-class _FollowBtn extends StatelessWidget {
+// Make sure FollowBtn is not private (remove the underscore if needed)
+// Change from class _FollowBtn to class FollowBtn
+class FollowBtn extends StatelessWidget {
   final bool isFollowing;
   final VoidCallback onTap;
-  const _FollowBtn({required this.isFollowing, required this.onTap});
+  const FollowBtn({required this.isFollowing, required this.onTap});
+
   @override
   Widget build(BuildContext context) => GestureDetector(
     onTap: onTap,
@@ -1086,7 +1089,6 @@ class _FollowBtn extends StatelessWidget {
     ),
   );
 }
-
 class _ActionBtn extends StatelessWidget {
   final IconData icon;
   final String label;

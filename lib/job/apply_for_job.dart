@@ -270,7 +270,7 @@ class _ApplyForJobPageState extends State<ApplyForJobPage> {
         backgroundColor: const Color(0xFFF8FAFC),
         appBar: AppBar(
           title: const Text('Apply for Job'),
-          backgroundColor: Colors.blue.shade700,
+          backgroundColor: Colors.blue,
           elevation: 0,
           foregroundColor: Colors.white,
           automaticallyImplyLeading: true,
@@ -313,7 +313,7 @@ class _ApplyForJobPageState extends State<ApplyForJobPage> {
                   ),
                 ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue.shade700,
+                  backgroundColor: Colors.blue,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                   shape: RoundedRectangleBorder(
@@ -958,7 +958,7 @@ class _ResumePreviewDialogState extends State<ResumePreviewDialog> {
                           const SizedBox(height: 8),
                           Text(
                             widget.fileName,
-                            style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                            style: TextStyle(color: Colors.white, fontSize: 12),
                             textAlign: TextAlign.center,
                           ),
                           const SizedBox(height: 24),

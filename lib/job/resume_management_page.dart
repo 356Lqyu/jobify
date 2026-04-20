@@ -342,7 +342,7 @@ class ResumePreviewDialog extends StatelessWidget {
                           const SizedBox(height: 8),
                           Text(
                             fileName,
-                            style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                            style: TextStyle(color: Colors.white, fontSize: 12),
                             textAlign: TextAlign.center,
                           ),
                           const SizedBox(height: 24),

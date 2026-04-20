@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
-import '../data/applicantion_respository.dart';
+import 'package:jobify/data/applicantion_respository.dart';
 import 'applicantion_details.dart';
 
 class ApplicantListPage extends StatefulWidget {
@@ -78,30 +78,54 @@ class _ApplicantListPageState extends State<ApplicantListPage>
     final pendingCount = _pendingApplicants.length;
     final acceptedCount = _acceptedApplicants.length;
     final rejectedCount = _rejectedApplicants.length;
-    final totalCount = _stats['total'] ?? 0;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text(
-          'Applicants',
-          style: TextStyle(fontWeight: FontWeight.bold),
+        title: Text(
+          widget.jobTitle,
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white),
         ),
-        backgroundColor: Colors.white,
+        backgroundColor: const Color(0xFF2563EB),
         elevation: 0,
-        foregroundColor: Colors.black87,
+        foregroundColor: Colors.white,
         automaticallyImplyLeading: true,
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(50),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
+            color: const Color(0xFF2563EB),
+            child: Column(
               children: [
-                _buildStatusTab('Pending', pendingCount, 0, Colors.orange),
-                const SizedBox(width: 8),
-                _buildStatusTab('Accepted', acceptedCount, 1, Colors.green),
-                const SizedBox(width: 8),
-                _buildStatusTab('Rejected', rejectedCount, 2, Colors.red),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    children: [
+                      _buildStatusTab('Pending', pendingCount, 0, Colors.orange),
+                      const SizedBox(width: 8),
+                      _buildStatusTab('Accepted', acceptedCount, 1, Colors.green),
+                      const SizedBox(width: 8),
+                      _buildStatusTab('Rejected', rejectedCount, 2, Colors.red),
+                    ],
+                  ),
+                ),
+                // Bottom indicator line
+                Container(
+                  margin: const EdgeInsets.only(top: 4),
+                  height: 2,
+                  child: Row(
+                    children: List.generate(3, (index) {
+                      final isSelected = _tabController.index == index;
+                      return Expanded(
+                        child: Container(
+                          height: 2,
+                          color: isSelected
+                              ? _getTabColor(index)
+                              : Colors.transparent,
+                        ),
+                      );
+                    }),
+                  ),
+                ),
               ],
             ),
           ),
@@ -154,37 +178,59 @@ class _ApplicantListPageState extends State<ApplicantListPage>
     );
   }
 
+  Color _getTabColor(int index) {
+    switch (index) {
+      case 0:
+        return Colors.orange;
+      case 1:
+        return Colors.green;
+      case 2:
+        return Colors.red;
+      default:
+        return Colors.orange;
+    }
+  }
+
   Widget _buildStatusTab(String label, int count, int index, Color color) {
     final isSelected = _tabController.index == index;
     return Expanded(
       child: GestureDetector(
-        onTap: () => _tabController.animateTo(index),
+        onTap: () {
+          _tabController.animateTo(index);
+          setState(() {}); // Force rebuild to update colors
+        },
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 10),
+          padding: const EdgeInsets.symmetric(vertical: 12),
           decoration: BoxDecoration(
-            color: isSelected ? color.withOpacity(0.1) : Colors.transparent,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: isSelected ? color : Colors.grey.shade300,
-              width: 1,
-            ),
+            borderRadius: BorderRadius.circular(30),
           ),
-          child: Column(
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text(
-                count.toString(),
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: isSelected ? color : Colors.grey.shade600,
-                ),
-              ),
-              const SizedBox(height: 2),
               Text(
                 label,
                 style: TextStyle(
-                  fontSize: 12,
-                  color: isSelected ? color : Colors.grey.shade500,
+                  fontSize: 14,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                  color: isSelected ? color : Colors.white.withOpacity(0.7),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? color
+                      : Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  count.toString(),
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: isSelected ? Colors.white : Colors.white.withOpacity(0.9),
+                  ),
                 ),
               ),
             ],
@@ -275,7 +321,7 @@ class _ApplicantCard extends StatelessWidget {
       case 'pending':
         return Colors.orange;
       case 'accepted':
-        return Colors.green;
+        return Color(0xFF00F109);
       case 'rejected':
         return Colors.red;
       default:
@@ -291,6 +337,19 @@ class _ApplicantCard extends StatelessWidget {
         return 'ACCEPTED';
       case 'rejected':
         return 'REJECTED';
+      default:
+        return status.toUpperCase();
+    }
+  }
+
+  String _getStatusLabel(String status) {
+    switch (status.toLowerCase()) {
+      case 'pending':
+        return 'Under Review';
+      case 'accepted':
+        return 'Application Accepted';
+      case 'rejected':
+        return 'Application Declined';
       default:
         return status.toUpperCase();
     }
@@ -312,11 +371,11 @@ class _ApplicantCard extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 8,
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 12,
               offset: const Offset(0, 2),
             ),
           ],
@@ -324,31 +383,39 @@ class _ApplicantCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Blue Header
+            // Blue Gradient Header
             Container(
               padding: const EdgeInsets.all(16),
               decoration: const BoxDecoration(
-                color: Color(0xFF2563EB),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Color(0xFF2563EB),
+                    Color(0xFF1E40AF),
+                  ],
+                ),
                 borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(16),
-                  topRight: Radius.circular(16),
+                  topLeft: Radius.circular(20),
+                  topRight: Radius.circular(20),
                 ),
               ),
               child: Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(10),
+                    width: 48,
+                    height: 48,
                     decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(14),
                     ),
                     child: const Icon(
                       Icons.person_outline,
                       color: Colors.white,
-                      size: 24,
+                      size: 26,
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 14),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -356,7 +423,7 @@ class _ApplicantCard extends StatelessWidget {
                         Text(
                           user['fullname'] ?? 'Unknown',
                           style: const TextStyle(
-                            fontSize: 18,
+                            fontSize: 16,
                             fontWeight: FontWeight.bold,
                             color: Colors.white,
                           ),
@@ -372,10 +439,27 @@ class _ApplicantCard extends StatelessWidget {
                       ],
                     ),
                   ),
+                ],
+              ),
+            ),
+            // Status Row (Pill style without box)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Row(
+                children: [
+                  Text(
+                    _getStatusLabel(status),
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: statusColor,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
+                      color: statusColor.withOpacity(0.12),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
@@ -383,8 +467,16 @@ class _ApplicantCard extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
-                        color: Colors.white,
+                        color: statusColor,
                       ),
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    'Applied $appliedDate',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade500,
                     ),
                   ),
                 ],
@@ -392,10 +484,12 @@ class _ApplicantCard extends StatelessWidget {
             ),
             // Body
             Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  const Divider(height: 8),
+                  const SizedBox(height: 8),
                   // Email
                   Row(
                     children: [
@@ -409,21 +503,9 @@ class _ApplicantCard extends StatelessWidget {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  // Applied Date
-                  Row(
-                    children: [
-                      Icon(Icons.access_time, size: 16, color: Colors.grey[500]),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Applied: $appliedDate',
-                        style: TextStyle(color: Colors.grey[600], fontSize: 13),
-                      ),
-                    ],
-                  ),
+                  const SizedBox(height: 12),
                   // Resume Button
                   if (applicant['resume_url'] != null && applicant['resume_url'].toString().isNotEmpty) ...[
-                    const SizedBox(height: 12),
                     GestureDetector(
                       onTap: () => _previewResume(
                         context,
@@ -433,8 +515,11 @@ class _ApplicantCard extends StatelessWidget {
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF2563EB).withOpacity(0.05),
-                          borderRadius: BorderRadius.circular(8),
+                          color: const Color(0xFF2563EB).withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: const Color(0xFF2563EB).withOpacity(0.2),
+                          ),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
@@ -449,12 +534,18 @@ class _ApplicantCard extends StatelessWidget {
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
+                            const SizedBox(width: 4),
+                            const Icon(
+                              Icons.open_in_new,
+                              size: 14,
+                              color: Color(0xFF2563EB),
+                            ),
                           ],
                         ),
                       ),
                     ),
                   ],
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 16),
                   // View Details Link
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
@@ -478,13 +569,6 @@ class _ApplicantCard extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  String _getInitials(String name) {
-    final parts = name.trim().split(' ');
-    if (parts.isEmpty) return '?';
-    if (parts.length == 1) return parts[0][0].toUpperCase();
-    return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
   }
 }
 
@@ -547,11 +631,11 @@ class _ResumePreviewDialogState extends State<ResumePreviewDialog> {
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       child: Container(
         width: MediaQuery.of(context).size.width * 0.9,
         height: MediaQuery.of(context).size.height * 0.7,
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Column(
           children: [
             Row(
@@ -563,6 +647,7 @@ class _ResumePreviewDialogState extends State<ResumePreviewDialog> {
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
+                      color: Color(0xFF1E293B),
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -607,7 +692,7 @@ class _ResumePreviewDialogState extends State<ResumePreviewDialog> {
                   child: Container(
                     decoration: BoxDecoration(
                       color: Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(16),
                     ),
                     child: Center(
                       child: Column(
@@ -621,7 +706,11 @@ class _ResumePreviewDialogState extends State<ResumePreviewDialog> {
                           const SizedBox(height: 16),
                           const Text(
                             'PDF Ready to View',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF1E293B),
+                            ),
                           ),
                           const SizedBox(height: 8),
                           Text(
@@ -638,7 +727,7 @@ class _ResumePreviewDialogState extends State<ResumePreviewDialog> {
                               backgroundColor: const Color(0xFF2563EB),
                               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                               shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
+                                borderRadius: BorderRadius.circular(12),
                               ),
                             ),
                           ),

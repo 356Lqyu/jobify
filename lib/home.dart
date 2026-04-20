@@ -9,6 +9,7 @@ import 'package:jobify/users/profile_page.dart';
 import 'package:provider/provider.dart';
 import 'discovery/job_discovery.dart';
 import 'users/user_provider.dart';
+import 'job/my_applications.dart';  // ADDED: Import for My Applications page
 
 class HomePage extends StatefulWidget {
   final Users user;
@@ -39,13 +40,15 @@ class _HomePageState extends State<HomePage> {
 
   void _buildScreensAndItems() {
     if (_isJobSeeker) {
+      // Job Seeker Screens
       _screens = [
         SocialFeedPage(user: widget.user),
-        DiscoveryJob(user:widget.user),
-        const AppliedScreen(),
+        DiscoveryJob(user: widget.user),
+        MyApplicationsPage(),  // ADDED: My Applications screen
         const SettingPage(),
       ];
 
+      // Job Seeker Bottom Navigation Items
       _items = const [
         BottomBarItem(
           icon: Icons.home_outlined,
@@ -60,7 +63,7 @@ class _HomePageState extends State<HomePage> {
         BottomBarItem(
           icon: Icons.description_outlined,
           activeIcon: Icons.description,
-          label: 'Applied',
+          label: 'Applications',  // CHANGED: from 'Applied' to 'Applications'
         ),
         BottomBarItem(
           icon: Icons.person_outline,
@@ -69,9 +72,10 @@ class _HomePageState extends State<HomePage> {
         ),
       ];
     } else {
+      // Employer Screens
       _screens = [
         SocialFeedPage(user: widget.user),
-        DiscoveryJob(user:widget.user),
+        DiscoveryJob(user: widget.user),
         JobPostManagementPage(key: _jobsPageKey),
         CreateJobPost(
           onPostSuccess: () {
@@ -84,6 +88,7 @@ class _HomePageState extends State<HomePage> {
         const SettingPage(),
       ];
 
+      // Employer Bottom Navigation Items
       _items = const [
         BottomBarItem(
           icon: Icons.home_outlined,
@@ -158,14 +163,5 @@ class _HomePageState extends State<HomePage> {
         ),
       ),
     );
-  }
-}
-
-class AppliedScreen extends StatelessWidget {
-  const AppliedScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const Center(child: Text("Applied Screen"));
   }
 }

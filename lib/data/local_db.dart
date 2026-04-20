@@ -21,10 +21,10 @@ class LocalDB {
   }
 
   static Future<Database> _init() async {
-    final dbPath = join(await getDatabasesPath(), 'jobify_v4.db');
+    final dbPath = join(await getDatabasesPath(), 'jobify_v5.db');
     return openDatabase(
       dbPath,
-      version: 4,
+      version: 5,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -206,7 +206,7 @@ class LocalDB {
     )
   ''');
 
-    //12.Cached branch
+    // 12. Cached branch
     await db.execute('''
     CREATE TABLE IF NOT EXISTS company_branches (
       branch_id     TEXT PRIMARY KEY,
@@ -226,10 +226,64 @@ class LocalDB {
       FOREIGN KEY (company_id) REFERENCES company_profiles (company_id) ON DELETE CASCADE
     )
   ''');
+
+    // 13. Cached job applications
+    await db.execute('''
+    CREATE TABLE IF NOT EXISTS cached_job_applications (
+      application_id   TEXT PRIMARY KEY,
+      user_id          TEXT NOT NULL,
+      job_id           TEXT NOT NULL,
+      job_title        TEXT NOT NULL DEFAULT '',
+      company_name     TEXT NOT NULL DEFAULT '',
+      company_logo     TEXT,
+      location         TEXT,
+      salary_min       REAL,
+      salary_max       REAL,
+      job_type         TEXT,
+      description      TEXT,
+      resume_url       TEXT,
+      resume_file_name TEXT,
+      cover_letter     TEXT,
+      status           TEXT NOT NULL DEFAULT 'pending',
+      applied_at       TEXT NOT NULL,
+      updated_at       TEXT NOT NULL,
+      cached_at        TEXT NOT NULL
+    )
+  ''');
   }
 
-
   static Future<void> _onUpgrade(Database db, int oldV, int newV) async {
+    // Check if we need to add the cached_job_applications table
+    if (oldV < 5) {
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS cached_job_applications (
+            application_id   TEXT PRIMARY KEY,
+            user_id          TEXT NOT NULL,
+            job_id           TEXT NOT NULL,
+            job_title        TEXT NOT NULL DEFAULT '',
+            company_name     TEXT NOT NULL DEFAULT '',
+            company_logo     TEXT,
+            location         TEXT,
+            salary_min       REAL,
+            salary_max       REAL,
+            job_type         TEXT,
+            description      TEXT,
+            resume_url       TEXT,
+            resume_file_name TEXT,
+            cover_letter     TEXT,
+            status           TEXT NOT NULL DEFAULT 'pending',
+            applied_at       TEXT NOT NULL,
+            updated_at       TEXT NOT NULL,
+            cached_at        TEXT NOT NULL
+          )
+        ''');
+      } catch (e) {
+        // Table might already exist, ignore error
+        print('Error creating cached_job_applications during upgrade: $e');
+      }
+    }
+
     for (final t in ['posts','comments','liked_posts','saved_posts','job_posts','saved_jobs',
       'users','job_seeker_profiles','company_profiles',
       'skills','education','experience','resumes']) {
@@ -561,6 +615,8 @@ class LocalDB {
         'job_type': app['job_type'] ?? '',
         'description': app['description'] ?? '',
         'resume_url': app['resume_url'] ?? '',
+        'resume_file_name': app['resume_file_name'],
+        'cover_letter': app['cover_letter'],
         'status': app['status'] ?? 'pending',
         'applied_at': app['applied_at'] ?? DateTime.now().toIso8601String(),
         'updated_at': app['updated_at'] ?? DateTime.now().toIso8601String(),
@@ -585,6 +641,8 @@ class LocalDB {
       'job_type': application['job_type'] ?? '',
       'description': application['description'] ?? '',
       'resume_url': application['resume_url'] ?? '',
+      'resume_file_name': application['resume_file_name'],
+      'cover_letter': application['cover_letter'],
       'status': application['status'] ?? 'pending',
       'applied_at': application['applied_at'] ?? DateTime.now().toIso8601String(),
       'updated_at': application['updated_at'] ?? DateTime.now().toIso8601String(),
@@ -920,7 +978,7 @@ class LocalDB {
     final d = await db;
     for (final t in ['posts','saved_posts','job_posts','saved_jobs','reference_table',
       'users','job_seeker_profiles','company_profiles','skills',
-      'education','experience','resumes','company_branches']) {
+      'education','experience','resumes','company_branches', 'cached_job_applications']) {
       await d.delete(t);
     }
   }
@@ -934,5 +992,6 @@ class LocalDB {
     await db.delete('education', where: 'user_id = ?', whereArgs: [userId]);
     await db.delete('experience', where: 'user_id = ?', whereArgs: [userId]);
     await db.delete('resumes', where: 'user_id = ?', whereArgs: [userId]);
+    await db.delete('cached_job_applications', where: 'user_id = ?', whereArgs: [userId]);
   }
 }

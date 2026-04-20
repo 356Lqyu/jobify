@@ -9,6 +9,7 @@ class ViewProfilePage extends StatefulWidget {
   final String? name;
   final String? avatarUrl;
   final bool isCompany;
+  final VoidCallback? onFollowChanged;
 
   const ViewProfilePage({
     super.key,
@@ -17,7 +18,9 @@ class ViewProfilePage extends StatefulWidget {
     this.name,
     this.avatarUrl,
     required this.isCompany,
+    this.onFollowChanged,  // Add this
   });
+
 
   @override
   State<ViewProfilePage> createState() => _ViewProfilePageState();
@@ -239,11 +242,12 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
             .eq('company_id', widget.companyId!);
         _jobPostsCount = (jobPostsResult as List).length;
 
-        // Count followers
+        // IMPORTANT FIX: Count followers using userId, not companyId
+        // The follows table stores following_id as user_id from users table
         final followersResult = await supabase
             .from('follows')
             .select('follow_id')
-            .eq('following_id', widget.companyId!);
+            .eq('following_id', widget.userId);  // Use userId here!
         _followersCount = (followersResult as List).length;
 
         // Count branches
@@ -255,7 +259,7 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
 
         debugPrint('Stats - Posts: $_postsCount, Job Posts: $_jobPostsCount, Followers: $_followersCount, Branches: $_branchesCount');
       } else {
-        // For user profile - only show posts and followers count
+        // For user profile
         final postsResult = await supabase
             .from('post')
             .select('post_id')
@@ -281,7 +285,6 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
       if (mounted) setState(() {});
     }
   }
-
   Future<void> _loadRecentPosts() async {
     try {
       final posts = await supabase
@@ -430,10 +433,11 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
       late final List<dynamic> followersData;
 
       if (widget.isCompany && widget.companyId != null) {
+        // FIX: Use userId, not companyId
         followersData = await supabase
             .from('follows')
             .select('follower_id')
-            .eq('following_id', widget.companyId!);
+            .eq('following_id', widget.userId);  // Use userId here!
       } else {
         followersData = await supabase
             .from('follows')
@@ -474,16 +478,18 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
       });
     }
   }
-
   Future<void> _checkFollowStatus() async {
     if (_currentUserId == null) return;
 
     try {
+      // Always use userId for following_id
+      final followingId = widget.userId;
+
       final result = await supabase
           .from('follows')
           .select()
           .eq('follower_id', _currentUserId!)
-          .eq('following_id', widget.isCompany ? widget.companyId! : widget.userId)
+          .eq('following_id', followingId)
           .maybeSingle();
 
       if (mounted) {
@@ -495,7 +501,6 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
       debugPrint('Error checking follow status: $e');
     }
   }
-
   Future<void> _toggleFollow() async {
     if (_currentUserId == null) {
       if (mounted) {
@@ -506,26 +511,74 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
       return;
     }
 
+    // Always follow the user_id (for both individuals and companies)
+    final followingId = widget.userId;
+
     setState(() => _isFollowing = !_isFollowing);
 
     try {
       if (_isFollowing) {
+        // Follow
         await supabase.from('follows').insert({
           'follower_id': _currentUserId,
-          'following_id': widget.isCompany ? widget.companyId! : widget.userId,
+          'following_id': followingId,
         });
-        setState(() => _followersCount++);
+
+        // Update UI
+        setState(() {
+          _followersCount++;
+        });
+
+        // Reload followers list
         await _loadFollowers();
+
+        // Notify parent if callback exists
+        widget.onFollowChanged?.call();
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Following successfully!'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
       } else {
+        // Unfollow
         await supabase
             .from('follows')
             .delete()
             .eq('follower_id', _currentUserId!)
-            .eq('following_id', widget.isCompany ? widget.companyId! : widget.userId);
-        setState(() => _followersCount--);
+            .eq('following_id', followingId);
+
+        // Update UI
+        setState(() {
+          _followersCount--;
+        });
+
+        // Reload followers list
         await _loadFollowers();
+
+        // Notify parent if callback exists
+        widget.onFollowChanged?.call();
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Unfollowed successfully'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
       }
+
+      // Refresh stats
+      await _loadStats();
+
     } catch (e) {
+      // Revert on error
       setState(() => _isFollowing = !_isFollowing);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -534,7 +587,6 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
       }
     }
   }
-
   @override
   Widget build(BuildContext context) {
     final bool isOwnProfile = _currentUserId == widget.userId;
@@ -1693,7 +1745,23 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
           borderRadius: BorderRadius.circular(16),
         ),
         child: const Center(
-          child: Text('No followers yet'),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.people_outline, size: 48, color: Colors.grey),
+              SizedBox(height: 12),
+              Text(
+                'No followers yet',
+                style: TextStyle(color: Colors.grey, fontSize: 14),
+              ),
+              SizedBox(height: 4),
+              Text(
+                'When someone follows this profile, they\'ll appear here',
+                style: TextStyle(color: Colors.grey, fontSize: 12),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -1708,12 +1776,20 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
 
         if (user == null) return const SizedBox.shrink();
 
+        final isOwnProfile = _currentUserId == user['user_id'];
+
         return Container(
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.02),
+                blurRadius: 4,
+              ),
+            ],
           ),
           child: Row(
             children: [
@@ -1739,17 +1815,23 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
                       ),
                     ),
                     const SizedBox(height: 2),
-                    Text(
-                      'Follower',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey.shade600,
-                      ),
+                    Row(
+                      children: [
+                        Icon(Icons.person_outline, size: 12, color: Colors.grey.shade500),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Follower',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey.shade500,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
               ),
-              if (_currentUserId != user['user_id'])
+              if (!isOwnProfile)
                 OutlinedButton(
                   onPressed: () {
                     Navigator.push(
@@ -1761,6 +1843,11 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
                           name: user['fullname'],
                           avatarUrl: user['profile_image_url'],
                           isCompany: false,
+                          onFollowChanged: () {
+                            // Refresh current page when follow status changes
+                            _loadFollowers();
+                            _loadStats();
+                          },
                         ),
                       ),
                     );
@@ -1769,8 +1856,10 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(20),
                     ),
+                    side: BorderSide(color: Colors.blue.shade200),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                   ),
-                  child: const Text('View'),
+                  child: const Text('View Profile'),
                 ),
             ],
           ),
@@ -1778,7 +1867,6 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
       },
     );
   }
-
   String _formatDate(String? dateString) {
     if (dateString == null) return '';
     try {

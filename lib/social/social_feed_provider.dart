@@ -191,17 +191,23 @@ class SocialFeedProvider extends ChangeNotifier {
   }
 
   // Follow the author's user ID
+  // In SocialFeedProvider class, update the toggleFollow method:
   Future<void> toggleFollow(FeedPost post) async {
-    final targetUserId =
-        post.userId; // Author's user ID (POSTER account for companies)
+    // The targetUserId is always the user_id (for both individuals and companies)
+    final targetUserId = post.userId; // This is always the user_id from users table
     final wasFollowing = post.isFollowing;
 
     _updateInLists(post.postId, (p) => p.isFollowing = !p.isFollowing);
     notifyListeners();
 
-    await _repository.toggleFollowUser(targetUserId, wasFollowing);
-  }
+    final result = await _repository.toggleFollowUser(targetUserId, wasFollowing);
 
+    // If the operation failed, revert the optimistic update
+    if (result == wasFollowing) {
+      _updateInLists(post.postId, (p) => p.isFollowing = wasFollowing);
+      notifyListeners();
+    }
+  }
   Future<FeedPost?> createPost({
     required String content,
     required PostType postType,

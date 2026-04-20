@@ -21,10 +21,10 @@ class LocalDB {
   }
 
   static Future<Database> _init() async {
-    final dbPath = join(await getDatabasesPath(), 'jobify_v8.db');
+    final dbPath = join(await getDatabasesPath(), 'jobify_v9.db');
     return openDatabase(
       dbPath,
-      version: 8,
+      version: 9,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );

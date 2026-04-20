@@ -633,6 +633,7 @@ class FeedRepository {
   }
 
   // FOLLOW USER (follows the user account, which is the correct approach for both individuals and companies)
+  // In FeedRepository class
   Future<bool> toggleFollowUser(
       String targetUserId,
       bool currentlyFollowing,
@@ -643,7 +644,7 @@ class FeedRepository {
       if (newFollowing) {
         await _sb.from('follows').insert({
           'follower_id': _uid,
-          'following_id': targetUserId,
+          'following_id': targetUserId,  // Must be a valid user_id from users table
         });
       } else {
         await _sb

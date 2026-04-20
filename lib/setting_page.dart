@@ -137,19 +137,32 @@ class _SettingPageState extends State<SettingPage> {
 
   Future<void> _loadJobSeekerStats(String authUserId) async {
     try {
-      // Count posts by user
+      // Count user's posts
       final postsResult = await supabase
           .from('post')
           .select('post_id')
           .eq('user_id', authUserId);
       _userPostsCount = (postsResult as List).length;
 
-      // Count saved jobs
+      // Count saved jobs (using post_saved table)
       final savedJobsResult = await supabase
-          .from('saved_jobs')
-          .select('job_id')
+          .from('post_saved')
+          .select('post_id')
           .eq('user_id', authUserId);
-      _savedJobsCount = (savedJobsResult as List).length;
+
+      // Get job posts from saved items
+      int savedJobsCount = 0;
+      final savedPostIds = (savedJobsResult as List).map((s) => s['post_id'] as String).toList();
+
+      if (savedPostIds.isNotEmpty) {
+        final jobPostsResult = await supabase
+            .from('post')
+            .select('post_id')
+            .inFilter('post_id', savedPostIds)
+            .eq('post_type', 'job');
+        savedJobsCount = (jobPostsResult as List).length;
+      }
+      _savedJobsCount = savedJobsCount;
 
       // Count following (users/companies the current user follows)
       final followingResult = await supabase
@@ -162,7 +175,8 @@ class _SettingPageState extends State<SettingPage> {
       final applicationsResult = await supabase
           .from('job_application')
           .select('application_id')
-          .eq('user_id', authUserId);
+          .eq('user_id', authUserId)
+          .neq('status', 'withdrawn');
       _applicationsCount = (applicationsResult as List).length;
 
       debugPrint('Job Seeker Stats - Posts: $_userPostsCount, Saved Jobs: $_savedJobsCount, Following: $_followingCount, Applications: $_applicationsCount');
@@ -199,11 +213,11 @@ class _SettingPageState extends State<SettingPage> {
             .eq('company_id', compId);
         _jobPostsCount = (jobPostsResult as List).length;
 
-        // Count company followers
+        // Count company followers (users following this company's user account)
         final followersResult = await supabase
             .from('follows')
             .select('follow_id')
-            .eq('following_id', compId);
+            .eq('following_id', authUserId);  // Use user_id, not company_id
         _companyFollowersCount = (followersResult as List).length;
 
         // Count applications received for company's jobs
@@ -218,7 +232,8 @@ class _SettingPageState extends State<SettingPage> {
           final applicationsResult = await supabase
               .from('job_application')
               .select('application_id')
-              .inFilter('job_id', jobIds);
+              .inFilter('job_id', jobIds)
+              .neq('status', 'withdrawn');
           _applicationsReceivedCount = (applicationsResult as List).length;
         } else {
           _applicationsReceivedCount = 0;
@@ -549,6 +564,7 @@ class _SettingPageState extends State<SettingPage> {
                 name: userName,
                 avatarUrl: profileImageUrl,
                 isCompany: false,
+                onFollowChanged: () => _refreshProfileData(),
               ),
             ),
           );

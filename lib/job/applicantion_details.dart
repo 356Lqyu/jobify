@@ -1,8 +1,7 @@
 // lib/job/applicantion_details.dart
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../data/applicantion_respository.dart';
-import 'applicantion_status.dart';
+import 'package:jobify/data/applicantion_respository.dart';
 
 class ApplicantDetailPage extends StatefulWidget {
   final String applicationId;
@@ -33,72 +32,137 @@ class _ApplicantDetailPageState extends State<ApplicantDetailPage> {
     final appliedAt = DateTime.tryParse(widget.applicant['applied_at'] ?? '');
     final updatedAt = DateTime.tryParse(widget.applicant['updated_at'] ?? '');
 
+    final isPending = status == 'pending';
+    final isAccepted = status == 'accepted';
+    final isRejected = status == 'rejected';
+
+    Color getStatusColor() {
+      if (isPending) return Colors.orange;
+      if (isAccepted) return Colors.green;
+      if (isRejected) return Colors.red;
+      return Colors.grey;
+    }
+
+    String getStatusText() {
+      if (isPending) return 'PENDING';
+      if (isAccepted) return 'ACCEPTED';
+      if (isRejected) return 'REJECTED';
+      return status.toUpperCase();
+    }
+
+    String getStatusLabel() {
+      if (isPending) return 'Under Review';
+      if (isAccepted) return 'Application Accepted';
+      if (isRejected) return 'Application Declined';
+      return status.toUpperCase();
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: Text(user['fullname'] ?? 'Applicant Details'),
-        backgroundColor: Colors.white,
+        title: const Text(
+          'Applicant Details',
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white),
+        ),
+        backgroundColor: const Color(0xFF2563EB),
         elevation: 0,
-        foregroundColor: Colors.black87,
-        actions: [
-          if (status == 'pending')
-            PopupMenuButton<String>(
-              onSelected: (value) => _showStatusDialog(value),
-              itemBuilder: (context) => [
-                const PopupMenuItem(
-                  value: 'accepted',
-                  child: Row(
-                    children: [
-                      Icon(Icons.check_circle, color: Colors.green),
-                      SizedBox(width: 8),
-                      Text('Accept Application'),
-                    ],
-                  ),
-                ),
-                const PopupMenuItem(
-                  value: 'rejected',
-                  child: Row(
-                    children: [
-                      Icon(Icons.cancel, color: Colors.red),
-                      SizedBox(width: 8),
-                      Text('Reject Application'),
-                    ],
-                  ),
-                ),
-              ],
-              child: const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  children: [
-                    Text('Actions'),
-                    Icon(Icons.arrow_drop_down),
-                  ],
-                ),
-              ),
-            ),
-        ],
+        foregroundColor: Colors.white,
+        automaticallyImplyLeading: true,
+
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            ApplicationStatusTimeline(
-              currentStatus: status,
-              appliedAt: appliedAt,
-              updatedAt: updatedAt,
+            // Status Card
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    getStatusColor().withOpacity(0.15),
+                    getStatusColor().withOpacity(0.05),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: getStatusColor().withOpacity(0.2),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: getStatusColor().withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Icon(
+                      isPending ? Icons.access_time :
+                      isAccepted ? Icons.check_circle : Icons.cancel,
+                      color: getStatusColor(),
+                      size: 28,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          getStatusLabel(),
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: getStatusColor(),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Applied on ${_formatDate(widget.applicant['applied_at'])}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: getStatusColor().withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      getStatusText(),
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: getStatusColor(),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
+
             const SizedBox(height: 16),
 
+            // Timeline Card
             Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 8,
+                    color: Colors.black.withOpacity(0.04),
+                    blurRadius: 12,
+                    offset: const Offset(0, 2),
                   ),
                 ],
               ),
@@ -106,132 +170,248 @@ class _ApplicantDetailPageState extends State<ApplicantDetailPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Applicant Information',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    'Application Timeline',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: Color(0xFF1E293B),
+                    ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 20),
+                  _buildTimelineStep(
+                    stepNumber: 1,
+                    title: 'Application Submitted',
+                    date: appliedAt,
+                    isCompleted: true,
+                    isLast: false,
+                  ),
+                  _buildTimelineStep(
+                    stepNumber: 2,
+                    title: 'Under Review',
+                    date: isPending ? null : appliedAt,
+                    isCompleted: !isPending,
+                    isLast: false,
+                  ),
+                  _buildTimelineStep(
+                    stepNumber: 3,
+                    title: 'Final Decision',
+                    date: isAccepted || isRejected ? updatedAt : null,
+                    isCompleted: isAccepted || isRejected,
+                    isLast: true,
+                    customColor: isAccepted ? Colors.green : isRejected ? Colors.red : null,
+                    customIcon: isAccepted ? Icons.check_circle : isRejected ? Icons.cancel : null,
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // Applicant Information Card
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.04),
+                    blurRadius: 12,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF2563EB).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.person_outline,
+                          color: Color(0xFF2563EB),
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Text(
+                        'Applicant Information',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: Color(0xFF1E293B),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
                   _buildInfoRow(
                     Icons.person,
                     'Full Name',
                     user['fullname'] ?? 'Not provided',
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 16),
                   _buildInfoRow(
                     Icons.email,
                     'Email',
                     user['email'] ?? 'Not provided',
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 16),
                   _buildInfoRow(
                     Icons.phone,
                     'Phone',
                     user['phone'] ?? 'Not provided',
                   ),
-                  const SizedBox(height: 12),
-                  if (user['date_of_birth'] != null && user['date_of_birth'].toString().isNotEmpty)
+                  if (user['date_of_birth'] != null && user['date_of_birth'].toString().isNotEmpty) ...[
+                    const SizedBox(height: 16),
                     _buildInfoRow(
                       Icons.cake,
                       'Date of Birth',
                       user['date_of_birth'],
                     ),
-                  const SizedBox(height: 12),
-                  if (user['gender'] != null && user['gender'].toString().isNotEmpty)
+                  ],
+                  if (user['gender'] != null && user['gender'].toString().isNotEmpty) ...[
+                    const SizedBox(height: 16),
                     _buildInfoRow(
                       Icons.person_outline,
                       'Gender',
                       user['gender'],
                     ),
-                  const SizedBox(height: 12),
-                  if (user['address'] != null && user['address'].toString().isNotEmpty)
+                  ],
+                  if (user['address'] != null && user['address'].toString().isNotEmpty) ...[
+                    const SizedBox(height: 16),
                     _buildInfoRow(
                       Icons.location_on,
                       'Address',
                       user['address'],
                     ),
-                  const SizedBox(height: 12),
-                  if (user['bio'] != null && user['bio'].toString().isNotEmpty)
+                  ],
+                  if (user['bio'] != null && user['bio'].toString().isNotEmpty) ...[
+                    const SizedBox(height: 16),
                     _buildInfoRow(
                       Icons.description,
                       'Bio',
                       user['bio'],
                       isMultiline: true,
                     ),
+                  ],
                 ],
               ),
             ),
 
             const SizedBox(height: 16),
 
+            // Resume Card
             Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 8,
+                    color: Colors.black.withOpacity(0.04),
+                    blurRadius: 12,
+                    offset: const Offset(0, 2),
                   ),
                 ],
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Resume',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.red.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(
+                          Icons.picture_as_pdf,
+                          color: Colors.red.shade600,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Text(
+                        'Resume',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: Color(0xFF1E293B),
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF8FAFC),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.grey.shade200),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: Colors.red.shade100,
-                            borderRadius: BorderRadius.circular(8),
+                  const SizedBox(height: 16),
+                  GestureDetector(
+                    onTap: _openResume,
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.grey.shade200),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: Colors.red.shade100,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(
+                              Icons.picture_as_pdf,
+                              color: Colors.red.shade700,
+                              size: 24,
+                            ),
                           ),
-                          child: const Icon(Icons.picture_as_pdf,
-                              color: Colors.red),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                widget.applicant['resume_file_name'] ??
-                                    'Resume',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w500,
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  widget.applicant['resume_file_name'] ?? 'Resume.pdf',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 14,
+                                    color: Color(0xFF1E293B),
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'Uploaded: ${_formatDate(widget.applicant['applied_at'])}',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.grey.shade600,
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Uploaded: ${_formatDate(widget.applicant['applied_at'])}',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.grey.shade600,
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                        ),
-                        IconButton(
-                          onPressed: _openResume,
-                          icon: const Icon(Icons.open_in_new,
-                              color: Color(0xFF2563EB)),
-                          tooltip: 'Open Resume',
-                        ),
-                      ],
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2563EB).withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(
+                              Icons.open_in_new,
+                              color: Color(0xFF2563EB),
+                              size: 20,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ],
@@ -240,20 +420,21 @@ class _ApplicantDetailPageState extends State<ApplicantDetailPage> {
 
             const SizedBox(height: 24),
 
-            if (status == 'pending') ...[
+            // Action Buttons
+            if (isPending) ...[
               Row(
                 children: [
                   Expanded(
                     child: OutlinedButton.icon(
                       onPressed: _isProcessing ? null : () => _updateStatus('rejected'),
-                      icon: const Icon(Icons.close),
+                      icon: const Icon(Icons.close, size: 20),
                       label: const Text('Reject'),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Colors.red,
                         side: const BorderSide(color: Colors.red),
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(14),
                         ),
                       ),
                     ),
@@ -262,15 +443,16 @@ class _ApplicantDetailPageState extends State<ApplicantDetailPage> {
                   Expanded(
                     child: ElevatedButton.icon(
                       onPressed: _isProcessing ? null : () => _updateStatus('accepted'),
-                      icon: const Icon(Icons.check),
+                      icon: const Icon(Icons.check, size: 20),
                       label: const Text('Accept'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.green,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(14),
                         ),
+                        elevation: 0,
                       ),
                     ),
                   ),
@@ -283,25 +465,111 @@ class _ApplicantDetailPageState extends State<ApplicantDetailPage> {
     );
   }
 
+  Widget _buildTimelineStep({
+    required int stepNumber,
+    required String title,
+    required DateTime? date,
+    required bool isCompleted,
+    required bool isLast,
+    Color? customColor,
+    IconData? customIcon,
+  }) {
+    final color = customColor ?? (isCompleted ? const Color(0xFF2563EB) : Colors.grey.shade400);
+    final icon = customIcon ?? (isCompleted ? Icons.check_circle : Icons.access_time);
+
+    return Column(
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Step number circle
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: color.withOpacity(0.1),
+                border: Border.all(
+                  color: color,
+                  width: 2,
+                ),
+              ),
+              child: Center(
+                child: Icon(
+                  icon,
+                  color: color,
+                  size: 16,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            // Content
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: isCompleted ? const Color(0xFF1E293B) : Colors.grey.shade500,
+                    ),
+                  ),
+                  if (date != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      _formatDateTime(date),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+        if (!isLast)
+          Padding(
+            padding: const EdgeInsets.only(left: 15, top: 8, bottom: 8),
+            child: Container(
+              width: 2,
+              height: 30,
+              color: isCompleted ? color.withOpacity(0.5) : Colors.grey.shade300,
+            ),
+          ),
+      ],
+    );
+  }
+
   Widget _buildInfoRow(IconData icon, String label, String value,
       {bool isMultiline = false}) {
     return Row(
       crossAxisAlignment:
       isMultiline ? CrossAxisAlignment.start : CrossAxisAlignment.center,
       children: [
-        Icon(icon, size: 18, color: Colors.grey[600]),
+        Icon(icon, size: 18, color: Colors.grey[500]),
         const SizedBox(width: 12),
         SizedBox(
           width: 100,
           child: Text(
             label,
-            style: TextStyle(color: Colors.grey[600], fontSize: 13),
+            style: TextStyle(
+              color: Colors.grey[600],
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+            ),
           ),
         ),
         Expanded(
           child: Text(
             value,
-            style: const TextStyle(fontSize: 13),
+            style: const TextStyle(
+              fontSize: 13,
+              color: Color(0xFF1E293B),
+            ),
           ),
         ),
       ],
@@ -317,9 +585,21 @@ class _ApplicantDetailPageState extends State<ApplicantDetailPage> {
       } else {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Could not open resume')),
+            const SnackBar(
+              content: Text('Could not open resume'),
+              backgroundColor: Colors.red,
+            ),
           );
         }
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No resume available'),
+            backgroundColor: Colors.orange,
+          ),
+        );
       }
     }
   }
@@ -329,24 +609,48 @@ class _ApplicantDetailPageState extends State<ApplicantDetailPage> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(isAccept ? 'Accept Application' : 'Reject Application'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Icon(
+              isAccept ? Icons.check_circle : Icons.cancel,
+              color: isAccept ? Colors.green : Colors.red,
+              size: 28,
+            ),
+            const SizedBox(width: 12),
+            Text(
+              isAccept ? 'Accept Application' : 'Reject Application',
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
         content: Text(
           isAccept
               ? 'Are you sure you want to accept this application? The applicant will be notified.'
               : 'Are you sure you want to reject this application? This action cannot be undone.',
+          style: const TextStyle(fontSize: 14, height: 1.4),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            ),
             child: const Text('Cancel'),
           ),
-          TextButton(
+          ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
               _updateStatus(newStatus);
             },
-            style: TextButton.styleFrom(
-              foregroundColor: isAccept ? Colors.green : Colors.red,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: isAccept ? Colors.green : Colors.red,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              elevation: 0,
             ),
             child: Text(isAccept ? 'Accept' : 'Reject'),
           ),
@@ -373,8 +677,13 @@ class _ApplicantDetailPageState extends State<ApplicantDetailPage> {
               newStatus == 'accepted'
                   ? 'Application accepted successfully'
                   : 'Application rejected',
+              style: const TextStyle(color: Colors.white),
             ),
             backgroundColor: newStatus == 'accepted' ? Colors.green : Colors.red,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
           ),
         );
         widget.onStatusChanged();
@@ -384,6 +693,8 @@ class _ApplicantDetailPageState extends State<ApplicantDetailPage> {
           const SnackBar(
             content: Text('Failed to update status'),
             backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+
           ),
         );
       }
@@ -398,5 +709,9 @@ class _ApplicantDetailPageState extends State<ApplicantDetailPage> {
     } catch (e) {
       return 'Unknown';
     }
+  }
+
+  String _formatDateTime(DateTime date) {
+    return '${date.day}/${date.month}/${date.year}';
   }
 }

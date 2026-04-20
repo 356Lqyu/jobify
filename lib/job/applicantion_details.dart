@@ -328,12 +328,12 @@ class _ApplicantDetailPageState extends State<ApplicantDetailPage> {
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: Colors.red.shade50,
+                          color: Colors.blue.shade50,
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Icon(
-                          Icons.picture_as_pdf,
-                          color: Colors.red.shade600,
+                          Icons.description_outlined,
+                          color: Colors.blue.shade700,
                           size: 20,
                         ),
                       ),
@@ -363,12 +363,12 @@ class _ApplicantDetailPageState extends State<ApplicantDetailPage> {
                           Container(
                             padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
-                              color: Colors.red.shade100,
+                              color: Colors.blue.shade50,
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Icon(
-                              Icons.picture_as_pdf,
-                              color: Colors.red.shade700,
+                              Icons.description_outlined,
+                              color: Colors.blue.shade700,
                               size: 24,
                             ),
                           ),

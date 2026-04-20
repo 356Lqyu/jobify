@@ -25,18 +25,28 @@ class FeedRepository {
     required Uint8List fileBytes,
   }) async {
     final ext = fileName.split('.').last.toLowerCase();
-    if (!['png', 'jpg', 'jpeg'].contains(ext)) {
-      throw Exception('Only png, jpg, jpeg images are supported.');
+    const allowed = ['png', 'jpg', 'jpeg', 'webp'];
+    if (!allowed.contains(ext)) {
+      throw Exception('Only ${allowed.join(', ')} images are supported.');
     }
-    final mime = ext == 'png' ? 'image/png' : 'image/jpeg';
-    await _sb.storage
-        .from(bucket)
-        .uploadBinary(
-      fileName,
-      fileBytes,
-      fileOptions: FileOptions(contentType: mime, upsert: true),
-    );
-    return _sb.storage.from(bucket).getPublicUrl(fileName);
+    String mime;
+    switch (ext) {
+      case 'png': mime = 'image/png'; break;
+      case 'webp': mime = 'image/webp'; break;
+      default: mime = 'image/jpeg';
+    }
+    try {
+      await _sb.storage.from(bucket).uploadBinary(
+        fileName,
+        fileBytes,
+        fileOptions: FileOptions(contentType: mime, upsert: true),
+      );
+      return _sb.storage.from(bucket).getPublicUrl(fileName);
+    } catch (e) {
+      print('Detailed upload error: $e');
+      // Also print response body if available
+      throw Exception('Storage upload failed: ${e.toString()}');
+    }
   }
 
   // POSTS  –  READ

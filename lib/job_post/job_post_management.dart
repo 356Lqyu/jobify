@@ -182,14 +182,31 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
       ),
     );
     if (confirm == true) {
-      await _jobRepo.deleteJobPost(jobId);
-      loadJobs();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+      try {
+        await _jobRepo.deleteJobPost(jobId);
+        await loadJobs();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-                content: Text('Job deleted'),
-                backgroundColor: Colors.green,
-            ));
+              content: Text('Job deleted successfully'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } catch (e) {
+        String errorMessage = 'Failed to delete job';
+        if (e.toString().contains('23503') || e.toString().contains('foreign key constraint')) {
+          errorMessage = 'Cannot delete this job because it has existing applications. Please close the job instead.';
+        }
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(errorMessage),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
       }
     }
   }
@@ -568,8 +585,8 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
                 _actionButton(
                   icon: Icons.delete_outline,
                   label: 'Delete',
-                  onTap: () => _deleteJob(job['job_id']),
-                  color: Colors.red,
+                  onTap: hasApplications ? null : () => _deleteJob(job['job_id']),
+                  color: hasApplications ? Colors.grey : Colors.red,
                 ),
               ],
             ),

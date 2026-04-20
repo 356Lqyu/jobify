@@ -1,7 +1,7 @@
-
 // lib/job/resume_management_page.dart
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
@@ -49,6 +49,72 @@ class _ResumeManagementPageState extends State<ResumeManagementPage> {
           SnackBar(content: Text('Error loading resumes: $e')),
         );
       }
+    }
+  }
+
+  Future<void> _uploadResume() async {
+    try {
+      FilePickerResult? result = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf', 'doc', 'docx'],
+      );
+
+      if (result == null) return;
+
+      final file = File(result.files.single.path!);
+      final fileName = result.files.single.name;
+      final userId = supabase.auth.currentUser?.id;
+
+      if (userId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please login first')),
+        );
+        return;
+      }
+
+      setState(() => _isUploading = true);
+
+      final bytes = await file.readAsBytes();
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final extension = fileName.substring(fileName.lastIndexOf('.'));
+      final storagePath = '${userId}_$timestamp$extension';
+
+      await supabase.storage.from('resumes').uploadBinary(
+        storagePath,
+        bytes,
+        fileOptions: const FileOptions(cacheControl: '3600', upsert: true),
+      );
+
+      final publicUrl = supabase.storage.from('resumes').getPublicUrl(storagePath);
+
+      // Insert with is_default field
+      await supabase.from('resume').insert({
+        'user_id': userId,
+        'file_url': publicUrl,
+        'file_name': fileName,
+        'uploaded_at': DateTime.now().toIso8601String(),
+        'is_default': false,
+      });
+
+      await _loadResumes();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Resume uploaded successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      print('Upload error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error uploading resume: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isUploading = false);
     }
   }
 
@@ -106,12 +172,10 @@ class _ResumeManagementPageState extends State<ResumeManagementPage> {
     if (confirmed == true) {
       setState(() => _isLoading = true);
       try {
-        // Delete from storage
         final url = resume['file_url'] as String;
         final path = url.split('/resumes/').last;
         await supabase.storage.from('resumes').remove([path]);
 
-        // Delete from database
         await supabase
             .from('resume')
             .delete()
@@ -135,16 +199,6 @@ class _ResumeManagementPageState extends State<ResumeManagementPage> {
     }
   }
 
-  void _showPreviewDialog(String url, String fileName) {
-    showDialog(
-      context: context,
-      builder: (context) => ResumePreviewDialog(
-        resumeUrl: url,
-        fileName: fileName,
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -153,6 +207,19 @@ class _ResumeManagementPageState extends State<ResumeManagementPage> {
         backgroundColor: const Color(0xFF2563EB),
         foregroundColor: Colors.white,
         elevation: 0,
+        actions: [
+          IconButton(
+            icon: _isUploading
+                ? const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+            )
+                : const Icon(Icons.upload_file),
+            onPressed: _isUploading ? null : _uploadResume,
+            tooltip: 'Upload Resume',
+          ),
+        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -175,12 +242,12 @@ class _ResumeManagementPageState extends State<ResumeManagementPage> {
                 leading: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Colors.red.shade50,
+                    color: Colors.blue.shade50,
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(
-                    Icons.picture_as_pdf,
-                    color: Colors.red.shade600,
+                    Icons.description_outlined,
+                    color: Colors.blue.shade700,
                     size: 28,
                   ),
                 ),
@@ -199,7 +266,7 @@ class _ResumeManagementPageState extends State<ResumeManagementPage> {
                   children: [
                     IconButton(
                       icon: const Icon(Icons.visibility, color: Color(0xFF2563EB)),
-                      onPressed: () => _showPreviewDialog(resume['file_url'], resume['file_name']),
+                      onPressed: () => _viewResume(resume['file_url'], resume['file_name']),
                       tooltip: 'Preview Resume',
                     ),
                     IconButton(
@@ -229,9 +296,28 @@ class _ResumeManagementPageState extends State<ResumeManagementPage> {
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
           ),
           const SizedBox(height: 8),
-          Text(
-            'Upload your resume from your profile page',
-            style: TextStyle(color: Colors.grey.shade600),
+          const Text(
+            'Tap the upload button to add your resume',
+            style: TextStyle(color: Colors.grey),
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton.icon(
+            onPressed: _isUploading ? null : _uploadResume,
+            icon: _isUploading
+                ? const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+                : const Icon(Icons.upload_file),
+            label: const Text('Upload Resume'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF2563EB),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
           ),
         ],
       ),
@@ -246,148 +332,5 @@ class _ResumeManagementPageState extends State<ResumeManagementPage> {
     } catch (e) {
       return 'Unknown';
     }
-  }
-}
-
-// Resume Preview Dialog - Reusable component
-class ResumePreviewDialog extends StatelessWidget {
-  final String resumeUrl;
-  final String fileName;
-
-  const ResumePreviewDialog({
-    super.key,
-    required this.resumeUrl,
-    required this.fileName,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Container(
-        width: MediaQuery.of(context).size.width * 0.9,
-        height: MediaQuery.of(context).size.height * 0.7,
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Text(
-                    fileName,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close),
-                  onPressed: () => Navigator.pop(context),
-                ),
-              ],
-            ),
-            const Divider(),
-            const SizedBox(height: 8),
-            Expanded(
-              child: FutureBuilder(
-                future: _downloadResume(),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  if (snapshot.hasError) {
-                    return Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.error_outline, size: 64, color: Colors.red.shade400),
-                          const SizedBox(height: 16),
-                          const Text(
-                            'Failed to load resume',
-                            style: TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            snapshot.error.toString(),
-                            style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
-                      ),
-                    );
-                  }
-                  if (snapshot.hasData) {
-                    return Container(
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.picture_as_pdf,
-                            size: 80,
-                            color: Colors.red.shade400,
-                          ),
-                          const SizedBox(height: 16),
-                          const Text(
-                            'PDF Ready to View',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            fileName,
-                            style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 24),
-                          ElevatedButton.icon(
-                            onPressed: () => _openFullScreen(context, snapshot.data!),
-                            icon: const Icon(Icons.open_in_new),
-                            label: const Text('Open Full Screen'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF2563EB),
-                              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }
-                  return const SizedBox.shrink();
-                },
-              ),
-            ),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<File> _downloadResume() async {
-    final cleanUrl = resumeUrl.trim();
-    final response = await http.get(Uri.parse(cleanUrl));
-
-    if (response.statusCode != 200) {
-      throw Exception('Failed to download resume (HTTP ${response.statusCode})');
-    }
-
-    final tempDir = await getTemporaryDirectory();
-    final file = File('${tempDir.path}/$fileName');
-    await file.writeAsBytes(response.bodyBytes);
-    return file;
-  }
-
-  Future<void> _openFullScreen(BuildContext context, File file) async {
-    await OpenFilex.open(file.path);
   }
 }

@@ -4,7 +4,7 @@ import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 import 'package:jobify/data/job_repository.dart';
 import 'package:jobify/job_post/create_job_post.dart';
 import 'package:jobify/data/local_db.dart';
-import 'package:jobify/job/applicant_list.dart'; // added import
+import 'package:jobify/job/applicant_list.dart';
 
 class JobDetailEmployer extends StatefulWidget {
   final Map<String, dynamic> job;
@@ -68,8 +68,10 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
     await _refresh();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Job ${newStatus == 'active' ? 'reopened' : 'closed'}'),
-          backgroundColor: Colors.green,),
+        SnackBar(
+          content: Text('Job ${newStatus == 'active' ? 'reopened' : 'closed'}'),
+          backgroundColor: Colors.green,
+        ),
       );
     }
   }
@@ -91,8 +93,23 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
     );
     if (confirm == true) {
       setState(() => _isLoading = true);
-      await _jobRepo.deleteJobPost(_job['job_id']);
-      if (mounted) Navigator.pop(context, true);
+      try {
+        await _jobRepo.deleteJobPost(_job['job_id']);
+        if (mounted) Navigator.pop(context, true);
+      } catch (e) {
+        String errorMessage = 'Failed to delete job';
+        if (e.toString().contains('23503') ||
+            e.toString().contains('foreign key constraint')) {
+          errorMessage =
+          'Cannot delete this job because it has existing applications. Please close the job instead.';
+        }
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(errorMessage), backgroundColor: Colors.red),
+          );
+        }
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -106,6 +123,7 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
     final hasVideo = _youtubeController != null;
     final viewCount = _job['view_count'] ?? 0;
     final appCount = _job['application_count'] ?? 0;
+    final hasApplications = appCount > 0;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -217,7 +235,6 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
                           children: [
                             _statItem(Icons.visibility, '$viewCount', 'Views'),
                             Container(width: 1, height: 30, color: Colors.grey.shade300),
-                            // Make Applications clickable
                             GestureDetector(
                               onTap: () {
                                 Navigator.push(
@@ -275,29 +292,38 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
                       Row(
                         children: [
                           Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: _toggleStatus,
-                              icon: Icon(isActive ? Icons.close : Icons.refresh, size: 18),
-                              label: Text(isActive ? 'Close Job' : 'Reopen Job'),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: isActive ? Colors.orange : Colors.green,
-                                side: BorderSide(color: isActive ? Colors.orange : Colors.green),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                padding: const EdgeInsets.symmetric(vertical: 12),
+                            child: SizedBox(
+                              height: 48, // fixed height for both buttons
+                              child: OutlinedButton.icon(
+                                onPressed: _toggleStatus,
+                                icon: Icon(isActive ? Icons.close : Icons.refresh, size: 18),
+                                label: Text(isActive ? 'Close Job' : 'Reopen Job'),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: isActive ? Colors.orange : Colors.green,
+                                  side: BorderSide(color: isActive ? Colors.orange : Colors.green),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                ),
                               ),
                             ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: _delete,
-                              icon: const Icon(Icons.delete_outline, size: 18),
-                              label: const Text('Delete Job'),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: Colors.red,
-                                side: const BorderSide(color: Colors.red),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                padding: const EdgeInsets.symmetric(vertical: 12),
+                            child: Tooltip(
+                              message: hasApplications
+                                  ? 'Cannot delete a job with existing applications'
+                                  : 'Delete this job',
+                              child: SizedBox(
+                                height: 48, // same fixed height
+                                child: OutlinedButton.icon(
+                                  onPressed: hasApplications ? null : _delete,
+                                  icon: const Icon(Icons.delete_outline, size: 18),
+                                  label: const Text('Delete Job'),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: hasApplications ? Colors.grey : Colors.red,
+                                    side: BorderSide(color: hasApplications ? Colors.grey : Colors.red),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                  ),
+                                ),
                               ),
                             ),
                           ),

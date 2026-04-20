@@ -586,6 +586,7 @@ class _ApplicationCardState extends State<_ApplicationCard> {
                     ),
                     const SizedBox(height: 16),
                     // Resume
+                    // Resume
                     if (widget.application['resume_url'] != null &&
                         widget.application['resume_url'].toString().isNotEmpty) ...[
                       GestureDetector(
@@ -605,7 +606,11 @@ class _ApplicationCardState extends State<_ApplicationCard> {
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.picture_as_pdf, size: 18, color: Colors.red.shade600),
+                              Icon(
+                                Icons.description_outlined,
+                                size: 18,
+                                color: const Color(0xFF2563EB),
+                              ),
                               const SizedBox(width: 10),
                               Text(
                                 widget.application['resume_file_name'] ?? 'Resume.pdf',
@@ -626,8 +631,7 @@ class _ApplicationCardState extends State<_ApplicationCard> {
                         ),
                       ),
                       const SizedBox(height: 16),
-                    ],
-                    // Job Description
+                    ],// Job Description
                     if (description.isNotEmpty) ...[
                       const Divider(),
                       const SizedBox(height: 8),

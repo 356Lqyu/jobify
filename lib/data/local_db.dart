@@ -21,10 +21,10 @@ class LocalDB {
   }
 
   static Future<Database> _init() async {
-    final dbPath = join(await getDatabasesPath(), 'jobify_v5.db');
+    final dbPath = join(await getDatabasesPath(), 'jobify_v8.db');
     return openDatabase(
       dbPath,
-      version: 5,
+      version: 8,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -96,6 +96,15 @@ class LocalDB {
         synced_at            TEXT NOT NULL DEFAULT ''
       )
     ''');
+
+    // 4. Saved jobs
+    await db.execute('''
+  CREATE TABLE IF NOT EXISTS saved_jobs (
+    job_id     TEXT PRIMARY KEY,
+    user_id    TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  )
+''');
 
     // 4. Reference tables
     await db.execute('''

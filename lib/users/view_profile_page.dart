@@ -808,7 +808,14 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
               color: Colors.blue,
             ),
           ),
-
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey.shade600,
+            ),
+          ),
         ],
       ),
     );

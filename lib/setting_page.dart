@@ -948,7 +948,7 @@ class _SettingPageState extends State<SettingPage> {
                     ),
                     child: Column(
                       children: [
-                        buildSectionHeader('Profile'),
+                        buildSectionHeader('General'),
                         buildListItem(
                           Icons.person_outline,
                           'My Profile',
@@ -972,7 +972,7 @@ class _SettingPageState extends State<SettingPage> {
                         ),
                         buildListItem(
                           Icons.post_add_outlined,
-                          'Manage My Posts',
+                          'My Posts',
                           () {
                             final userProvider = Provider.of<UserProvider>(
                               context,

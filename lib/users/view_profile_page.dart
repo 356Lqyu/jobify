@@ -37,6 +37,9 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
   bool _isLoading = true;
   bool _isFollowing = false;
 
+  String _profileVisibility = 'public';
+  bool _isLoadingVisibility = false;
+
   // Track which section is selected
   // For company: 0: Posts, 1: Jobs, 2: Branches, 3: Followers, 4: Following
   // For job seeker: 0: Posts, 1: Following
@@ -100,6 +103,7 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
     _loadFollowing();
     _loadHeadOffice();
     _checkFollowStatus();
+    _loadVisibilitySetting();
     if (!widget.isCompany) {
       _loadJobSeekerDetails();
     }
@@ -166,6 +170,432 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
       });
     } catch (e) {
       debugPrint('Error loading job seeker details: $e');
+    }
+  }
+
+  Future<void> _loadVisibilitySetting() async {
+    if (_currentUserId == null) return;
+
+    try {
+      final data = await supabase
+          .from('users')
+          .select('profile_visibility')
+          .eq('user_id', _currentUserId!)
+          .maybeSingle();
+
+      if (data != null && mounted) {
+        setState(() {
+          _profileVisibility = data['profile_visibility'] ?? 'public';
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading visibility: $e');
+    }
+  }
+
+  Future<void> _updateVisibility(String newVisibility) async {
+    if (_currentUserId == null) return;
+
+    setState(() => _isLoadingVisibility = true);
+
+    try {
+      await supabase
+          .from('users')
+          .update({'profile_visibility': newVisibility})
+          .eq('user_id', _currentUserId!);
+
+      setState(() {
+        _profileVisibility = newVisibility;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Profile visibility updated to ${_getVisibilityLabel(newVisibility)}'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      setState(() => _isLoadingVisibility = false);
+    }
+  }
+
+  void _showVisibilityDialog() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Handle bar
+            Container(
+              margin: const EdgeInsets.only(top: 12),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 16),
+            // Title
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 20),
+              child: Text(
+                'Profile Visibility',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 20),
+              child: Text(
+                'Choose who can view your profile',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey,
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            // Options
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Column(
+                children: [
+                  // Public Option
+                  _buildVisibilityCard(
+                    context: context,
+                    icon: Icons.public,
+                    title: 'Public',
+                    description: 'Everyone can view your profile',
+                    value: 'public',
+                    currentValue: _profileVisibility,
+                    color: Colors.green,
+                    onTap: () async {
+                      await _updateVisibility('public');
+                      if (mounted) Navigator.pop(context);
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  // Employers Only Option
+                  _buildVisibilityCard(
+                    context: context,
+                    icon: Icons.business,
+                    title: 'Employers Only',
+                    description: 'All employers can view your profile',
+                    value: 'employers_only',
+                    currentValue: _profileVisibility,
+                    color: Colors.orange,
+                    onTap: () async {
+                      await _updateVisibility('employers_only');
+                      if (mounted) Navigator.pop(context);
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  // Hidden Option (replaces Private)
+                  _buildVisibilityCard(
+                    context: context,
+                    icon: Icons.visibility_off,
+                    title: 'Hidden',
+                    description: 'Only employers this user has applied to can view the profile',
+                    value: 'hidden',
+                    currentValue: _profileVisibility,
+                    color: Colors.red,
+                    onTap: () async {
+                      await _updateVisibility('hidden');
+                      if (mounted) Navigator.pop(context);
+                    },
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 34),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVisibilityCard({
+    required BuildContext context,
+    required IconData icon,
+    required String title,
+    required String description,
+    required String value,
+    required String currentValue,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    final isSelected = currentValue == value;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isSelected ? color.withOpacity(0.1) : Colors.grey.shade50,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isSelected ? color : Colors.grey.shade200,
+            width: isSelected ? 2 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            // Icon Container
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                color: isSelected ? color : Colors.grey.shade200,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Icon(
+                icon,
+                size: 28,
+                color: isSelected ? Colors.white : Colors.grey.shade600,
+              ),
+            ),
+            const SizedBox(width: 16),
+            // Text Content
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: isSelected ? color : Colors.black87,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    description,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                      height: 1.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVisibilityOption(
+      BuildContext context, {
+        required IconData icon,
+        required String title,
+        required String description,
+        required String value,
+        required String currentValue,
+        required VoidCallback onTap,
+      }) {
+    final isSelected = currentValue == value;
+
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: isSelected ? Colors.blue : Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(
+                icon,
+                color: isSelected ? Colors.white : Colors.grey.shade600,
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
+                      color: isSelected ? Colors.blue : Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    description,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (isSelected)
+              Icon(Icons.check_circle, color: Colors.blue, size: 24),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _getVisibilityLabel(String visibility) {
+    switch (visibility) {
+      case 'public': return 'Public';
+      case 'employers_only': return 'Employers Only';
+      case 'hidden': return 'Hidden';
+      default: return 'Public';
+    }
+  }
+
+  IconData _getVisibilityIcon(String visibility) {
+    switch (visibility) {
+      case 'public': return Icons.public;
+      case 'employers_only': return Icons.business;
+      case 'hidden': return Icons.visibility_off;
+      default: return Icons.public;
+    }
+  }
+
+  Color _getVisibilityColor(String visibility) {
+    switch (visibility) {
+      case 'public': return Colors.green;
+      case 'employers_only': return Colors.orange;
+      case 'hidden': return Colors.red;
+      default: return Colors.green;
+    }
+  }
+
+  Future<Map<String, dynamic>> _checkProfileAccess() async {
+    // If viewing own profile, always allow
+    if (_currentUserId == widget.userId) {
+      return {'canView': true, 'visibility': 'public'};
+    }
+
+    try {
+      // Get profile visibility setting and role
+      final userData = await supabase
+          .from('users')
+          .select('profile_visibility, role')
+          .eq('user_id', widget.userId)
+          .maybeSingle();
+
+      if (userData == null) return {'canView': true, 'visibility': 'public'};
+
+      final visibility = userData['profile_visibility'] ?? 'public';
+      final userRole = userData['role'];
+
+      // If profile is public, always show
+      if (visibility == 'public') {
+        return {'canView': true, 'visibility': visibility};
+      }
+
+      // If profile is hidden, check if current user is employer who received application
+      if (visibility == 'hidden') {
+        // If current user is a job seeker, cannot view
+        if (_currentUserId == null) return {'canView': false, 'visibility': visibility};
+
+        // Get current user's role
+        final currentUserData = await supabase
+            .from('users')
+            .select('role')
+            .eq('user_id', _currentUserId!)
+            .maybeSingle();
+
+        if (currentUserData == null) return {'canView': false, 'visibility': visibility};
+
+        // If current user is not an employer, cannot view
+        if (currentUserData['role'] != 'POSTER') {
+          return {'canView': false, 'visibility': visibility};
+        }
+
+        // Check if this employer has received an application from the profile owner
+        final applications = await supabase
+            .from('job_application')
+            .select('application_id')
+            .eq('user_id', widget.userId)
+            .inFilter('job_id', await _getEmployerJobIds());
+
+        final canView = (applications as List).isNotEmpty;
+        return {'canView': canView, 'visibility': visibility};
+      }
+
+      // If employers_only, check if current user is employer (any employer)
+      if (visibility == 'employers_only') {
+        if (_currentUserId == null) return {'canView': false, 'visibility': visibility};
+
+        // Get current user's role
+        final currentUserData = await supabase
+            .from('users')
+            .select('role')
+            .eq('user_id', _currentUserId!)
+            .maybeSingle();
+
+        if (currentUserData == null) return {'canView': false, 'visibility': visibility};
+
+        // Only employers can view
+        final canView = currentUserData['role'] == 'POSTER';
+        return {'canView': canView, 'visibility': visibility};
+      }
+
+      return {'canView': true, 'visibility': visibility};
+    } catch (e) {
+      debugPrint('Error checking visibility: $e');
+      return {'canView': true, 'visibility': 'public'};
+    }
+  }
+  Future<List<String>> _getEmployerJobIds() async {
+    if (_currentUserId == null) return [];
+
+    try {
+      final jobs = await supabase
+          .from('job_post')
+          .select('job_id')
+          .eq('created_by', _currentUserId!);
+
+      return (jobs as List).map((job) => job['job_id'] as String).toList();
+    } catch (e) {
+      debugPrint('Error getting job IDs: $e');
+      return [];
     }
   }
 
@@ -642,17 +1072,370 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final bool isOwnProfile = _currentUserId == widget.userId;
+  // Add this method for the hidden/restricted page
+  Widget _buildHiddenRestrictedPage() {
     final String displayName = widget.isCompany
         ? (_companyName ?? widget.name ?? 'Company')
         : (_fullname ?? widget.name ?? 'User');
+
+    final String profileImage = widget.isCompany
+        ? (_profileImageUrl ?? '')
+        : (_profileImageUrl ?? '');
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
+      appBar: AppBar(
+        elevation: 0,
+        automaticallyImplyLeading: true,
+        actions: [
+          // Follow button for non-own profile
+          if (_currentUserId != widget.userId)
+            Padding(
+              padding: const EdgeInsets.only(right: 16),
+              child: ElevatedButton.icon(
+                onPressed: _toggleFollow,
+                icon: Icon(
+                  _isFollowing ? Icons.check : Icons.person_add,
+                  size: 18,
+                ),
+                label: Text(_isFollowing ? 'Following' : 'Follow'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _isFollowing ? Colors.white : Colors.blue,
+                  foregroundColor: _isFollowing ? Colors.blue : Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+      body: SingleChildScrollView(
+        child: Column(
+          children: [
+            // Profile Header - Top position, centered horizontally
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
+              child: Column(
+                children: [
+                  CircleAvatar(
+                    radius: 60,
+                    backgroundColor: Colors.grey[200],
+                    backgroundImage: profileImage.isNotEmpty
+                        ? CachedNetworkImageProvider(profileImage)
+                        : null,
+                    child: profileImage.isEmpty
+                        ? Icon(
+                      widget.isCompany ? Icons.business : Icons.person,
+                      size: 60,
+                      color: Colors.blue,
+                    )
+                        : null,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    displayName,
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
+                  // Role Badge
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: widget.isCompany
+                          ? Colors.purple.shade50
+                          : Colors.blue.shade50,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: widget.isCompany
+                            ? Colors.purple.shade200
+                            : Colors.blue.shade200,
+                      ),
+                    ),
+                    child: Text(
+                      widget.isCompany ? 'Employer' : 'Job Seeker',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: widget.isCompany
+                            ? Colors.purple.shade700
+                            : Colors.blue.shade700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Hidden Message Card
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              child: Container(
+                padding: const EdgeInsets.all(42),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 10,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    Icon(
+                      Icons.visibility_off,
+                      size: 64,
+                      color: Colors.grey.shade400,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Hidden Profile',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Only employers this user has applied to can view the profile',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey.shade500,
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmployersOnlyRestrictedPage() {
+    final String displayName = widget.isCompany
+        ? (_companyName ?? widget.name ?? 'Company')
+        : (_fullname ?? widget.name ?? 'User');
+
+    final String profileImage = widget.isCompany
+        ? (_profileImageUrl ?? '')
+        : (_profileImageUrl ?? '');
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
+      appBar: AppBar(
+        elevation: 0,
+        automaticallyImplyLeading: true,
+        actions: [
+          // Follow button for non-own profile
+          if (_currentUserId != widget.userId)
+            Padding(
+              padding: const EdgeInsets.only(right: 16),
+              child: ElevatedButton.icon(
+                onPressed: _toggleFollow,
+                icon: Icon(
+                  _isFollowing ? Icons.check : Icons.person_add,
+                  size: 18,
+                ),
+                label: Text(_isFollowing ? 'Following' : 'Follow'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _isFollowing ? Colors.white : Colors.blue,
+                  foregroundColor: _isFollowing ? Colors.blue : Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+      body: SingleChildScrollView(
+        child: Column(
+          children: [
+            // Profile Header - Top position, centered horizontally
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
+              child: Column(
+                children: [
+                  CircleAvatar(
+                    radius: 60,
+                    backgroundColor: Colors.grey[200],
+                    backgroundImage: profileImage.isNotEmpty
+                        ? CachedNetworkImageProvider(profileImage)
+                        : null,
+                    child: profileImage.isEmpty
+                        ? Icon(
+                      widget.isCompany ? Icons.business : Icons.person,
+                      size: 60,
+                      color: Colors.blue,
+                    )
+                        : null,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    displayName,
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
+                  // Role Badge
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: widget.isCompany
+                          ? Colors.purple.shade50
+                          : Colors.blue.shade50,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: widget.isCompany
+                            ? Colors.purple.shade200
+                            : Colors.blue.shade200,
+                      ),
+                    ),
+                    child: Text(
+                      widget.isCompany ? 'Employer' : 'Job Seeker',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: widget.isCompany
+                            ? Colors.purple.shade700
+                            : Colors.blue.shade700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Employers Only Message Card
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              child: Container(
+                padding: const EdgeInsets.all(42),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 10,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    Icon(
+                      Icons.business,
+                      size: 64,
+                      color: Colors.grey.shade400,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Employers Only',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'This profile is only visible to employers.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey.shade500,
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bool isOwnProfile = _currentUserId == widget.userId;
+
+    return FutureBuilder<Map<String, dynamic>>(
+      future: _checkProfileAccess(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            backgroundColor: Color(0xFFF8FAFC),
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        final result = snapshot.data ?? {'canView': true, 'visibility': 'public'};
+        final canView = result['canView'] as bool;
+        final visibility = result['visibility'] as String;
+
+        if (!canView && !isOwnProfile) {
+          if (visibility == 'employers_only') {
+            return _buildEmployersOnlyRestrictedPage();
+          }
+          return _buildHiddenRestrictedPage();
+        }
+
+        return _buildProfileContent(isOwnProfile);
+      },
+    );
+  }
+
+  Widget _buildProfileContent(bool isOwnProfile) {
+    final String displayName = widget.isCompany
+        ? (_companyName ?? widget.name ?? 'Company')
+        : (_fullname ?? widget.name ?? 'User');
+
+    // Only show visibility button for job seekers (not companies)
+    final bool showVisibilityButton = isOwnProfile && !widget.isCompany;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
         actions: [
+          // Visibility button for own profile (job seeker only)
+          if (showVisibilityButton)
+            Padding(
+              padding: const EdgeInsets.only(right: 16),
+              child: ElevatedButton.icon(
+                onPressed: _showVisibilityDialog,
+                icon: Icon(
+                  _getVisibilityIcon(_profileVisibility),
+                  size: 18,
+                ),
+                label: Text(_getVisibilityLabel(_profileVisibility)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: Colors.blue,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                ),
+              ),
+            ),
+          // Follow button for non-own profile
           if (!isOwnProfile)
             Padding(
               padding: const EdgeInsets.only(right: 16),
@@ -685,6 +1468,7 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
           await _loadBranches();
           await _loadFollowers();
           await _loadFollowing();
+          await _loadVisibilitySetting();
           if (!widget.isCompany) {
             await _loadJobSeekerDetails();
           }
@@ -695,7 +1479,7 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
             children: [
               _buildHeaderSection(displayName),
               if (widget.isCompany) _buildCompanyInfoSection()
-              else  _buildContactInfoSection(isOwnProfile: isOwnProfile),
+              else _buildContactInfoSection(isOwnProfile: isOwnProfile),
               _buildAboutSection(),
               _buildStatsRow(),
               if (widget.isCompany)
@@ -711,6 +1495,8 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
   }
 
   Widget _buildHeaderSection(String displayName) {
+    final bool isOwnProfile = _currentUserId == widget.userId;
+
     return Container(
       padding: const EdgeInsets.fromLTRB(24, 0, 24, 10),
       child: Column(
@@ -736,13 +1522,10 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
             style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 8),
         ],
       ),
     );
   }
-
-
 
   Widget _buildCompanyInfoSection() {
     String headOfficeLocation = '';
@@ -822,7 +1605,7 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
 
     return Container(
       margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -926,7 +1709,7 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
       child: GestureDetector(
         onTap: () {
           setState(() {
-              _selectedSection = sectionIndex;
+            _selectedSection = sectionIndex;
           });
         },
         child: Container(
@@ -1313,7 +2096,7 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
       return dateString;
     }
   }
-  
+
   Widget _buildPostsContent() {
     if (_recentPosts.isEmpty) {
       final bool isOwnProfile = _currentUserId == widget.userId;
@@ -2051,7 +2834,6 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
   }
 
   void _navigateToPostDetail(Map<String, dynamic> post) async {
-    // Create a FeedPost object from the post data
     final feedPost = FeedPost(
       postId: post['post_id'] as String,
       userId: widget.userId,
@@ -2079,11 +2861,9 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
       linkedJob: null,
     );
 
-    // Get current user data
     final currentUserId = supabase.auth.currentUser?.id;
 
     if (currentUserId == null) {
-      // User not logged in, show error or return
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Please login to view post details')),

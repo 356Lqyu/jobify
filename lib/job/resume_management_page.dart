@@ -205,7 +205,7 @@ class _ResumeManagementPageState extends State<ResumeManagementPage> {
         title: const Text('My Resumes',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
-        backgroundColor: const Color(0xFF2563EB),
+        backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
@@ -313,7 +313,8 @@ class _ResumeManagementPageState extends State<ResumeManagementPage> {
                 : const Icon(Icons.upload_file),
             label: const Text('Upload Resume'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF2563EB),
+              backgroundColor: Colors.blue,
+              foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),

@@ -73,7 +73,9 @@ class _SocialFeedPageState extends State<SocialFeedPage>
       child: Scaffold(
         backgroundColor: const Color(0xFFF8FAFC),
         appBar: AppBar(
-          title: const Text('Home'),
+          title: const Text('Home',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
           backgroundColor: Colors.blue,
           foregroundColor: Colors.white,
           elevation: 0,

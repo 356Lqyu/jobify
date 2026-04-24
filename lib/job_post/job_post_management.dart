@@ -246,7 +246,9 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text('My Jobs'),
+        title: const Text('My Jobs',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
         elevation: 0,

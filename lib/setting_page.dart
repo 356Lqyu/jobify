@@ -29,18 +29,33 @@ class _SettingPageState extends State<SettingPage> {
   String? userId;
   String? companyId;
 
+  String? _phone;
+  String? _email;
+  String? _dateOfBirth;
+  String? _gender;
+  String? _address;
+  String? _bio;
+  String? _companyPhone;
+  String? _companyEmail;
+  String? _companyDescription;
+  String? _industry;
+  String? _companySize;
+  List<Map<String, dynamic>> _skills = [];
+  List<Map<String, dynamic>> _education = [];
+  List<Map<String, dynamic>> _experience = [];
+  List<Map<String, dynamic>> _branches = [];
+
   bool showLogoutDialog = false;
 
   // Stats for Job Seeker
   int _applicationsCount = 0;
-  int _savedPostsCount =
-      0; // renamed from _savedJobsCount – now counts all saved posts
+  int _savedPostsCount = 0;
   int _followingCount = 0;
-  int _userPostsCount = 0; // social posts only (job_id IS NULL)
+  int _userPostsCount = 0;
 
   // Stats for Employer
-  int _posterSocialPostCount = 0; // post table job_id IS NULL
-  int _posterJobPostCount = 0; // post table job_id IS NOT NULL
+  int _posterSocialPostCount = 0;
+  int _posterJobPostCount = 0;
   int _posterSavedPostsCount = 0;
   int _companyFollowersCount = 0;
   int _posterFollowingCount = 0;
@@ -64,6 +79,95 @@ class _SettingPageState extends State<SettingPage> {
     });
   }
 
+  Future<void> _loadProfileCompletionData() async {
+    final authUserId = supabase.auth.currentUser?.id;
+    if (authUserId == null) return;
+
+    final isJobSeeker = role?.toUpperCase() == 'JOB_SEEKER';
+
+    if (isJobSeeker) {
+      // Fetch job seeker profile
+      final profileData = await supabase
+          .from('job_seeker_profile')
+          .select('date_of_birth, gender, address, bio')
+          .eq('user_id', authUserId)
+          .maybeSingle();
+
+      if (profileData != null && mounted) {
+        setState(() {
+          _dateOfBirth = profileData['date_of_birth'];
+          _gender = profileData['gender'];
+          _address = profileData['address'];
+          _bio = profileData['bio'];
+        });
+      }
+
+      // Fetch skills, education, experience
+      final skillsData = await supabase
+          .from('skills')
+          .select()
+          .eq('user_id', authUserId);
+      _skills = List<Map<String, dynamic>>.from(skillsData);
+
+      final educationData = await supabase
+          .from('education')
+          .select()
+          .eq('user_id', authUserId);
+      _education = List<Map<String, dynamic>>.from(educationData);
+
+      final experienceData = await supabase
+          .from('experience')
+          .select()
+          .eq('user_id', authUserId);
+      _experience = List<Map<String, dynamic>>.from(experienceData);
+
+    } else if (role?.toUpperCase() == 'POSTER') {
+      // Fetch company profile
+      final companyData = await supabase
+          .from('company_profile')
+          .select('company_name, company_description, industry, company_size')
+          .eq('user_id', authUserId)
+          .maybeSingle();
+
+      if (companyData != null && mounted) {
+        setState(() {
+          _companyDescription = companyData['company_description'];
+          _industry = companyData['industry'];
+          _companySize = companyData['company_size'];
+        });
+      }
+
+      // Fetch branches
+      final companyProfile = await supabase
+          .from('company_profile')
+          .select('company_id')
+          .eq('user_id', authUserId)
+          .maybeSingle();
+
+      if (companyProfile != null) {
+        final branchesData = await supabase
+            .from('company_branch')
+            .select()
+            .eq('company_id', companyProfile['company_id']);
+        _branches = List<Map<String, dynamic>>.from(branchesData);
+      }
+    }
+
+    // Get email and phone from user table
+    final userData = await supabase
+        .from('users')
+        .select('email, phone')
+        .eq('user_id', authUserId)
+        .maybeSingle();
+
+    if (userData != null && mounted) {
+      setState(() {
+        _email = userData['email'];
+        _phone = userData['phone'];
+      });
+    }
+  }
+
   Future<void> fetchUserInfo() async {
     // Get current user from provider or cache
     final userProvider = Provider.of<UserProvider>(context, listen: false);
@@ -76,6 +180,9 @@ class _SettingPageState extends State<SettingPage> {
         profileImageUrl = user.profileImageUrl;
         userId = user.userId;
       });
+
+      // Load profile completion data
+      await _loadProfileCompletionData();
 
       // Load stats after getting user info
       await _loadStats();
@@ -341,6 +448,10 @@ class _SettingPageState extends State<SettingPage> {
 
   Widget buildProfileSummary() {
     final bool isJobSeeker = role == 'job_seeker';
+
+    // Calculate profile completion percentage
+    double completionPercentage = _calculateProfileCompletion(isJobSeeker);
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 25),
       margin: const EdgeInsets.symmetric(vertical: 8),
@@ -351,75 +462,139 @@ class _SettingPageState extends State<SettingPage> {
           BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 6),
         ],
       ),
-      child: Row(
+      child: Column(
         children: [
-          CircleAvatar(
-            radius: 32,
-            backgroundColor: Colors.grey[200],
-            backgroundImage:
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 40,
+                backgroundColor: Colors.grey[200],
+                backgroundImage:
                 profileImageUrl != null && profileImageUrl!.isNotEmpty
-                ? NetworkImage(profileImageUrl!)
-                : null,
-            child: profileImageUrl == null || profileImageUrl!.isEmpty
-                ? Icon(
-                    isJobSeeker ? Icons.person : Icons.business,
-                    size: 32,
-                    color: Colors.grey[400],
-                  )
-                : null,
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  isJobSeeker ? userName ?? '' : companyName ?? userName ?? '',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 17,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  isJobSeeker ? 'Job Seeker' : 'Employer Account',
-                  style: const TextStyle(color: Colors.grey, fontSize: 14),
-                ),
-                if (isJobSeeker)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Row(
+                    ? NetworkImage(profileImageUrl!)
+                    : null,
+                child: profileImageUrl == null || profileImageUrl!.isEmpty
+                    ? Icon(
+                  isJobSeeker ? Icons.person : Icons.business,
+                  size: 32,
+                  color: Colors.grey[400],
+                )
+                    : null,
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isJobSeeker ? userName ?? '' : companyName ?? userName ?? '',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 17,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      isJobSeeker ? 'Job Seeker' : 'Employer Account',
+                      style: const TextStyle(color: Colors.grey, fontSize: 14, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Container(
-                          width: 6,
-                          height: 6,
-                          decoration: const BoxDecoration(
-                            color: Colors.blue,
-                            shape: BoxShape.circle,
+                        Text(
+                          'Profile Completeness',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
                           ),
                         ),
-                        const SizedBox(width: 4),
-                        const Text(
-                          'Profile 60% complete',
+                        Text(
+                          '${completionPercentage.toStringAsFixed(0)}%',
                           style: TextStyle(
-                            color: Colors.blue,
                             fontSize: 12,
-                            fontWeight: FontWeight.w500,
+                            fontWeight: FontWeight.bold,
+                            color: _getProgressColor(completionPercentage),
                           ),
                         ),
                       ],
                     ),
-                  ),
-              ],
-            ),
+                    const SizedBox(height: 4),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: LinearProgressIndicator(
+                        value: completionPercentage / 100,
+                        backgroundColor: Colors.grey.shade200,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          _getProgressColor(completionPercentage),
+                        ),
+                        minHeight: 5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  // ── Job Seeker activity panel ──────────────────────────────────────────────
-  // Shows: Applications | Social Posts | Saved Posts (clickable) | Following
+  // Method to calculate profile completion percentage
+  double _calculateProfileCompletion(bool isJobSeeker) {
+    int completedFields = 0;
+    int totalFields = isJobSeeker ? 12 : 8;
+
+    if (isJobSeeker) {
+      // Job Seeker Fields
+      if (profileImageUrl != null && profileImageUrl!.isNotEmpty) completedFields++;
+      if (userName != null && userName!.isNotEmpty) completedFields++;
+      if (_phone != null && _phone!.isNotEmpty) completedFields++;
+      if (_email != null && _email!.isNotEmpty) completedFields++;
+      if (_dateOfBirth != null && _dateOfBirth!.isNotEmpty) completedFields++;
+      if (_gender != null && _gender!.isNotEmpty) completedFields++;
+      if (_address != null && _address!.isNotEmpty) completedFields++;
+      if (_bio != null && _bio!.isNotEmpty) completedFields++;
+
+      // Skills, Education, Experience
+      if (_skills.isNotEmpty) completedFields++;
+      if (_education.isNotEmpty) completedFields++;
+      if (_experience.isNotEmpty) completedFields++;
+
+      totalFields = 12; // Profile image, name, phone, email, DOB, gender, address, bio, skills, education, experience
+    } else {
+      // Employer Fields
+      if (profileImageUrl != null && profileImageUrl!.isNotEmpty) completedFields++;
+      if (companyName != null && companyName!.isNotEmpty) completedFields++;
+      if (_companyPhone != null && _companyPhone!.isNotEmpty) completedFields++;
+      if (_companyEmail != null && _companyEmail!.isNotEmpty) completedFields++;
+      if (_companyDescription != null && _companyDescription!.isNotEmpty) completedFields++;
+      if (_industry != null && _industry!.isNotEmpty) completedFields++;
+      if (_companySize != null && _companySize!.isNotEmpty) completedFields++;
+      if (_branches.isNotEmpty) completedFields++;
+
+      totalFields = 8; // Logo, company name, phone, email, description, industry, size, branches
+    }
+
+    // Calculate percentage
+    double percentage = (completedFields / totalFields) * 100;
+    return percentage.clamp(0.0, 100.0);
+  }
+
+  // Method to get progress color based on percentage
+  Color _getProgressColor(double percentage) {
+    if (percentage >= 80) {
+      return Colors.green;
+    } else if (percentage >= 50) {
+      return Colors.orange;
+    } else {
+      return Colors.red;
+    }
+  }
+
+  // Job Seeker activity panel
+  // Shows Applications , Social Posts , Saved Posts (clickable) , Following
   Widget buildJobSeekerStats() {
     if (_isLoadingStats) {
       return Container(
@@ -454,7 +629,7 @@ class _SettingPageState extends State<SettingPage> {
             style: TextStyle(fontWeight: FontWeight.w500, fontSize: 15),
           ),
           const SizedBox(height: 16),
-          // Row 1: Applications | Social Posts | Saved Posts(clickable)
+          //first fow - Applications , Social Posts , Saved Posts(clickable)
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
@@ -495,7 +670,7 @@ class _SettingPageState extends State<SettingPage> {
             ],
           ),
           const SizedBox(height: 20),
-          // Row 2: Following
+          // second row - Following
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [buildStatItem(_followingCount.toString(), 'Following')],
@@ -540,7 +715,7 @@ class _SettingPageState extends State<SettingPage> {
             style: TextStyle(fontWeight: FontWeight.w500, fontSize: 15),
           ),
           const SizedBox(height: 16),
-          // Row 1: Social Posts | Job Posts | Saved Posts(clickable)
+          // first row - Social Posts , Job Posts , Saved Posts(clickable)
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
@@ -656,7 +831,7 @@ class _SettingPageState extends State<SettingPage> {
           );
           await _refreshProfileData();
         } else {
-          Navigator.pop(context); // Close loading dialog
+          Navigator.pop(context);
           _showErrorDialog('Unable to load dashboard. User ID not found.');
         }
       } else if (role == 'poster') {
@@ -682,7 +857,7 @@ class _SettingPageState extends State<SettingPage> {
           }
         }
 
-        Navigator.pop(context); // Close loading dialog
+        Navigator.pop(context);
 
         if (targetCompanyId != null && userId != null) {
           await Navigator.push(
@@ -704,11 +879,11 @@ class _SettingPageState extends State<SettingPage> {
           );
         }
       } else {
-        Navigator.pop(context); // Close loading dialog
+        Navigator.pop(context);
         _showErrorDialog('Unable to load dashboard. Please try again.');
       }
     } catch (e) {
-      Navigator.pop(context); // Close loading dialog
+      Navigator.pop(context);
       _showErrorDialog('Error loading dashboard: ${e.toString()}');
     }
   }
@@ -736,7 +911,9 @@ class _SettingPageState extends State<SettingPage> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text('My Account'),
+        title: const Text('My Account',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
         elevation: 0,
@@ -784,7 +961,7 @@ class _SettingPageState extends State<SettingPage> {
                             await _refreshProfileData();
                           },
                         ),
-                        // Dashboard – navigates to ViewProfilePage
+                        // Dashboard will navigates to ViewProfilePage
                         buildListItem(
                           Icons.dashboard_outlined,
                           'My Dashboard',
@@ -792,7 +969,6 @@ class _SettingPageState extends State<SettingPage> {
                             _navigateToDashboard();
                           },
                         ),
-                        // Manage My Posts – both roles
                         buildListItem(
                           Icons.post_add_outlined,
                           'Manage My Posts',
@@ -812,7 +988,7 @@ class _SettingPageState extends State<SettingPage> {
                             ).then((_) => _refreshProfileData());
                           },
                         ),
-                        // My Resume – job seeker only
+                        // My Resume for job seeker only
                         if (isJobSeeker)
                           buildListItem(
                             Icons.description_outlined,
@@ -858,7 +1034,7 @@ class _SettingPageState extends State<SettingPage> {
                     ),
                   ),
 
-                  // Activity Panel – role-specific stats
+                  // Activity Panel is role-specific stats
                   if (isJobSeeker)
                     buildJobSeekerStats()
                   else if (role == 'poster')
@@ -912,7 +1088,6 @@ class _SettingPageState extends State<SettingPage> {
             ),
           ),
 
-          // Full-screen overlay dialog
           if (showLogoutDialog)
             Container(
               color: Colors.black54,
@@ -938,7 +1113,7 @@ class _SettingPageState extends State<SettingPage> {
                         ),
                         const SizedBox(height: 12),
                         const Text(
-                          "Are you sure you want to logout? You'll need to login again to access your account.",
+                          "Are you sure you want to logout? ",
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 13,

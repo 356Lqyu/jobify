@@ -1,4 +1,3 @@
-// lib/job/resume_management_page.dart
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
@@ -203,7 +202,9 @@ class _ResumeManagementPageState extends State<ResumeManagementPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('My Resumes'),
+        title: const Text('My Resumes',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         backgroundColor: const Color(0xFF2563EB),
         foregroundColor: Colors.white,
         elevation: 0,

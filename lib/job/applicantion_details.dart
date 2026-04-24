@@ -1,4 +1,3 @@
-// lib/job/applicantion_details.dart
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:jobify/data/applicantion_respository.dart';

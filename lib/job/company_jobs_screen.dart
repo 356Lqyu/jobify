@@ -1,5 +1,3 @@
-
-// lib/job/company_jobs_screen.dart
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:jobify/job/applicant_list.dart';
@@ -51,7 +49,9 @@ class _CompanyJobsScreenState extends State<CompanyJobsScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text('My Job Posts'),
+        title: const Text('My Job Posts',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         backgroundColor: Colors.white,
         elevation: 0,
         foregroundColor: Colors.black87,

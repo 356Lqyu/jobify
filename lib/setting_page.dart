@@ -547,14 +547,13 @@ class _SettingPageState extends State<SettingPage> {
   // Method to calculate profile completion percentage
   double _calculateProfileCompletion(bool isJobSeeker) {
     int completedFields = 0;
-    int totalFields = isJobSeeker ? 12 : 8;
+    int totalFields = isJobSeeker ? 10 : 7;
 
     if (isJobSeeker) {
       // Job Seeker Fields
       if (profileImageUrl != null && profileImageUrl!.isNotEmpty) completedFields++;
       if (userName != null && userName!.isNotEmpty) completedFields++;
       if (_phone != null && _phone!.isNotEmpty) completedFields++;
-      if (_email != null && _email!.isNotEmpty) completedFields++;
       if (_dateOfBirth != null && _dateOfBirth!.isNotEmpty) completedFields++;
       if (_gender != null && _gender!.isNotEmpty) completedFields++;
       if (_address != null && _address!.isNotEmpty) completedFields++;
@@ -565,19 +564,18 @@ class _SettingPageState extends State<SettingPage> {
       if (_education.isNotEmpty) completedFields++;
       if (_experience.isNotEmpty) completedFields++;
 
-      totalFields = 12; // Profile image, name, phone, email, DOB, gender, address, bio, skills, education, experience
+      totalFields = 10; // Profile image, name, phone, email, DOB, gender, address, bio, skills, education, experience
     } else {
       // Employer Fields
       if (profileImageUrl != null && profileImageUrl!.isNotEmpty) completedFields++;
       if (companyName != null && companyName!.isNotEmpty) completedFields++;
-      if (_companyPhone != null && _companyPhone!.isNotEmpty) completedFields++;
-      if (_companyEmail != null && _companyEmail!.isNotEmpty) completedFields++;
+      if (_phone != null && _phone!.isNotEmpty) completedFields++;
       if (_companyDescription != null && _companyDescription!.isNotEmpty) completedFields++;
       if (_industry != null && _industry!.isNotEmpty) completedFields++;
       if (_companySize != null && _companySize!.isNotEmpty) completedFields++;
       if (_branches.isNotEmpty) completedFields++;
 
-      totalFields = 8; // Logo, company name, phone, email, description, industry, size, branches
+      totalFields = 7; // Logo, company name, phone, email, description, industry, size, branches
     }
 
     // Calculate percentage

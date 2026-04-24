@@ -109,7 +109,9 @@ class _SavedPostsPageState extends State<SavedPostsPage> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text('Saved Posts'),
+        title: const Text('Saved Posts',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
         elevation: 0,

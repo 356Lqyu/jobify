@@ -168,7 +168,9 @@ class _JobDetailPageState extends State<JobDetailPage> {
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
-            title: const Text('Job Details'),
+            title: const Text('Job Details',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
             backgroundColor: Colors.blue,
             foregroundColor: Colors.white,
             elevation: 0,

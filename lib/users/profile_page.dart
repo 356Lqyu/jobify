@@ -552,6 +552,7 @@ class _ProfilePageState extends State<ProfilePage> {
       companyName: companyName,
       industry: industry,
       companySize: companySize,
+      phone: phone,
       jobCategories: _jobCategories,
       companySizeOptions: companySizeOptions,
       userId: userId,
@@ -680,7 +681,9 @@ class _ProfilePageState extends State<ProfilePage> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text('My Profile'),
+        title: const Text('My Profile',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
         elevation: 0,
@@ -708,6 +711,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   companyName: companyName,
                   industry: industry,
                   companySize: companySize,
+                  phone: phone,
                   onEdit: _showEditCompanyInfoBottomSheet,
                 ),
                 const SizedBox(height: 15),

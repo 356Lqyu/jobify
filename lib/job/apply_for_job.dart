@@ -1,4 +1,3 @@
-// lib/job/apply_for_job.dart
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -7,7 +6,6 @@ import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
 import 'package:jobify/data/applicantion_respository.dart';
 import 'resume_management_page.dart';
-
 
 // Resume Preview Dialog
 class ResumePreviewDialog extends StatefulWidget {
@@ -383,7 +381,9 @@ class _ApplyForJobPageState extends State<ApplyForJobPage> {
       return Scaffold(
         backgroundColor: const Color(0xFFF8FAFC),
         appBar: AppBar(
-          title: const Text('Access Denied'),
+          title: const Text('Access Denied',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
           backgroundColor: const Color(0xFF1E40AF),
           elevation: 0,
           foregroundColor: Colors.white,

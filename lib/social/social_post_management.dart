@@ -1,4 +1,3 @@
-// lib/social/social_post_management.dart
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:jobify/social/post_feed_setting.dart';
@@ -231,9 +230,7 @@ class _MyPostsPageState extends State<MyPostsPage> {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // MY POST CARD
-// ─────────────────────────────────────────────────────────────────────────────
 class _MyPostCard extends StatelessWidget {
   final FeedPost post;
   final VoidCallback onTap;
@@ -502,9 +499,7 @@ class _MyPostCard extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // AVATAR WIDGET
-// ─────────────────────────────────────────────────────────────────────────────
 class _Avatar extends StatelessWidget {
   final String name;
   final String? url;

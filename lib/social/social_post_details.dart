@@ -479,7 +479,8 @@ class _PostBody extends StatelessWidget {
               ),
             ),
           ),
-          // 🔹 Hashtags (non‑clickable, just styled text)
+          // Uses the new Paging Media Grid below
+          if (post.mediaUrls.isNotEmpty) _MediaGrid(urls: post.mediaUrls),
           if (post.hashtags.isNotEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
@@ -489,18 +490,17 @@ class _PostBody extends StatelessWidget {
                 children: post.hashtags
                     .map(
                       (tag) => Text(
-                        '#$tag',
-                        style: const TextStyle(
-                          color: Color(0xFF2563EB),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    )
+                    '#$tag',
+                    style: const TextStyle(
+                      color: Color(0xFF2563EB),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                )
                     .toList(),
               ),
             ),
-          if (post.mediaUrls.isNotEmpty) _MediaGrid(urls: post.mediaUrls),
           if (post.postType == PostType.job && post.linkedJob != null)
             _LinkedJobCard(job: post.linkedJob!),
           const Divider(height: 1, indent: 16, endIndent: 16),
@@ -553,78 +553,119 @@ class _PostBody extends StatelessWidget {
   }
 }
 
-// -------------------- MEDIA GRID --------------------
-class _MediaGrid extends StatelessWidget {
+// MEDIA GRID (PAGING VIEW)
+class _MediaGrid extends StatefulWidget {
   final List<String> urls;
   const _MediaGrid({required this.urls});
 
   @override
+  State<_MediaGrid> createState() => _MediaGridState();
+}
+
+class _MediaGridState extends State<_MediaGrid> {
+  int _currentIndex = 0;
+
+  @override
   Widget build(BuildContext context) {
-    if (urls.length == 1) {
+    if (widget.urls.isEmpty) return const SizedBox.shrink();
+
+    // Single Image: Show full size (up to 400 height)
+    if (widget.urls.length == 1) {
       return Padding(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(12),
-          child: CachedNetworkImage(
-            imageUrl: urls.first,
-            width: double.infinity,
-            height: 220,
-            fit: BoxFit.cover,
-            placeholder: (_, __) =>
-                Container(height: 220, color: Colors.grey.shade100),
-            errorWidget: (_, __, ___) => Container(
-              height: 220,
-              color: Colors.grey.shade100,
-              child: const Icon(
-                Icons.broken_image_outlined,
-                color: Colors.grey,
-              ),
-            ),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 400, minHeight: 200),
+            child: _buildImage(widget.urls.first),
           ),
         ),
       );
     }
+
+    // Multiple Images: Paging Carousel view
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-      child: GridView.builder(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          crossAxisSpacing: 6,
-          mainAxisSpacing: 6,
-          childAspectRatio: 1.2,
-        ),
-        itemCount: urls.length > 4 ? 4 : urls.length,
-        itemBuilder: (_, i) => ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              CachedNetworkImage(
-                imageUrl: urls[i],
-                fit: BoxFit.cover,
-                placeholder: (_, __) => Container(color: Colors.grey.shade100),
-                errorWidget: (_, __, ___) =>
-                    Container(color: Colors.grey.shade100),
-              ),
-              if (i == 3 && urls.length > 4)
-                Container(
-                  color: Colors.black54,
-                  child: Center(
-                    child: Text(
-                      '+${urls.length - 4}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
+      child: Column(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: SizedBox(
+              height: 350, // Fixed height for a consistent carousel
+              child: Stack(
+                children: [
+                  PageView.builder(
+                    itemCount: widget.urls.length,
+                    onPageChanged: (index) {
+                      setState(() => _currentIndex = index);
+                    },
+                    itemBuilder: (context, index) {
+                      return _buildImage(widget.urls[index]);
+                    },
+                  ),
+                  // Counter Indicator (Top Right)
+                  Positioned(
+                    top: 12,
+                    right: 12,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.6),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Text(
+                        '${_currentIndex + 1} / ${widget.urls.length}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ),
-                ),
-            ],
+                ],
+              ),
+            ),
           ),
-        ),
+          const SizedBox(height: 10),
+          // Dot Indicators (Bottom)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: List.generate(widget.urls.length, (index) {
+              final isSelected = _currentIndex == index;
+              return AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                margin: const EdgeInsets.symmetric(horizontal: 3),
+                width: isSelected ? 16 : 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? const Color(0xFF2563EB)
+                      : Colors.blueGrey.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              );
+            }),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildImage(String url) {
+    return CachedNetworkImage(
+      imageUrl: url,
+      width: double.infinity,
+      fit: BoxFit.cover,
+      placeholder: (_, __) =>
+          Container(color: Colors.grey.shade100, height: 250),
+      errorWidget: (_, __, ___) => Container(
+        color: Colors.grey.shade100,
+        height: 250,
+        child: const Icon(Icons.broken_image_outlined, color: Colors.grey),
       ),
     );
   }

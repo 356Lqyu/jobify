@@ -152,9 +152,7 @@ class SocialFeedProvider extends ChangeNotifier {
       final posts = await _repository.fetchPosts(
         followingOnly: true,
         followingUsersOnly: true,
-        postTypeFilter: _followingFilter == 'All'
-            ? null
-            : _followingFilter, // apply filter
+        postTypeFilter: _followingFilter == 'All' ? null : _followingFilter,
         limit: _pageSize,
         offset: 0,
       );
@@ -236,7 +234,13 @@ class SocialFeedProvider extends ChangeNotifier {
     final wasSaved = post.isSaved;
     final newSaved = !wasSaved;
 
-    _updateInLists(post.postId, (p) => p.isSaved = newSaved);
+    // UPDATED: Sync the nested job as well!
+    _updateInLists(post.postId, (p) {
+      p.isSaved = newSaved;
+      if (p.linkedJob != null) {
+        p.linkedJob!.isSaved = newSaved;
+      }
+    });
     notifyListeners();
 
     if (context != null && context.mounted) {
@@ -247,14 +251,18 @@ class SocialFeedProvider extends ChangeNotifier {
       );
     }
 
-    // Pass the linked jobId to properly sync the discovery/job cache
     final serverResult = await _repository.toggleSavePost(
       post.postId,
       wasSaved,
       jobId: post.jobId,
     );
     if (serverResult == wasSaved) {
-      _updateInLists(post.postId, (p) => p.isSaved = wasSaved);
+      _updateInLists(post.postId, (p) {
+        p.isSaved = wasSaved;
+        if (p.linkedJob != null) {
+          p.linkedJob!.isSaved = wasSaved;
+        }
+      });
       notifyListeners();
       if (context != null && context.mounted) {
         showFeedSnackBar(context, 'Failed to save post', isError: true);
@@ -376,7 +384,7 @@ class JobProvider extends ChangeNotifier {
   String _locationFilter = '';
   double? _salaryMin;
   bool _remoteOnly = false;
-  int _postDaysFilter = 0; // 0 means 'All Time'
+  int _postDaysFilter = 0;
 
   List<JobPost> get jobs => _jobs;
   bool get isLoading => _isLoading;
@@ -517,7 +525,6 @@ class JobProvider extends ChangeNotifier {
     refresh();
   }
 
-  /// Toggle save job with optimistic update + snackbar feedback.
   Future<void> toggleSaveJob(JobPost job, [BuildContext? context]) async {
     final wasSaved = job.isSaved;
     final newSaved = !wasSaved;

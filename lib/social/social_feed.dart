@@ -79,15 +79,22 @@ class _SocialFeedPageState extends State<SocialFeedPage>
           elevation: 0,
           automaticallyImplyLeading: false,
           actions: [
+            // UPDATED
             IconButton(
               icon: const Icon(Icons.bookmark_outline),
-              onPressed: () {
-                Navigator.push(
+              onPressed: () async {
+                await Navigator.push(
                   context,
                   MaterialPageRoute(
                     builder: (_) => SavedPostsPage(currentUser: widget.user),
                   ),
                 );
+                // Refresh after returning to sync unsaved changes
+                if (context.mounted) {
+                  final p = context.read<SocialFeedProvider>();
+                  p.refreshForYou();
+                  p.refreshFollowing();
+                }
               },
               tooltip: 'Saved Posts',
             ),
@@ -168,15 +175,13 @@ class _FilterChips extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Increased height from 44 to 52 for a more comfortable touch area
     return SizedBox(
       height: 52,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        // Increased horizontal padding
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         itemCount: _filters.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 10), // Wider gap
+        separatorBuilder: (_, _) => const SizedBox(width: 10),
         itemBuilder: (_, i) {
           final f = _filters[i];
           final sel = currentFilter == f['value'];
@@ -184,28 +189,30 @@ class _FilterChips extends StatelessWidget {
             onTap: () => onFilterChanged(f['value']!),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 150),
-              // Increased padding: 20 horizontal, 6 vertical
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
               decoration: BoxDecoration(
                 color: sel ? const Color(0xFF2563EB) : Colors.white,
-                borderRadius: BorderRadius.circular(25), // Rounder corners
+                borderRadius: BorderRadius.circular(25),
                 border: Border.all(
-                  color: sel ? const Color(0xFF2563EB) : const Color(0xFFE2E8F0),
+                  color: sel
+                      ? const Color(0xFF2563EB)
+                      : const Color(0xFFE2E8F0),
                   width: 1.5,
                 ),
-                boxShadow: sel ? [
-                  BoxShadow(
-                    color: const Color(0xFF2563EB).withOpacity(0.3),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  )
-                ] : null,
+                boxShadow: sel
+                    ? [
+                        BoxShadow(
+                          color: const Color(0xFF2563EB).withOpacity(0.3),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ]
+                    : null,
               ),
               child: Center(
                 child: Text(
                   f['label']!,
                   style: TextStyle(
-                    // Increased font size from 12 to 14
                     fontSize: 14,
                     fontWeight: sel ? FontWeight.bold : FontWeight.w600,
                     color: sel ? Colors.white : const Color(0xFF64748B),
@@ -220,7 +227,7 @@ class _FilterChips extends StatelessWidget {
   }
 }
 
-// -------- FOR YOU TAB --------
+// FOR YOU TAB
 class _ForYouTab extends StatelessWidget {
   final Users user;
   const _ForYouTab({required this.user});
@@ -287,7 +294,7 @@ class _ForYouTab extends StatelessWidget {
   }
 }
 
-// -------- FOLLOWING TAB (with filter) --------
+// FOLLOWING TAB
 class _FollowingTab extends StatelessWidget {
   final Users user;
   const _FollowingTab({required this.user});
@@ -474,7 +481,6 @@ class FeedCard extends StatelessWidget {
                 if (post.mediaUrls.isNotEmpty) _MediaGrid(urls: post.mediaUrls),
                 if (post.postType == PostType.job && post.linkedJob != null)
                   _LinkedJobCard(job: post.linkedJob!),
-                // Hashtags displayed as blue text
                 if (post.hashtags.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
@@ -604,7 +610,7 @@ class FeedCard extends StatelessWidget {
   }
 }
 
-// -------------------- RICH CONTENT (plain text) --------------------
+// RICH CONTENT
 class _RichContent extends StatefulWidget {
   final String content;
   const _RichContent({required this.content});
@@ -664,31 +670,39 @@ class _RichContentState extends State<_RichContent> {
   }
 }
 
-// -------------------- MEDIA GRID --------------------
+// MEDIA GRID
 class _MediaGrid extends StatelessWidget {
   final List<String> urls;
   const _MediaGrid({required this.urls});
 
   @override
   Widget build(BuildContext context) {
+    if (urls.isEmpty) return const SizedBox.shrink();
+
+    // 1 Image: Display "Full" with a flexible height up to 400px
     if (urls.length == 1) {
       return Padding(
         padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(12),
-          child: CachedNetworkImage(
-            imageUrl: urls.first,
-            width: double.infinity,
-            height: 200,
-            fit: BoxFit.cover,
-            placeholder: (_, __) =>
-                Container(height: 200, color: Colors.grey.shade100),
-            errorWidget: (_, __, ___) => Container(
-              height: 200,
-              color: Colors.grey.shade100,
-              child: const Icon(
-                Icons.broken_image_outlined,
-                color: Colors.grey,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(
+              maxHeight: 400, // Lets tall images show more of their content
+              minHeight: 200,
+            ),
+            child: CachedNetworkImage(
+              imageUrl: urls.first,
+              width: double.infinity,
+              fit: BoxFit.cover,
+              placeholder: (_, __) =>
+                  Container(height: 250, color: Colors.grey.shade100),
+              errorWidget: (_, __, ___) => Container(
+                height: 250,
+                color: Colors.grey.shade100,
+                child: const Icon(
+                  Icons.broken_image_outlined,
+                  color: Colors.grey,
+                ),
               ),
             ),
           ),
@@ -696,53 +710,65 @@ class _MediaGrid extends StatelessWidget {
       );
     }
 
+    // 2 or more Images: Facebook-style 2-column layout
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
-      child: GridView.builder(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          crossAxisSpacing: 6,
-          mainAxisSpacing: 6,
-          childAspectRatio: 1.2,
-        ),
-        itemCount: urls.length > 4 ? 4 : urls.length,
-        itemBuilder: (_, i) => ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: Stack(
-            fit: StackFit.expand,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: SizedBox(
+          height: 240, // Nice large height for the two side-by-side images
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              CachedNetworkImage(
-                imageUrl: urls[i],
-                fit: BoxFit.cover,
-                placeholder: (_, __) => Container(color: Colors.grey.shade100),
-                errorWidget: (_, __, ___) =>
-                    Container(color: Colors.grey.shade100),
-              ),
-              if (i == 3 && urls.length > 4)
-                Container(
-                  color: Colors.black54,
-                  child: Center(
-                    child: Text(
-                      '+${urls.length - 4}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
+              // First Image (Left)
+              Expanded(child: _buildImage(urls[0])),
+              const SizedBox(width: 4), // Small Facebook-style gap
+              // Second Image (Right)
+              Expanded(
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    _buildImage(urls[1]),
+
+                    // The "+X" overlay if there are more than 2 images
+                    if (urls.length > 2)
+                      Container(
+                        color: Colors.black.withOpacity(0.5), // Dark overlay
+                        child: Center(
+                          child: Text(
+                            '+${urls.length - 2}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 28,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
+                  ],
                 ),
+              ),
             ],
           ),
         ),
       ),
     );
   }
+
+  Widget _buildImage(String url) {
+    return CachedNetworkImage(
+      imageUrl: url,
+      fit: BoxFit.cover,
+      placeholder: (_, __) => Container(color: Colors.grey.shade100),
+      errorWidget: (_, __, ___) => Container(
+        color: Colors.grey.shade100,
+        child: const Icon(Icons.broken_image_outlined, color: Colors.grey),
+      ),
+    );
+  }
 }
 
-// -------------------- LINKED JOB CARD --------------------
+// LINKED JOB CARD
 class _LinkedJobCard extends StatelessWidget {
   final JobPost job;
   const _LinkedJobCard({required this.job});
@@ -806,7 +832,7 @@ class _LinkedJobCard extends StatelessWidget {
   }
 }
 
-// -------------------- SMALL WIDGETS --------------------
+// SMALL WIDGETS
 class _InlineChip extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -1000,7 +1026,7 @@ class _EmptyState extends StatelessWidget {
   );
 }
 
-// ------------ COMMENT SHEET (unchanged) ------------
+// ------------ COMMENT SHEET ------------
 class _CommentSheet extends StatefulWidget {
   final FeedPost post;
   final Users currentUser;
@@ -1024,11 +1050,12 @@ class _CommentSheetState extends State<_CommentSheet> {
   Future<void> _load() async {
     final prov = context.read<SocialFeedProvider>();
     final c = await prov.fetchComments(widget.post.postId);
-    if (mounted)
+    if (mounted) {
       setState(() {
         _comments = c;
         _loading = false;
       });
+    }
   }
 
   Future<void> _submit() async {

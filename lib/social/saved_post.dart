@@ -1,4 +1,3 @@
-// lib/social/saved_posts_page.dart
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:jobify/social/post_feed_setting.dart';

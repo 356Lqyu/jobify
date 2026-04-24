@@ -91,7 +91,7 @@ class _MyApplicationsPageState extends State<MyApplicationsPage>
           'My Applications',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
-        backgroundColor: Colors.blue.shade700,
+        backgroundColor: Colors.blue,
         elevation: 0,
         foregroundColor: Colors.white,
         automaticallyImplyLeading: false,
@@ -102,13 +102,13 @@ class _MyApplicationsPageState extends State<MyApplicationsPage>
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Row(
               children: [
-                _buildStatusTab('All', allCount, 0, Colors.grey),
+                _buildStatusTab('All', allCount, 0, Colors.white),
                 const SizedBox(width: 10),
-                _buildStatusTab('Pending', pendingCount, 1, Colors.grey),
+                _buildStatusTab('Pending', pendingCount, 1, Colors.white),
                 const SizedBox(width: 10),
-                _buildStatusTab('Accepted', acceptedCount, 2, Colors.grey),
+                _buildStatusTab('Accepted', acceptedCount, 2, Colors.white),
                 const SizedBox(width: 10),
-                _buildStatusTab('Rejected', rejectedCount, 3, Colors.grey),
+                _buildStatusTab('Rejected', rejectedCount, 3, Colors.white),
               ],
             ),
           ),
@@ -182,24 +182,24 @@ class _MyApplicationsPageState extends State<MyApplicationsPage>
               Text(
                 label,
                 style: TextStyle(
-                  fontSize: 14,
+                  fontSize: 15,
                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
                   color: isSelected ? color : Colors.white.withOpacity(0.8),
                 ),
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: 5),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
                   color: isSelected ? color : Colors.white.withOpacity(0.3),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(11),
                 ),
                 child: Text(
                   count.toString(),
                   style: TextStyle(
-                    fontSize: 11,
+                    fontSize: 13,
                     fontWeight: FontWeight.bold,
-                    color: isSelected ? Colors.white : Colors.white.withOpacity(0.9),
+                    color: isSelected ? Colors.grey.shade900 : Colors.white,
                   ),
                 ),
               ),
@@ -209,6 +209,7 @@ class _MyApplicationsPageState extends State<MyApplicationsPage>
       ),
     );
   }
+
   Widget _buildApplicationList(List<Map<String, dynamic>> apps) {
     if (apps.isEmpty) {
       return Center(

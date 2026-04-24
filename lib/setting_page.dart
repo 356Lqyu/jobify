@@ -365,6 +365,9 @@ class _SettingPageState extends State<SettingPage> {
         });
       }
 
+      // Reload profile completion data
+      await _loadProfileCompletionData();
+
       // Also refresh company profile if employer
       if (role?.toUpperCase() == 'POSTER') {
         final companyData = await supabase

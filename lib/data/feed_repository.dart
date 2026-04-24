@@ -44,7 +44,6 @@ class FeedRepository {
       return _sb.storage.from(bucket).getPublicUrl(fileName);
     } catch (e) {
       print('Detailed upload error: $e');
-      // Also print response body if available
       throw Exception('Storage upload failed: ${e.toString()}');
     }
   }
@@ -118,7 +117,7 @@ class FeedRepository {
         postIds,
       );
 
-      // Build FeedPost list
+      // FeedPost list
       final posts = <FeedPost>[];
       for (final row in rows) {
         final r = row as Map<String, dynamic>;
@@ -434,35 +433,57 @@ class FeedRepository {
   }
 
   // SAVES
-  Future<bool> toggleSavePost(String postId, bool currentlySaved) async {
+  Future<bool> toggleSavePost(String postId, bool currentlySaved, {String? jobId}) async {
     if (_uid == null) return currentlySaved;
-    final newSaved = !currentlySaved;
+
     try {
-      if (newSaved) {
-        await _sb.from('post_saved').insert({
-          'post_id': postId,
-          'user_id': _uid,
-        });
+      final existing = await _sb
+          .from('post_saved')
+          .select('post_saved_id')
+          .eq('post_id', postId)
+          .eq('user_id', _uid!)
+          .maybeSingle();
+
+      final actuallySaved = existing != null;
+      final desiredSaved = !currentlySaved;
+
+      if (actuallySaved == desiredSaved) {
+        return desiredSaved;
+      }
+
+      if (desiredSaved) {
+        try {
+          await _sb.from('post_saved').insert({
+            'post_id': postId,
+            'user_id': _uid!,
+            'created_at': DateTime.now().toIso8601String(),
+          });
+        } on PostgrestException catch (e) {
+          if (e.code == '23505') {
+            debugPrint('toggleSavePost: duplicate ignored, already saved');
+          } else {
+            rethrow;
+          }
+        }
+        await LocalDB.setPostSaved(postId, true, _uid!);
+        // NEW: Sync job cache
+        if (jobId != null) {
+          await LocalDB.setJobSaved(jobId, true, _uid!);
+        }
+        return true;
       } else {
         await _sb
             .from('post_saved')
             .delete()
             .eq('post_id', postId)
             .eq('user_id', _uid!);
+        await LocalDB.setPostSaved(postId, false, _uid!);
+        // NEW: Sync job cache
+        if (jobId != null) {
+          await LocalDB.setJobSaved(jobId, false, _uid!);
+        }
+        return false;
       }
-
-      final postData = await _sb
-          .from('post')
-          .select('job_id')
-          .eq('post_id', postId)
-          .maybeSingle();
-      final jobId = postData?['job_id'] as String?;
-      if (jobId != null) {
-        await LocalDB.setJobSaved(jobId, newSaved, _uid!);
-      }
-
-      await LocalDB.setPostSaved(postId, newSaved, _uid!);
-      return newSaved;
     } catch (e) {
       debugPrint('toggleSavePost error: $e');
       return currentlySaved;
@@ -633,7 +654,6 @@ class FeedRepository {
   }
 
   // FOLLOW USER (follows the user account, which is the correct approach for both individuals and companies)
-  // In FeedRepository class
   Future<bool> toggleFollowUser(
       String targetUserId,
       bool currentlyFollowing,
@@ -644,7 +664,7 @@ class FeedRepository {
       if (newFollowing) {
         await _sb.from('follows').insert({
           'follower_id': _uid,
-          'following_id': targetUserId,  // Must be a valid user_id from users table
+          'following_id': targetUserId,
         });
       } else {
         await _sb

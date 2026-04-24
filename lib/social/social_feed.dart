@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:jobify/discovery/job_details.dart';
+import 'package:jobify/social/saved_post.dart';
+import 'package:jobify/social/social_post_management.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:jobify/social/post_feed_setting.dart';
@@ -11,7 +13,6 @@ import 'package:jobify/users/users.dart';
 import 'package:jobify/data/local_db.dart';
 import 'package:jobify/job_post/job_detail_employer.dart';
 import 'package:jobify/social/social_post_details.dart';
-
 import '../users/view_profile_page.dart';
 
 class SocialFeedPage extends StatefulWidget {
@@ -77,40 +78,51 @@ class _SocialFeedPageState extends State<SocialFeedPage>
           foregroundColor: Colors.white,
           elevation: 0,
           automaticallyImplyLeading: false,
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.bookmark_outline),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => SavedPostsPage(currentUser: widget.user),
+                  ),
+                );
+              },
+              tooltip: 'Saved Posts',
+            ),
+            IconButton(
+              icon: const Icon(Icons.list_alt),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => MyPostsPage(currentUser: widget.user),
+                  ),
+                );
+              },
+              tooltip: 'My Posts',
+            ),
+          ],
         ),
         body: SafeArea(
           bottom: false,
           child: Column(
             children: [
-              Material(
-                color: Colors.white,
-                elevation: 1,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Padding(padding: const EdgeInsets.fromLTRB(12, 10, 12, 6)),
-                    // Filter chips
-                    Consumer<SocialFeedProvider>(
-                      builder: (_, prov, _) => _FilterChips(provider: prov),
-                    ),
-                    // Tabs
-                    TabBar(
-                      controller: _tabController,
-                      labelColor: const Color(0xFF2563EB),
-                      unselectedLabelColor: Colors.blueGrey,
-                      indicatorColor: const Color(0xFF2563EB),
-                      indicatorWeight: 2.5,
-                      labelStyle: const TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                      ),
-                      tabs: const [
-                        Tab(text: 'For You'),
-                        Tab(text: 'Following'),
-                      ],
-                    ),
-                  ],
+              TabBar(
+                controller: _tabController,
+                labelColor: const Color(0xFF2563EB),
+                unselectedLabelColor: Colors.blueGrey,
+                indicatorColor: const Color(0xFF2563EB),
+                indicatorWeight: 2.5,
+                labelStyle: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
                 ),
+                tabs: const [
+                  Tab(text: 'For You'),
+                  Tab(text: 'Following'),
+                ],
               ),
               Expanded(
                 child: TabBarView(
@@ -126,22 +138,24 @@ class _SocialFeedPageState extends State<SocialFeedPage>
         ),
         floatingActionButton: widget.user.role == 'JOB_SEEKER'
             ? FloatingActionButton(
-          onPressed: _openCreatePost,
-          backgroundColor: const Color(0xFF2563EB),
-          child: const Icon(Icons.add, color: Colors.white),
-        )
+                onPressed: _openCreatePost,
+                backgroundColor: const Color(0xFF2563EB),
+                child: const Icon(Icons.add, color: Colors.white),
+              )
             : null,
       ),
     );
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// FILTER CHIPS ROW
-// ─────────────────────────────────────────────────────────────────────────────
+// Filter chips widget
 class _FilterChips extends StatelessWidget {
-  final SocialFeedProvider provider;
-  const _FilterChips({required this.provider});
+  final String currentFilter;
+  final ValueChanged<String> onFilterChanged;
+  const _FilterChips({
+    required this.currentFilter,
+    required this.onFilterChanged,
+  });
 
   static const _filters = [
     {'label': 'All', 'value': 'All'},
@@ -154,51 +168,59 @@ class _FilterChips extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<SocialFeedProvider>(
-      builder: (_, prov, _) => SizedBox(
-        height: 40,
-        child: ListView.separated(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          itemCount: _filters.length,
-          separatorBuilder: (_, _) => const SizedBox(width: 8),
-          itemBuilder: (_, i) {
-            final f = _filters[i];
-            final sel = prov.activeFilter == f['value'];
-            return GestureDetector(
-              onTap: () => prov.setFilter(f['value']!),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 150),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 4,
+    // Increased height from 44 to 52 for a more comfortable touch area
+    return SizedBox(
+      height: 52,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        // Increased horizontal padding
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        itemCount: _filters.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 10), // Wider gap
+        itemBuilder: (_, i) {
+          final f = _filters[i];
+          final sel = currentFilter == f['value'];
+          return GestureDetector(
+            onTap: () => onFilterChanged(f['value']!),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              // Increased padding: 20 horizontal, 6 vertical
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+              decoration: BoxDecoration(
+                color: sel ? const Color(0xFF2563EB) : Colors.white,
+                borderRadius: BorderRadius.circular(25), // Rounder corners
+                border: Border.all(
+                  color: sel ? const Color(0xFF2563EB) : const Color(0xFFE2E8F0),
+                  width: 1.5,
                 ),
-                decoration: BoxDecoration(
-                  color: sel
-                      ? const Color(0xFF2563EB)
-                      : const Color(0xFFF1F5F9),
-                  borderRadius: BorderRadius.circular(20),
-                ),
+                boxShadow: sel ? [
+                  BoxShadow(
+                    color: const Color(0xFF2563EB).withOpacity(0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  )
+                ] : null,
+              ),
+              child: Center(
                 child: Text(
                   f['label']!,
                   style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: sel ? Colors.white : Colors.blueGrey,
+                    // Increased font size from 12 to 14
+                    fontSize: 14,
+                    fontWeight: sel ? FontWeight.bold : FontWeight.w600,
+                    color: sel ? Colors.white : const Color(0xFF64748B),
                   ),
                 ),
               ),
-            );
-          },
-        ),
+            ),
+          );
+        },
       ),
     );
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// FOR YOU TAB
-// ─────────────────────────────────────────────────────────────────────────────
+// -------- FOR YOU TAB --------
 class _ForYouTab extends StatelessWidget {
   final Users user;
   const _ForYouTab({required this.user});
@@ -207,37 +229,57 @@ class _ForYouTab extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<SocialFeedProvider>(
       builder: (_, prov, _) {
-        if (prov.isLoadingForYou && prov.forYouPosts.isEmpty) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (prov.forYouPosts.isEmpty) {
-          return const _EmptyState(
-            icon: Icons.article_outlined,
-            message: 'No posts yet. Be the first to share!',
-          );
-        }
-        return RefreshIndicator(
-          onRefresh: prov.refreshForYou,
-          child: NotificationListener<ScrollNotification>(
-            onNotification: (n) {
-              if (n.metrics.pixels >= n.metrics.maxScrollExtent - 200) {
-                prov.loadMoreForYou();
-              }
-              return false;
-            },
-            child: ListView.builder(
-              padding: const EdgeInsets.only(top: 8, bottom: 100),
-              itemCount: prov.forYouPosts.length + (prov.isLoadingForYou ? 1 : 0),
-              itemBuilder: (ctx, i) {
-                if (i >= prov.forYouPosts.length) {
-                  return const Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Center(child: CircularProgressIndicator()),
-                  );
-                }
-                return FeedCard(post: prov.forYouPosts[i], currentUser: user);
-              },
-            ),
+        return Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Column(
+            children: [
+              _FilterChips(
+                currentFilter: prov.activeFilter,
+                onFilterChanged: prov.setFilter,
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: prov.isLoadingForYou && prov.forYouPosts.isEmpty
+                    ? const Center(child: CircularProgressIndicator())
+                    : prov.forYouPosts.isEmpty
+                    ? const _EmptyState(
+                        icon: Icons.article_outlined,
+                        message: 'No posts yet. Be the first to share!',
+                      )
+                    : RefreshIndicator(
+                        onRefresh: prov.refreshForYou,
+                        child: NotificationListener<ScrollNotification>(
+                          onNotification: (n) {
+                            if (n.metrics.pixels >=
+                                n.metrics.maxScrollExtent - 200) {
+                              prov.loadMoreForYou();
+                            }
+                            return false;
+                          },
+                          child: ListView.builder(
+                            padding: const EdgeInsets.only(top: 8, bottom: 100),
+                            itemCount:
+                                prov.forYouPosts.length +
+                                (prov.isLoadingForYou ? 1 : 0),
+                            itemBuilder: (ctx, i) {
+                              if (i >= prov.forYouPosts.length) {
+                                return const Padding(
+                                  padding: EdgeInsets.all(16),
+                                  child: Center(
+                                    child: CircularProgressIndicator(),
+                                  ),
+                                );
+                              }
+                              return FeedCard(
+                                post: prov.forYouPosts[i],
+                                currentUser: user,
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+              ),
+            ],
           ),
         );
       },
@@ -245,9 +287,7 @@ class _ForYouTab extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// FOLLOWING TAB
-// ─────────────────────────────────────────────────────────────────────────────
+// -------- FOLLOWING TAB (with filter) --------
 class _FollowingTab extends StatelessWidget {
   final Users user;
   const _FollowingTab({required this.user});
@@ -256,42 +296,58 @@ class _FollowingTab extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<SocialFeedProvider>(
       builder: (_, prov, _) {
-        if (prov.isLoadingFollowing && prov.followingPosts.isEmpty) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (prov.followingPosts.isEmpty) {
-          return const _EmptyState(
-            icon: Icons.people_outline,
-            message: 'Follow companies & people to see their posts here.',
-          );
-        }
-        return RefreshIndicator(
-          onRefresh: prov.refreshFollowing,
-          child: NotificationListener<ScrollNotification>(
-            onNotification: (n) {
-              if (n.metrics.pixels >= n.metrics.maxScrollExtent - 200) {
-                prov.loadMoreFollowing();
-              }
-              return false;
-            },
-            child: ListView.builder(
-              padding: const EdgeInsets.only(top: 8, bottom: 100),
-              itemCount:
-              prov.followingPosts.length +
-                  (prov.isLoadingFollowing ? 1 : 0),
-              itemBuilder: (_, i) {
-                if (i >= prov.followingPosts.length) {
-                  return const Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Center(child: CircularProgressIndicator()),
-                  );
-                }
-                return FeedCard(
-                  post: prov.followingPosts[i],
-                  currentUser: user,
-                );
-              },
-            ),
+        return Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Column(
+            children: [
+              _FilterChips(
+                currentFilter: prov.followingFilter,
+                onFilterChanged: prov.setFollowingFilter,
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: prov.isLoadingFollowing && prov.followingPosts.isEmpty
+                    ? const Center(child: CircularProgressIndicator())
+                    : prov.followingPosts.isEmpty
+                    ? const _EmptyState(
+                        icon: Icons.people_outline,
+                        message:
+                            'Follow companies & people to see their posts here.',
+                      )
+                    : RefreshIndicator(
+                        onRefresh: prov.refreshFollowing,
+                        child: NotificationListener<ScrollNotification>(
+                          onNotification: (n) {
+                            if (n.metrics.pixels >=
+                                n.metrics.maxScrollExtent - 200) {
+                              prov.loadMoreFollowing();
+                            }
+                            return false;
+                          },
+                          child: ListView.builder(
+                            padding: const EdgeInsets.only(top: 8, bottom: 100),
+                            itemCount:
+                                prov.followingPosts.length +
+                                (prov.isLoadingFollowing ? 1 : 0),
+                            itemBuilder: (_, i) {
+                              if (i >= prov.followingPosts.length) {
+                                return const Padding(
+                                  padding: EdgeInsets.all(16),
+                                  child: Center(
+                                    child: CircularProgressIndicator(),
+                                  ),
+                                );
+                              }
+                              return FeedCard(
+                                post: prov.followingPosts[i],
+                                currentUser: user,
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+              ),
+            ],
           ),
         );
       },
@@ -326,22 +382,25 @@ class FeedCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(14, 14, 6, 0),
+            padding: const EdgeInsets.fromLTRB(14, 14, 10, 0),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 GestureDetector(
                   onTap: () => _navigateToProfile(context, post),
-                  child: _FeedAvatar(name: post.authorName, url: post.authorAvatar),
+                  child: _FeedAvatar(
+                    name: post.authorName,
+                    url: post.authorAvatar,
+                  ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      GestureDetector(
-                        onTap: () => _navigateToProfile(context, post),
-                        child: Row(
+                  child: GestureDetector(
+                    onTap: () => _navigateToProfile(context, post),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
                           children: [
                             Flexible(
                               child: Text(
@@ -364,33 +423,38 @@ class FeedCard extends StatelessWidget {
                             ],
                           ],
                         ),
-                      ),
-                      if (post.authorSubtitle.isNotEmpty)
+                        if (post.authorSubtitle.isNotEmpty)
+                          Text(
+                            post.authorSubtitle,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Colors.blueGrey,
+                            ),
+                          ),
                         Text(
-                          post.authorSubtitle,
+                          post.timeAgo,
                           style: const TextStyle(
-                            fontSize: 11,
+                            fontSize: 10,
                             color: Colors.blueGrey,
                           ),
                         ),
-                      Text(
-                        post.timeAgo,
-                        style: const TextStyle(
-                          fontSize: 10,
-                          color: Colors.blueGrey,
-                        ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
-                _TypeBadge(type: post.postType),
-                const SizedBox(width: 4),
-                // Show follow button for any user/company that is not the current user
-                if (post.userId != currentUser.userId)
-                  FollowBtn(
-                    isFollowing: post.isFollowing,
-                    onTap: () => prov.toggleFollow(post),
-                  ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    _TypeBadge(type: post.postType),
+                    if (post.userId != currentUser.userId) ...[
+                      const SizedBox(height: 6),
+                      FollowBtn(
+                        isFollowing: post.isFollowing,
+                        onTap: () => prov.toggleFollow(post, context),
+                      ),
+                    ],
+                  ],
+                ),
               ],
             ),
           ),
@@ -407,6 +471,10 @@ class FeedCard extends StatelessWidget {
                   ),
                   child: _RichContent(content: post.content),
                 ),
+                if (post.mediaUrls.isNotEmpty) _MediaGrid(urls: post.mediaUrls),
+                if (post.postType == PostType.job && post.linkedJob != null)
+                  _LinkedJobCard(job: post.linkedJob!),
+                // Hashtags displayed as blue text
                 if (post.hashtags.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
@@ -415,35 +483,23 @@ class FeedCard extends StatelessWidget {
                       runSpacing: 4,
                       children: post.hashtags
                           .map(
-                            (tag) => GestureDetector(
-                          onTap: () =>
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Search: #$tag'),
-                                  duration: const Duration(seconds: 1),
-                                ),
+                            (tag) => Text(
+                              '#$tag',
+                              style: const TextStyle(
+                                color: Color(0xFF2563EB),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
                               ),
-                          child: Text(
-                            '#$tag',
-                            style: const TextStyle(
-                              color: Color(0xFF2563EB),
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
                             ),
-                          ),
-                        ),
-                      )
+                          )
                           .toList(),
                     ),
                   ),
-                if (post.mediaUrls.isNotEmpty) _MediaGrid(urls: post.mediaUrls),
-                if (post.postType == PostType.job && post.linkedJob != null)
-                  _LinkedJobCard(job: post.linkedJob!),
               ],
             ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(6, 4, 6, 6),
+            padding: const EdgeInsets.fromLTRB(6, 0, 6, 6),
             child: Row(
               children: [
                 _ActionBtn(
@@ -452,7 +508,7 @@ class FeedCard extends StatelessWidget {
                   color: post.isLiked
                       ? const Color(0xFFEF4444)
                       : Colors.blueGrey,
-                  onTap: () => prov.toggleLike(post),
+                  onTap: () => prov.toggleLike(post, context),
                 ),
                 if (post.postType != PostType.job)
                   _ActionBtn(
@@ -473,9 +529,11 @@ class FeedCard extends StatelessWidget {
                     icon: Icon(
                       post.isSaved ? Icons.bookmark : Icons.bookmark_border,
                       size: 20,
-                      color: post.isSaved ? const Color(0xFF2563EB) : Colors.blueGrey,
+                      color: post.isSaved
+                          ? const Color(0xFF2563EB)
+                          : Colors.blueGrey,
                     ),
-                    onPressed: () => prov.toggleSave(post),
+                    onPressed: () => prov.toggleSave(post, context),
                   )
                 else
                   const SizedBox(width: 36),
@@ -488,9 +546,6 @@ class FeedCard extends StatelessWidget {
   }
 
   void _navigateToProfile(BuildContext context, FeedPost post) {
-    // Determine if the post author is a company (has companyId) or a user
-    final bool isCompany = post.companyId != null;
-
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -499,7 +554,7 @@ class FeedCard extends StatelessWidget {
           companyId: post.companyId,
           name: post.authorName,
           avatarUrl: post.authorAvatar,
-          isCompany: isCompany,
+          isCompany: post.companyId != null,
         ),
       ),
     );
@@ -508,28 +563,23 @@ class FeedCard extends StatelessWidget {
   void _navigateToDetail(BuildContext context) async {
     if (post.postType == PostType.job && post.linkedJob != null) {
       final job = post.linkedJob!;
-
       if (post.userId == currentUser.userId) {
-        // Employer view
         final jobMap =
             await LocalDB.getCachedJobMapById(job.jobId) ?? job.toLocalDbMap();
         await Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => JobDetailEmployer(job: jobMap)),
         );
-        context.read<SocialFeedProvider>().refreshForYou();
       } else {
-        // Job seeker view
         await Navigator.push(
           context,
           MaterialPageRoute(
             builder: (_) => JobDetailPage(job: job, currentUser: currentUser),
           ),
         );
-        context.read<SocialFeedProvider>().refreshForYou();
       }
+      context.read<SocialFeedProvider>().refreshForYou();
     } else {
-      // Normal post
       await Navigator.push(
         context,
         MaterialPageRoute(
@@ -548,231 +598,13 @@ class FeedCard extends StatelessWidget {
       backgroundColor: Colors.transparent,
       builder: (_) => ChangeNotifierProvider.value(
         value: prov,
-        child: _CommentSheet(post: post, currentUser: currentUser), // pass currentUser
+        child: _CommentSheet(post: post, currentUser: currentUser),
       ),
     );
   }
 }
 
-// COMMENT SHEET
-class _CommentSheet extends StatefulWidget {
-  final FeedPost post;
-  final Users currentUser;
-  const _CommentSheet({required this.post, required this.currentUser});
-
-  @override
-  State<_CommentSheet> createState() => _CommentSheetState();
-}
-
-class _CommentSheetState extends State<_CommentSheet> {
-  final _ctrl = TextEditingController();
-  List<PostComment> _comments = [];
-  bool _loading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    final prov = context.read<SocialFeedProvider>();
-    final c = await prov.fetchComments(widget.post.postId);
-    if (mounted)
-      setState(() {
-        _comments = c;
-        _loading = false;
-      });
-  }
-
-  Future<void> _submit() async {
-    final text = _ctrl.text.trim();
-    if (text.isEmpty) return;
-    _ctrl.clear();
-    final prov = context.read<SocialFeedProvider>();
-    final c = await prov.addComment(widget.post.postId, text);
-    if (c != null && mounted) {
-      setState(() => _comments = [c, ..._comments]);
-    }
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return DraggableScrollableSheet(
-      initialChildSize: 0.65,
-      maxChildSize: 0.92,
-      minChildSize: 0.4,
-      expand: false,
-      builder: (_, ctrl) => Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: Column(
-          children: [
-            Container(
-              margin: const EdgeInsets.only(top: 12, bottom: 4),
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.grey.shade300,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Comments (${widget.post.commentCount})',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
-                ),
-              ),
-            ),
-            const Divider(height: 1),
-            Expanded(
-              child: _loading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _comments.isEmpty
-                  ? const Center(
-                child: Text(
-                  'No comments yet.',
-                  style: TextStyle(color: Colors.blueGrey),
-                ),
-              )
-                  : ListView.builder(
-                controller: ctrl,
-                padding: const EdgeInsets.all(16),
-                itemCount: _comments.length,
-                itemBuilder: (_, i) {
-                  final c = _comments[i];
-                  final isCurrentUser = c.userId == widget.currentUser.userId;
-                  final displayName = isCurrentUser ? 'You' : c.authorName;
-                  final avatarUrl = isCurrentUser ? widget.currentUser.profileImageUrl : c.authorAvatar;
-
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 14),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _FeedAvatar(
-                          name: displayName,
-                          url: avatarUrl,
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF8FAFC),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Text(
-                                      displayName,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        fontSize: 13,
-                                      ),
-                                    ),
-                                    const Spacer(),
-                                    Text(
-                                      c.timeAgo,
-                                      style: const TextStyle(
-                                        fontSize: 10,
-                                        color: Colors.blueGrey,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  c.commentText,
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    height: 1.4,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ),
-            Padding(
-              padding: EdgeInsets.fromLTRB(
-                16,
-                8,
-                16,
-                MediaQuery.of(context).viewInsets.bottom + 12,
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _ctrl,
-                      onSubmitted: (_) => _submit(),
-                      decoration: InputDecoration(
-                        hintText: 'Write a comment…',
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 10,
-                        ),
-                        filled: true,
-                        fillColor: const Color(0xFFF1F5F9),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(24),
-                          borderSide: BorderSide.none,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF2563EB),
-                      shape: BoxShape.circle,
-                    ),
-                    child: IconButton(
-                      icon: const Icon(
-                        Icons.send,
-                        color: Colors.white,
-                        size: 18,
-                      ),
-                      onPressed: _submit,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// RICH CONTENT  (clickable #hashtags)
-// ─────────────────────────────────────────────────────────────────────────────
-
+// -------------------- RICH CONTENT (plain text) --------------------
 class _RichContent extends StatefulWidget {
   final String content;
   const _RichContent({required this.content});
@@ -782,91 +614,57 @@ class _RichContent extends StatefulWidget {
 
 class _RichContentState extends State<_RichContent> {
   bool _expanded = false;
-  static const _maxLines = 4;
+  static const int _maxLines = 4;
 
   @override
   Widget build(BuildContext context) {
-    final spans = <InlineSpan>[];
-    for (final word in widget.content.split(' ')) {
-      if (word.startsWith('#')) {
-        spans.add(
-          WidgetSpan(
-            child: GestureDetector(
-              onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Search: $word'),
-                  duration: const Duration(seconds: 1),
-                ),
-              ),
+    final tp = TextPainter(
+      text: TextSpan(
+        text: widget.content,
+        style: const TextStyle(
+          fontSize: 14,
+          height: 1.5,
+          color: Colors.black87,
+        ),
+      ),
+      maxLines: _maxLines,
+      textDirection: TextDirection.ltr,
+    )..layout(maxWidth: MediaQuery.of(context).size.width - 48);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          widget.content,
+          maxLines: _expanded ? null : _maxLines,
+          overflow: _expanded ? TextOverflow.visible : TextOverflow.ellipsis,
+          style: const TextStyle(
+            fontSize: 14,
+            height: 1.5,
+            color: Colors.black87,
+          ),
+        ),
+        if (tp.didExceedMaxLines)
+          GestureDetector(
+            onTap: () => setState(() => _expanded = !_expanded),
+            child: Padding(
+              padding: const EdgeInsets.only(top: 4),
               child: Text(
-                '$word ',
+                _expanded ? 'Show less' : 'See more',
                 style: const TextStyle(
                   color: Color(0xFF2563EB),
+                  fontSize: 13,
                   fontWeight: FontWeight.w500,
-                  fontSize: 14,
                 ),
               ),
             ),
           ),
-        );
-      } else {
-        spans.add(
-          TextSpan(
-            text: '$word ',
-            style: const TextStyle(
-              fontSize: 14,
-              height: 1.5,
-              color: Colors.black87,
-            ),
-          ),
-        );
-      }
-    }
-
-    return LayoutBuilder(
-      builder: (ctx, constraints) {
-        final tp = TextPainter(
-          text: TextSpan(children: spans),
-          maxLines: _maxLines,
-          textDirection: TextDirection.ltr,
-        )..layout(maxWidth: constraints.maxWidth);
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            RichText(
-              maxLines: _expanded ? null : _maxLines,
-              overflow: _expanded
-                  ? TextOverflow.visible
-                  : TextOverflow.ellipsis,
-              text: TextSpan(children: spans),
-            ),
-            if (tp.didExceedMaxLines)
-              GestureDetector(
-                onTap: () => setState(() => _expanded = !_expanded),
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Text(
-                    _expanded ? 'Show less' : 'See more',
-                    style: const TextStyle(
-                      color: Color(0xFF2563EB),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-              ),
-          ],
-        );
-      },
+      ],
     );
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// MEDIA GRID
-// ─────────────────────────────────────────────────────────────────────────────
-
+// -------------------- MEDIA GRID --------------------
 class _MediaGrid extends StatelessWidget {
   final List<String> urls;
   const _MediaGrid({required this.urls});
@@ -944,10 +742,7 @@ class _MediaGrid extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// LINKED JOB CARD
-// ─────────────────────────────────────────────────────────────────────────────
-
+// -------------------- LINKED JOB CARD --------------------
 class _LinkedJobCard extends StatelessWidget {
   final JobPost job;
   const _LinkedJobCard({required this.job});
@@ -1011,10 +806,7 @@ class _LinkedJobCard extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SMALL REUSABLE WIDGETS
-// ─────────────────────────────────────────────────────────────────────────────
-
+// -------------------- SMALL WIDGETS --------------------
 class _InlineChip extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -1059,8 +851,6 @@ class _TypeBadge extends StatelessWidget {
   );
 }
 
-// Make sure FollowBtn is not private (remove the underscore if needed)
-// Change from class _FollowBtn to class FollowBtn
 class FollowBtn extends StatelessWidget {
   final bool isFollowing;
   final VoidCallback onTap;
@@ -1069,7 +859,8 @@ class FollowBtn extends StatelessWidget {
   @override
   Widget build(BuildContext context) => GestureDetector(
     onTap: onTap,
-    child: Container(
+    child: AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: isFollowing ? Colors.grey.shade100 : const Color(0xFF2563EB),
@@ -1089,6 +880,7 @@ class FollowBtn extends StatelessWidget {
     ),
   );
 }
+
 class _ActionBtn extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -1158,8 +950,12 @@ class _FeedAvatar extends StatelessWidget {
         .join();
     final fallbackInitials = initials.isEmpty ? '?' : initials;
     const palette = [
-      Color(0xFF6366F1), Color(0xFF2563EB), Color(0xFF10B981),
-      Color(0xFFEC4899), Color(0xFFF59E0B), Color(0xFF0EA5E9),
+      Color(0xFF6366F1),
+      Color(0xFF2563EB),
+      Color(0xFF10B981),
+      Color(0xFFEC4899),
+      Color(0xFFF59E0B),
+      Color(0xFF0EA5E9),
     ];
     final color = displayName.isEmpty
         ? palette[0]
@@ -1183,6 +979,7 @@ class _EmptyState extends StatelessWidget {
   final IconData icon;
   final String message;
   const _EmptyState({required this.icon, required this.message});
+
   @override
   Widget build(BuildContext context) => Center(
     child: Padding(
@@ -1201,4 +998,246 @@ class _EmptyState extends StatelessWidget {
       ),
     ),
   );
+}
+
+// ------------ COMMENT SHEET (unchanged) ------------
+class _CommentSheet extends StatefulWidget {
+  final FeedPost post;
+  final Users currentUser;
+  const _CommentSheet({required this.post, required this.currentUser});
+  @override
+  State<_CommentSheet> createState() => _CommentSheetState();
+}
+
+class _CommentSheetState extends State<_CommentSheet> {
+  final _ctrl = TextEditingController();
+  List<PostComment> _comments = [];
+  bool _loading = true;
+  bool _submitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final prov = context.read<SocialFeedProvider>();
+    final c = await prov.fetchComments(widget.post.postId);
+    if (mounted)
+      setState(() {
+        _comments = c;
+        _loading = false;
+      });
+  }
+
+  Future<void> _submit() async {
+    final text = _ctrl.text.trim();
+    if (text.isEmpty || _submitting) return;
+    setState(() => _submitting = true);
+    _ctrl.clear();
+    final prov = context.read<SocialFeedProvider>();
+    final c = await prov.addComment(widget.post.postId, text);
+    if (mounted) {
+      if (c != null) {
+        setState(() {
+          _comments = [c, ..._comments];
+          _submitting = false;
+        });
+        showFeedSnackBar(
+          context,
+          'Comment posted',
+          icon: Icons.check_circle_outline,
+        );
+      } else {
+        setState(() => _submitting = false);
+        showFeedSnackBar(context, 'Failed to post comment', isError: true);
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.65,
+      maxChildSize: 0.92,
+      minChildSize: 0.4,
+      expand: false,
+      builder: (_, ctrl) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          children: [
+            Container(
+              margin: const EdgeInsets.only(top: 12, bottom: 4),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                children: [
+                  Text(
+                    'Comments (${widget.post.commentCount})',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _comments.isEmpty
+                  ? const Center(
+                      child: Text(
+                        'No comments yet.',
+                        style: TextStyle(color: Colors.blueGrey),
+                      ),
+                    )
+                  : ListView.builder(
+                      controller: ctrl,
+                      padding: const EdgeInsets.all(16),
+                      itemCount: _comments.length,
+                      itemBuilder: (_, i) {
+                        final c = _comments[i];
+                        final isMe = c.userId == widget.currentUser.userId;
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 14),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _FeedAvatar(
+                                name: isMe ? 'You' : c.authorName,
+                                url: isMe
+                                    ? widget.currentUser.profileImageUrl
+                                    : c.authorAvatar,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF8FAFC),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Text(
+                                            isMe ? 'You' : c.authorName,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                          const Spacer(),
+                                          Text(
+                                            c.timeAgo,
+                                            style: const TextStyle(
+                                              fontSize: 10,
+                                              color: Colors.blueGrey,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        c.commentText,
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          height: 1.4,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+            ),
+            Padding(
+              padding: EdgeInsets.fromLTRB(
+                16,
+                8,
+                16,
+                MediaQuery.of(context).viewInsets.bottom + 12,
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _ctrl,
+                      onSubmitted: (_) => _submit(),
+                      decoration: InputDecoration(
+                        hintText: 'Write a comment…',
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 10,
+                        ),
+                        filled: true,
+                        fillColor: const Color(0xFFF1F5F9),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(24),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF2563EB),
+                      shape: BoxShape.circle,
+                    ),
+                    child: _submitting
+                        ? const Padding(
+                            padding: EdgeInsets.all(12),
+                            child: SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            ),
+                          )
+                        : IconButton(
+                            icon: const Icon(
+                              Icons.send,
+                              color: Colors.white,
+                              size: 18,
+                            ),
+                            onPressed: _submit,
+                          ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

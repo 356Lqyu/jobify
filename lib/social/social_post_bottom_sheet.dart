@@ -34,7 +34,7 @@ class _SocialPostBottomSheetState extends State<SocialPostBottomSheet> {
 
   PostType _selectedType  = PostType.post;
   final List<String> _hashtags  = [];
-  final List<File>   _imageFiles = [];   // local file previews
+  final List<File>   _imageFiles = [];
   bool _isPosting = false;
 
   static const _allowedTypes = [
@@ -127,7 +127,7 @@ class _SocialPostBottomSheetState extends State<SocialPostBottomSheet> {
         final fileName = 'posts/${widget.userId}_${_uuid.v4()}.$ext';
 
         final url = await repo.uploadImage(
-          bucket:    'post-media',
+          bucket:    'post_media',
           fileName:  fileName,
           fileBytes: bytes,
         );
@@ -395,7 +395,7 @@ class _SocialPostBottomSheetState extends State<SocialPostBottomSheet> {
                   ],
                   const SizedBox(height: 16),
 
-                  // ── Image picker area ────────────────────────────────
+                  // Image picker area
                   GestureDetector(
                     onTap: _imageFiles.length < 4 ? _pickImages : null,
                     child: Container(

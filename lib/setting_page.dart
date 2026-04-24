@@ -8,6 +8,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'auth/change_password.dart';
 import 'users/view_profile_page.dart';
 import 'package:jobify/job/resume_management_page.dart';
+import 'package:jobify/social/social_post_management.dart';
+import 'package:jobify/social/saved_post.dart';
 
 class SettingPage extends StatefulWidget {
   const SettingPage({super.key});
@@ -31,14 +33,17 @@ class _SettingPageState extends State<SettingPage> {
 
   // Stats for Job Seeker
   int _applicationsCount = 0;
-  int _savedJobsCount = 0;
+  int _savedPostsCount =
+      0; // renamed from _savedJobsCount – now counts all saved posts
   int _followingCount = 0;
-  int _userPostsCount = 0;
+  int _userPostsCount = 0; // social posts only (job_id IS NULL)
 
   // Stats for Employer
-  int _jobPostsCount = 0;
+  int _posterSocialPostCount = 0; // post table job_id IS NULL
+  int _posterJobPostCount = 0; // post table job_id IS NOT NULL
+  int _posterSavedPostsCount = 0;
   int _companyFollowersCount = 0;
-  int _applicationsReceivedCount = 0;
+  int _posterFollowingCount = 0;
 
   bool _isLoadingStats = false;
 
@@ -90,7 +95,8 @@ class _SettingPageState extends State<SettingPage> {
           setState(() {
             companyName = companyProfile['company_name'];
             companyId = companyProfile['company_id'];
-            if (companyProfile['logo_url'] != null && companyProfile['logo_url'].isNotEmpty) {
+            if (companyProfile['logo_url'] != null &&
+                companyProfile['logo_url'].isNotEmpty) {
               profileImageUrl = companyProfile['logo_url'];
             }
           });
@@ -98,12 +104,15 @@ class _SettingPageState extends State<SettingPage> {
           await LocalDB.cacheCompanyProfile(authUserId, companyProfile);
         } else {
           // Try from cache as fallback
-          final cachedProfile = await LocalDB.getCachedCompanyProfile(authUserId);
+          final cachedProfile = await LocalDB.getCachedCompanyProfile(
+            authUserId,
+          );
           if (cachedProfile != null && mounted) {
             setState(() {
               companyName = cachedProfile['company_name'];
               companyId = cachedProfile['company_id'];
-              if (cachedProfile['logo_url'] != null && cachedProfile['logo_url'].isNotEmpty) {
+              if (cachedProfile['logo_url'] != null &&
+                  cachedProfile['logo_url'].isNotEmpty) {
                 profileImageUrl = cachedProfile['logo_url'];
               }
             });
@@ -138,32 +147,20 @@ class _SettingPageState extends State<SettingPage> {
 
   Future<void> _loadJobSeekerStats(String authUserId) async {
     try {
-      // Count user's posts
+      // Count social posts only (job_id IS NULL)
       final postsResult = await supabase
           .from('post')
           .select('post_id')
-          .eq('user_id', authUserId);
+          .eq('user_id', authUserId)
+          .isFilter('job_id', null);
       _userPostsCount = (postsResult as List).length;
 
-      // Count saved jobs (using post_saved table)
-      final savedJobsResult = await supabase
+      // Count all saved posts
+      final savedResult = await supabase
           .from('post_saved')
-          .select('post_id')
+          .select('post_saved_id')
           .eq('user_id', authUserId);
-
-      // Get job posts from saved items
-      int savedJobsCount = 0;
-      final savedPostIds = (savedJobsResult as List).map((s) => s['post_id'] as String).toList();
-
-      if (savedPostIds.isNotEmpty) {
-        final jobPostsResult = await supabase
-            .from('post')
-            .select('post_id')
-            .inFilter('post_id', savedPostIds)
-            .eq('post_type', 'job');
-        savedJobsCount = (jobPostsResult as List).length;
-      }
-      _savedJobsCount = savedJobsCount;
+      _savedPostsCount = (savedResult as List).length;
 
       // Count following (users/companies the current user follows)
       final followingResult = await supabase
@@ -180,7 +177,9 @@ class _SettingPageState extends State<SettingPage> {
           .neq('status', 'withdrawn');
       _applicationsCount = (applicationsResult as List).length;
 
-      debugPrint('Job Seeker Stats - Posts: $_userPostsCount, Saved Jobs: $_savedJobsCount, Following: $_followingCount, Applications: $_applicationsCount');
+      debugPrint(
+        'Job Seeker Stats - Posts: $_userPostsCount, Saved: $_savedPostsCount, Following: $_followingCount, Applications: $_applicationsCount',
+      );
 
       if (mounted) setState(() {});
     } catch (e) {
@@ -190,58 +189,46 @@ class _SettingPageState extends State<SettingPage> {
 
   Future<void> _loadEmployerStats(String authUserId) async {
     try {
-      // First get company profile
-      final companyProfile = await supabase
-          .from('company_profile')
-          .select('company_id')
+      // Count social posts (post table job_id IS NULL)
+      final socialResult = await supabase
+          .from('post')
+          .select('post_id')
           .eq('user_id', authUserId)
-          .maybeSingle();
+          .isFilter('job_id', null);
+      _posterSocialPostCount = (socialResult as List).length;
 
-      if (companyProfile != null) {
-        final compId = companyProfile['company_id'];
+      // Count job posts (post table job_id IS NOT NULL)
+      final jobPostResult = await supabase
+          .from('post')
+          .select('post_id')
+          .eq('user_id', authUserId)
+          .not('job_id', 'is', null);
+      _posterJobPostCount = (jobPostResult as List).length;
 
-        // Update companyId if not set
-        if (companyId == null && mounted) {
-          setState(() {
-            companyId = compId;
-          });
-        }
+      // Count all saved posts
+      final savedResult = await supabase
+          .from('post_saved')
+          .select('post_saved_id')
+          .eq('user_id', authUserId);
+      _posterSavedPostsCount = (savedResult as List).length;
 
-        // Count job posts
-        final jobPostsResult = await supabase
-            .from('job_post')
-            .select('job_id')
-            .eq('company_id', compId);
-        _jobPostsCount = (jobPostsResult as List).length;
+      // Count company followers (users following this user account)
+      final followersResult = await supabase
+          .from('follows')
+          .select('follow_id')
+          .eq('following_id', authUserId);
+      _companyFollowersCount = (followersResult as List).length;
 
-        // Count company followers (users following this company's user account)
-        final followersResult = await supabase
-            .from('follows')
-            .select('follow_id')
-            .eq('following_id', authUserId);  // Use user_id, not company_id
-        _companyFollowersCount = (followersResult as List).length;
+      // Count following
+      final followingResult = await supabase
+          .from('follows')
+          .select('follow_id')
+          .eq('follower_id', authUserId);
+      _posterFollowingCount = (followingResult as List).length;
 
-        // Count applications received for company's jobs
-        final jobsResult = await supabase
-            .from('job_post')
-            .select('job_id')
-            .eq('company_id', compId);
-
-        final jobIds = (jobsResult as List).map((j) => j['job_id'] as String).toList();
-
-        if (jobIds.isNotEmpty) {
-          final applicationsResult = await supabase
-              .from('job_application')
-              .select('application_id')
-              .inFilter('job_id', jobIds)
-              .neq('status', 'withdrawn');
-          _applicationsReceivedCount = (applicationsResult as List).length;
-        } else {
-          _applicationsReceivedCount = 0;
-        }
-
-        debugPrint('Employer Stats - Job Posts: $_jobPostsCount, Followers: $_companyFollowersCount, Applications Received: $_applicationsReceivedCount');
-      }
+      debugPrint(
+        'Employer Stats - Social: $_posterSocialPostCount, JobPosts: $_posterJobPostCount, Followers: $_companyFollowersCount, Following: $_posterFollowingCount',
+      );
 
       if (mounted) setState(() {});
     } catch (e) {
@@ -273,7 +260,6 @@ class _SettingPageState extends State<SettingPage> {
 
       // Also refresh company profile if employer
       if (role?.toUpperCase() == 'POSTER') {
-        // Fetch fresh company profile from Supabase
         final companyData = await supabase
             .from('company_profile')
             .select()
@@ -284,11 +270,11 @@ class _SettingPageState extends State<SettingPage> {
           setState(() {
             companyName = companyData['company_name'];
             companyId = companyData['company_id'];
-            if (companyData['logo_url'] != null && companyData['logo_url'].isNotEmpty) {
+            if (companyData['logo_url'] != null &&
+                companyData['logo_url'].isNotEmpty) {
               profileImageUrl = companyData['logo_url'];
             }
           });
-          // Update cache
           await LocalDB.cacheCompanyProfile(authUserId, companyData);
         }
       }
@@ -319,16 +305,11 @@ class _SettingPageState extends State<SettingPage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
       decoration: const BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: Color(0xFFE5E7EB)),
-        ),
+        border: Border(bottom: BorderSide(color: Color(0xFFE5E7EB))),
       ),
       child: Text(
         title,
-        style: const TextStyle(
-          fontWeight: FontWeight.w500,
-          fontSize: 16,
-        ),
+        style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 16),
       ),
     );
   }
@@ -339,9 +320,7 @@ class _SettingPageState extends State<SettingPage> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         decoration: const BoxDecoration(
-          border: Border(
-            bottom: BorderSide(color: Color(0xFFE5E7EB)),
-          ),
+          border: Border(bottom: BorderSide(color: Color(0xFFE5E7EB))),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -377,15 +356,16 @@ class _SettingPageState extends State<SettingPage> {
           CircleAvatar(
             radius: 32,
             backgroundColor: Colors.grey[200],
-            backgroundImage: profileImageUrl != null && profileImageUrl!.isNotEmpty
+            backgroundImage:
+                profileImageUrl != null && profileImageUrl!.isNotEmpty
                 ? NetworkImage(profileImageUrl!)
                 : null,
             child: profileImageUrl == null || profileImageUrl!.isEmpty
                 ? Icon(
-              isJobSeeker ? Icons.person : Icons.business,
-              size: 32,
-              color: Colors.grey[400],
-            )
+                    isJobSeeker ? Icons.person : Icons.business,
+                    size: 32,
+                    color: Colors.grey[400],
+                  )
                 : null,
           ),
           const SizedBox(width: 16),
@@ -396,7 +376,9 @@ class _SettingPageState extends State<SettingPage> {
                 Text(
                   isJobSeeker ? userName ?? '' : companyName ?? userName ?? '',
                   style: const TextStyle(
-                      fontWeight: FontWeight.bold, fontSize: 17),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 17,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -420,21 +402,24 @@ class _SettingPageState extends State<SettingPage> {
                         const Text(
                           'Profile 60% complete',
                           style: TextStyle(
-                              color: Colors.blue,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500),
+                            color: Colors.blue,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ],
                     ),
                   ),
               ],
             ),
-          )
+          ),
         ],
       ),
     );
   }
 
+  // ── Job Seeker activity panel ──────────────────────────────────────────────
+  // Shows: Applications | Social Posts | Saved Posts (clickable) | Following
   Widget buildJobSeekerStats() {
     if (_isLoadingStats) {
       return Container(
@@ -464,23 +449,63 @@ class _SettingPageState extends State<SettingPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Your Activity',
-              style: TextStyle(fontWeight: FontWeight.w500, fontSize: 15)),
-          const SizedBox(height: 12),
+          const Text(
+            'Your Activity',
+            style: TextStyle(fontWeight: FontWeight.w500, fontSize: 15),
+          ),
+          const SizedBox(height: 16),
+          // Row 1: Applications | Social Posts | Saved Posts(clickable)
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
               buildStatItem(_applicationsCount.toString(), 'Applications'),
-              buildStatItem(_savedJobsCount.toString(), 'Saved Jobs'),
-              buildStatItem(_followingCount.toString(), 'Following'),
-              buildStatItem(_userPostsCount.toString(), 'Posts'),
+              buildStatItem(_userPostsCount.toString(), 'Social Posts'),
+              // Saved Posts – tappable
+              GestureDetector(
+                onTap: _navigateToSavedPosts,
+                child: Column(
+                  children: [
+                    Text(
+                      _savedPostsCount.toString(),
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Saved Posts',
+                          style: TextStyle(fontSize: 12, color: Colors.grey),
+                        ),
+                        SizedBox(width: 2),
+                        Icon(
+                          Icons.arrow_forward_ios,
+                          size: 10,
+                          color: Colors.grey,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
             ],
-          )
+          ),
+          const SizedBox(height: 20),
+          // Row 2: Following
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [buildStatItem(_followingCount.toString(), 'Following')],
+          ),
         ],
       ),
     );
   }
 
+  // Employer activity panel
   Widget buildEmployerStats() {
     if (_isLoadingStats) {
       return Container(
@@ -510,17 +535,59 @@ class _SettingPageState extends State<SettingPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Company Activity',
-              style: TextStyle(fontWeight: FontWeight.w500, fontSize: 15)),
-          const SizedBox(height: 12),
+          const Text(
+            'Company Activity',
+            style: TextStyle(fontWeight: FontWeight.w500, fontSize: 15),
+          ),
+          const SizedBox(height: 16),
+          // Row 1: Social Posts | Job Posts | Saved Posts(clickable)
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              buildStatItem(_jobPostsCount.toString(), 'Job Posts'),
-              buildStatItem(_companyFollowersCount.toString(), 'Followers'),
-              buildStatItem(_applicationsReceivedCount.toString(), 'Applications'),
+              buildStatItem(_posterSocialPostCount.toString(), 'Social Posts'),
+              buildStatItem(_posterJobPostCount.toString(), 'Job Posts'),
+              // Saved Posts – tappable
+              GestureDetector(
+                onTap: _navigateToSavedPosts,
+                child: Column(
+                  children: [
+                    Text(
+                      _posterSavedPostsCount.toString(),
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Saved Posts',
+                          style: TextStyle(fontSize: 12, color: Colors.grey),
+                        ),
+                        SizedBox(width: 2),
+                        Icon(
+                          Icons.arrow_forward_ios,
+                          size: 10,
+                          color: Colors.grey,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
             ],
-          )
+          ),
+          const SizedBox(height: 20),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              buildStatItem(_companyFollowersCount.toString(), 'Followers'),
+              buildStatItem(_posterFollowingCount.toString(), 'Following'),
+            ],
+          ),
         ],
       ),
     );
@@ -529,16 +596,34 @@ class _SettingPageState extends State<SettingPage> {
   Widget buildStatItem(String value, String label) {
     return Column(
       children: [
-        Text(value,
-            style: const TextStyle(
-                fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blue)),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Colors.blue,
+          ),
+        ),
         const SizedBox(height: 4),
         Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
       ],
     );
   }
 
-  // Method to navigate to dashboard
+  // Navigate to saved posts
+  void _navigateToSavedPosts() {
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    final currentUser = userProvider.currentUser;
+    if (currentUser == null) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SavedPostsPage(currentUser: currentUser),
+      ),
+    ).then((_) => _refreshProfileData());
+  }
+
+  // Method to navigate to dashboard (ViewProfilePage)
   void _navigateToDashboard() async {
     final bool isJobSeeker = role == 'job_seeker';
 
@@ -614,7 +699,9 @@ class _SettingPageState extends State<SettingPage> {
           );
           await _refreshProfileData();
         } else {
-          _showErrorDialog('Unable to load dashboard. Company information not found.');
+          _showErrorDialog(
+            'Unable to load dashboard. Company information not found.',
+          );
         }
       } else {
         Navigator.pop(context); // Close loading dialog
@@ -672,35 +759,74 @@ class _SettingPageState extends State<SettingPage> {
                   Container(
                     margin: const EdgeInsets.only(top: 8),
                     decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        boxShadow: [
-                          BoxShadow(
-                              color: Colors.black.withOpacity(0.05),
-                              blurRadius: 6)
-                        ]),
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 6,
+                        ),
+                      ],
+                    ),
                     child: Column(
                       children: [
                         buildSectionHeader('Profile'),
-                        buildListItem(Icons.person_outline, 'My Profile', () async {
-                          await Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (_) => const ProfilePage()),
-                          );
-                          await _refreshProfileData();
-                        }),
-                        // New Dashboard item
-                        buildListItem(Icons.dashboard_outlined, 'My Dashboard', () {
-                          _navigateToDashboard();
-                        }),
-                        if (isJobSeeker)
-                          buildListItem(Icons.description_outlined, 'My Resume', () {
+                        buildListItem(
+                          Icons.person_outline,
+                          'My Profile',
+                          () async {
+                            await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const ProfilePage(),
+                              ),
+                            );
+                            await _refreshProfileData();
+                          },
+                        ),
+                        // Dashboard – navigates to ViewProfilePage
+                        buildListItem(
+                          Icons.dashboard_outlined,
+                          'My Dashboard',
+                          () {
+                            _navigateToDashboard();
+                          },
+                        ),
+                        // Manage My Posts – both roles
+                        buildListItem(
+                          Icons.post_add_outlined,
+                          'Manage My Posts',
+                          () {
+                            final userProvider = Provider.of<UserProvider>(
+                              context,
+                              listen: false,
+                            );
+                            final currentUser = userProvider.currentUser;
+                            if (currentUser == null) return;
                             Navigator.push(
                               context,
-                              MaterialPageRoute(builder: (_) => const ResumeManagementPage()),
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    MyPostsPage(currentUser: currentUser),
+                              ),
                             ).then((_) => _refreshProfileData());
-                          }),],
+                          },
+                        ),
+                        // My Resume – job seeker only
+                        if (isJobSeeker)
+                          buildListItem(
+                            Icons.description_outlined,
+                            'My Resume',
+                            () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const ResumeManagementPage(),
+                                ),
+                              ).then((_) => _refreshProfileData());
+                            },
+                          ),
+                      ],
                     ),
                   ),
 
@@ -708,26 +834,31 @@ class _SettingPageState extends State<SettingPage> {
                   Container(
                     margin: const EdgeInsets.only(top: 8),
                     decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        boxShadow: [
-                          BoxShadow(
-                              color: Colors.black.withOpacity(0.05),
-                              blurRadius: 6)
-                        ]),
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 6,
+                        ),
+                      ],
+                    ),
                     child: Column(
                       children: [
                         buildSectionHeader('Account'),
                         buildListItem(Icons.lock, 'Change Password', () {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (_) => const ChangePasswordPage()),
+                            MaterialPageRoute(
+                              builder: (_) => const ChangePasswordPage(),
+                            ),
                           );
                         }),
                       ],
                     ),
                   ),
 
+                  // Activity Panel – role-specific stats
                   if (isJobSeeker)
                     buildJobSeekerStats()
                   else if (role == 'poster')
@@ -754,10 +885,13 @@ class _SettingPageState extends State<SettingPage> {
                           children: const [
                             Icon(Icons.logout, color: Colors.red),
                             SizedBox(width: 8),
-                            Text('Logout',
-                                style: TextStyle(
-                                    color: Colors.red,
-                                    fontWeight: FontWeight.bold)),
+                            Text(
+                              'Logout',
+                              style: TextStyle(
+                                color: Colors.red,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -806,7 +940,10 @@ class _SettingPageState extends State<SettingPage> {
                         const Text(
                           "Are you sure you want to logout? You'll need to login again to access your account.",
                           textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 13, color: Color(0xFF4E4C4C)),
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Color(0xFF4E4C4C),
+                          ),
                         ),
                         const SizedBox(height: 16),
                         Row(

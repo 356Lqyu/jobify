@@ -18,9 +18,8 @@ class ViewProfilePage extends StatefulWidget {
     this.name,
     this.avatarUrl,
     required this.isCompany,
-    this.onFollowChanged,  // Add this
+    this.onFollowChanged,
   });
-
 
   @override
   State<ViewProfilePage> createState() => _ViewProfilePageState();
@@ -33,8 +32,9 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
   bool _isLoading = true;
   bool _isFollowing = false;
 
-  // Selected tab for content section (for company view)
-  int _selectedTabIndex = 0; // 0: Posts, 1: Jobs, 2: Branches, 3: Followers
+  // Selected tab for content section (company view)
+  // 0: Posts, 1: Jobs, 2: Branches, 3: Followers, 4: Following
+  int _selectedTabIndex = 0;
 
   // For job seeker - expanded sections
   bool _showExperience = true;
@@ -61,6 +61,8 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
   String? _headOfficeCountry;
 
   // Stats
+  // For job seeker: _postsCount = social posts (job_id IS NULL), _followingCount used in stats row
+  // For company: _postsCount = social posts (job_id IS NULL), _jobPostsCount from job_post table
   int _postsCount = 0;
   int _jobPostsCount = 0;
   int _followersCount = 0;
@@ -68,10 +70,11 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
   int _branchesCount = 0;
 
   // Lists
-  List<Map<String, dynamic>> _recentPosts = [];
+  List<Map<String, dynamic>> _recentPosts = []; // social posts (job_id IS NULL)
   List<Map<String, dynamic>> _jobPosts = [];
   List<Map<String, dynamic>> _branches = [];
   List<Map<String, dynamic>> _followers = [];
+  List<Map<String, dynamic>> _following = []; // following list
   List<Map<String, dynamic>> _skills = [];
   List<Map<String, dynamic>> _education = [];
   List<Map<String, dynamic>> _experience = [];
@@ -88,6 +91,7 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
     _loadJobPosts();
     _loadBranches();
     _loadFollowers();
+    _loadFollowing();
     _loadHeadOffice();
     _checkFollowStatus();
     if (!widget.isCompany) {
@@ -228,49 +232,53 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
   Future<void> _loadStats() async {
     try {
       if (widget.isCompany && widget.companyId != null) {
-        // Count posts
+        // Social posts (job_id IS NULL) – shown as "Posts" tab
         final postsResult = await supabase
             .from('post')
             .select('post_id')
-            .eq('company_id', widget.companyId!);
+            .eq('company_id', widget.companyId!)
+            .isFilter('job_id', null);
         _postsCount = (postsResult as List).length;
 
-        // Count job posts
+        // Job posts from job_post table
         final jobPostsResult = await supabase
             .from('job_post')
             .select('job_id')
             .eq('company_id', widget.companyId!);
         _jobPostsCount = (jobPostsResult as List).length;
 
-        // IMPORTANT FIX: Count followers using userId, not companyId
-        // The follows table stores following_id as user_id from users table
+        // Followers – uses userId (follows table stores user_id)
         final followersResult = await supabase
             .from('follows')
             .select('follow_id')
-            .eq('following_id', widget.userId);  // Use userId here!
+            .eq('following_id', widget.userId);
         _followersCount = (followersResult as List).length;
 
-        // Count branches
+        // Following
+        final followingResult = await supabase
+            .from('follows')
+            .select('follow_id')
+            .eq('follower_id', widget.userId);
+        _followingCount = (followingResult as List).length;
+
+        // Branches
         final branchesResult = await supabase
             .from('company_branch')
             .select('branch_id')
             .eq('company_id', widget.companyId!);
         _branchesCount = (branchesResult as List).length;
 
-        debugPrint('Stats - Posts: $_postsCount, Job Posts: $_jobPostsCount, Followers: $_followersCount, Branches: $_branchesCount');
+        debugPrint(
+          'Stats - Posts: $_postsCount, Job Posts: $_jobPostsCount, Followers: $_followersCount, Following: $_followingCount, Branches: $_branchesCount',
+        );
       } else {
-        // For user profile
+        // Job seeker: social posts only (job_id IS NULL)
         final postsResult = await supabase
             .from('post')
             .select('post_id')
-            .eq('user_id', widget.userId);
+            .eq('user_id', widget.userId)
+            .isFilter('job_id', null);
         _postsCount = (postsResult as List).length;
-
-        final followersResult = await supabase
-            .from('follows')
-            .select('follow_id')
-            .eq('following_id', widget.userId);
-        _followersCount = (followersResult as List).length;
 
         final followingResult = await supabase
             .from('follows')
@@ -285,6 +293,8 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
       if (mounted) setState(() {});
     }
   }
+
+  // Loads social posts only (job_id IS NULL)
   Future<void> _loadRecentPosts() async {
     try {
       final posts = await supabase
@@ -297,8 +307,11 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
             created_at,
             users!post_user_id_fkey (fullname, profile_image_url)
           ''')
-          .eq(widget.isCompany ? 'company_id' : 'user_id',
-          widget.isCompany ? widget.companyId! : widget.userId)
+          .eq(
+            widget.isCompany ? 'company_id' : 'user_id',
+            widget.isCompany ? widget.companyId! : widget.userId,
+          )
+          .isFilter('job_id', null) // social posts only
           .order('created_at', ascending: false)
           .limit(10);
 
@@ -430,32 +443,39 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
 
   Future<void> _loadFollowers() async {
     try {
-      late final List<dynamic> followersData;
+      final followersData = await supabase
+          .from('follows')
+          .select('follower_id')
+          .eq('following_id', widget.userId);
 
-      if (widget.isCompany && widget.companyId != null) {
-        // FIX: Use userId, not companyId
-        followersData = await supabase
-            .from('follows')
-            .select('follower_id')
-            .eq('following_id', widget.userId);  // Use userId here!
-      } else {
-        followersData = await supabase
-            .from('follows')
-            .select('follower_id')
-            .eq('following_id', widget.userId);
-      }
-
-      if (mounted && followersData.isNotEmpty) {
-        final followerIds = followersData.map((f) => f['follower_id'] as String).toList();
+      if (mounted && (followersData as List).isNotEmpty) {
+        final followerIds = followersData
+            .map((f) => f['follower_id'] as String)
+            .toList();
 
         if (followerIds.isNotEmpty) {
+          // Added company_profile join here
           final usersData = await supabase
               .from('users')
-              .select('user_id, fullname, profile_image_url')
+              .select('user_id, fullname, profile_image_url, role, company_profile(company_name, logo_url)')
               .inFilter('user_id', followerIds);
 
-          final followersList = usersData.map((user) => {
-            'users': user,
+          final followersList = usersData.map((userData) {
+            // Create a mutable copy of the user data
+            final user = Map<String, dynamic>.from(userData);
+
+            // If the user is a company, swap the name and avatar with company details
+            if (user['role'] == 'POSTER' && user['company_profile'] != null) {
+              final cp = user['company_profile'];
+              // Handle both list (1-to-many fallback) and map (1-to-1) responses safely
+              final companyMap = (cp is List && cp.isNotEmpty) ? cp[0] : (cp is Map ? cp : null);
+
+              if (companyMap != null) {
+                user['fullname'] = companyMap['company_name'] ?? user['fullname'];
+                user['profile_image_url'] = companyMap['logo_url'] ?? user['profile_image_url'];
+              }
+            }
+            return {'users': user};
           }).toList();
 
           setState(() {
@@ -478,11 +498,70 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
       });
     }
   }
+
+  // Load users that this profile is following
+  Future<void> _loadFollowing() async {
+    try {
+      final followingData = await supabase
+          .from('follows')
+          .select('following_id')
+          .eq('follower_id', widget.userId);
+
+      if (mounted && (followingData as List).isNotEmpty) {
+        final followingIds = followingData
+            .map((f) => f['following_id'] as String)
+            .toList();
+
+        if (followingIds.isNotEmpty) {
+          // Added company_profile join here
+          final usersData = await supabase
+              .from('users')
+              .select('user_id, fullname, profile_image_url, role, company_profile(company_name, logo_url)')
+              .inFilter('user_id', followingIds);
+
+          final followingList = usersData.map((userData) {
+            // Create a mutable copy of the user data
+            final user = Map<String, dynamic>.from(userData);
+
+            // If the user is a company, swap the name and avatar with company details
+            if (user['role'] == 'POSTER' && user['company_profile'] != null) {
+              final cp = user['company_profile'];
+              final companyMap = (cp is List && cp.isNotEmpty) ? cp[0] : (cp is Map ? cp : null);
+
+              if (companyMap != null) {
+                user['fullname'] = companyMap['company_name'] ?? user['fullname'];
+                user['profile_image_url'] = companyMap['logo_url'] ?? user['profile_image_url'];
+              }
+            }
+            return {'users': user};
+          }).toList();
+
+          setState(() {
+            _following = List<Map<String, dynamic>>.from(followingList);
+          });
+        } else {
+          setState(() {
+            _following = [];
+          });
+        }
+      } else {
+        setState(() {
+          _following = [];
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading following: $e');
+      setState(() {
+        _following = [];
+      });
+    }
+  }
+
+
   Future<void> _checkFollowStatus() async {
     if (_currentUserId == null) return;
 
     try {
-      // Always use userId for following_id
       final followingId = widget.userId;
 
       final result = await supabase
@@ -501,6 +580,7 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
       debugPrint('Error checking follow status: $e');
     }
   }
+
   Future<void> _toggleFollow() async {
     if (_currentUserId == null) {
       if (mounted) {
@@ -511,9 +591,7 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
       return;
     }
 
-    // Always follow the user_id (for both individuals and companies)
     final followingId = widget.userId;
-
     setState(() => _isFollowing = !_isFollowing);
 
     try {
@@ -523,18 +601,11 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
           'follower_id': _currentUserId,
           'following_id': followingId,
         });
-
-        // Update UI
         setState(() {
           _followersCount++;
         });
-
-        // Reload followers list
         await _loadFollowers();
-
-        // Notify parent if callback exists
         widget.onFollowChanged?.call();
-
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -551,18 +622,11 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
             .delete()
             .eq('follower_id', _currentUserId!)
             .eq('following_id', followingId);
-
-        // Update UI
         setState(() {
           _followersCount--;
         });
-
-        // Reload followers list
         await _loadFollowers();
-
-        // Notify parent if callback exists
         widget.onFollowChanged?.call();
-
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -576,17 +640,17 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
 
       // Refresh stats
       await _loadStats();
-
     } catch (e) {
       // Revert on error
       setState(() => _isFollowing = !_isFollowing);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: ${e.toString()}')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
       }
     }
   }
+
   @override
   Widget build(BuildContext context) {
     final bool isOwnProfile = _currentUserId == widget.userId;
@@ -597,7 +661,6 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-
         actions: [
           if (!isOwnProfile)
             Padding(
@@ -623,34 +686,35 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
-        onRefresh: () async {
-          await _loadProfile();
-          await _loadStats();
-          await _loadRecentPosts();
-          await _loadJobPosts();
-          await _loadBranches();
-          await _loadFollowers();
-          if (!widget.isCompany) {
-            await _loadJobSeekerDetails();
-          }
-        },
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          child: Column(
-            children: [
-              _buildHeaderSection(displayName),
-              if (widget.isCompany) _buildCompanyInfoSection(),
-              _buildAboutSection(),
-              _buildStatsRow(),
-              if (widget.isCompany)
-                _buildCompanyContentSection()
-              else
-                _buildJobSeekerContentSection(),
-              const SizedBox(height: 20),
-            ],
-          ),
-        ),
-      ),
+              onRefresh: () async {
+                await _loadProfile();
+                await _loadStats();
+                await _loadRecentPosts();
+                await _loadJobPosts();
+                await _loadBranches();
+                await _loadFollowers();
+                await _loadFollowing();
+                if (!widget.isCompany) {
+                  await _loadJobSeekerDetails();
+                }
+              },
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: Column(
+                  children: [
+                    _buildHeaderSection(displayName),
+                    if (widget.isCompany) _buildCompanyInfoSection(),
+                    _buildAboutSection(),
+                    _buildStatsRow(),
+                    if (widget.isCompany)
+                      _buildCompanyContentSection()
+                    else
+                      _buildJobSeekerContentSection(),
+                    const SizedBox(height: 20),
+                  ],
+                ),
+              ),
+            ),
     );
   }
 
@@ -662,24 +726,22 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
           CircleAvatar(
             radius: 60,
             backgroundColor: Colors.grey[200],
-            backgroundImage: _profileImageUrl != null && _profileImageUrl!.isNotEmpty
+            backgroundImage:
+                _profileImageUrl != null && _profileImageUrl!.isNotEmpty
                 ? CachedNetworkImageProvider(_profileImageUrl!)
                 : null,
             child: (_profileImageUrl == null || _profileImageUrl!.isEmpty)
                 ? Icon(
-              widget.isCompany ? Icons.business : Icons.person,
-              size: 60,
-              color: Colors.blue,
-            )
+                    widget.isCompany ? Icons.business : Icons.person,
+                    size: 60,
+                    color: Colors.blue,
+                  )
                 : null,
           ),
           const SizedBox(height: 16),
           Text(
             displayName,
-            style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-            ),
+            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 8),
@@ -710,7 +772,11 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (headOfficeLocation.isNotEmpty)
-            _buildInfoRow(Icons.location_on_outlined, 'Head Office', headOfficeLocation),
+            _buildInfoRow(
+              Icons.location_on_outlined,
+              'Head Office',
+              headOfficeLocation,
+            ),
           if (_industry != null && _industry!.isNotEmpty)
             _buildInfoRow(Icons.category_outlined, 'Industry', _industry!),
           if (_companySize != null && _companySize!.isNotEmpty)
@@ -743,10 +809,7 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
             ),
           ),
           Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(color: Colors.grey),
-            ),
+            child: Text(value, style: const TextStyle(color: Colors.grey)),
           ),
         ],
       ),
@@ -765,10 +828,7 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-          ),
+          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8),
         ],
       ),
       child: Column(
@@ -780,23 +840,20 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
               const SizedBox(width: 8),
               const Text(
                 'About',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
               ),
             ],
           ),
           const SizedBox(height: 12),
-          Text(
-            displayBio,
-            style: const TextStyle(height: 1.5),
-          ),
+          Text(displayBio, style: const TextStyle(height: 1.5)),
         ],
       ),
     );
   }
 
+  // Stats row
+  // Company: Social Posts | Jobs | Branches | Followers | Following
+  // Job Seeker: Social Posts | Following
   Widget _buildStatsRow() {
     if (widget.isCompany) {
       return Container(
@@ -806,10 +863,7 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 8,
-            ),
+            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8),
           ],
         ),
         child: Row(
@@ -819,11 +873,12 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
             _buildStatItem(_jobPostsCount, 'Jobs', 1),
             _buildStatItem(_branchesCount, 'Branches', 2),
             _buildStatItem(_followersCount, 'Followers', 3),
+            _buildStatItem(_followingCount, 'Following', 4),
           ],
         ),
       );
     } else {
-      // For job seeker - only show Posts and Followers in stats row
+      // Job seeker: social posts + following only
       return Container(
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         padding: const EdgeInsets.all(16),
@@ -831,10 +886,7 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 8,
-            ),
+            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8),
           ],
         ),
         child: Row(
@@ -849,31 +901,35 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
   }
 
   Widget _buildStatItem(int count, String label, int index) {
+    final bool tappable = index >= 0;
     return Expanded(
-      child: Column(
-        children: [
-          Text(
-            count.toString(),
-            style: const TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: Colors.blue,
+      child: GestureDetector(
+        onTap: tappable
+            ? () => setState(() => _selectedTabIndex = index)
+            : null,
+        child: Column(
+          children: [
+            Text(
+              count.toString(),
+              style: const TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                color: Colors.blue,
+              ),
             ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey.shade600,
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+              textAlign: TextAlign.center,
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-  // Company content section with tabs
+  // Company content section with scrollable tabs
   Widget _buildCompanyContentSection() {
     return Column(
       children: [
@@ -883,53 +939,54 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
         else if (_selectedTabIndex == 1)
           _buildJobPostsContent()
         else if (_selectedTabIndex == 2)
-            _buildBranchesContent()
-          else if (_selectedTabIndex == 3)
-              _buildFollowersContent(),
+          _buildBranchesContent()
+        else if (_selectedTabIndex == 3)
+          _buildFollowersContent()
+        else if (_selectedTabIndex == 4)
+          _buildFollowingContent(),
       ],
     );
   }
 
+  // Scrollable tab bar – Posts | Jobs | Branches | Followers | Following
   Widget _buildCompanyTabs() {
+    const tabs = ['Posts', 'Jobs', 'Branches', 'Followers', 'Following'];
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: [
-          _buildTabButton('Posts', 0),
-          _buildTabButton('Jobs', 1),
-          _buildTabButton('Branches', 2),
-          _buildTabButton('Followers', 3),
-        ],
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: List.generate(
+            tabs.length,
+            (i) => _buildTabButton(tabs[i], i),
+          ),
+        ),
       ),
     );
   }
 
   Widget _buildTabButton(String label, int index) {
     final isSelected = _selectedTabIndex == index;
-    return Expanded(
-      child: TextButton(
-        onPressed: () {
-          setState(() {
-            _selectedTabIndex = index;
-          });
-        },
-        style: TextButton.styleFrom(
-          foregroundColor: isSelected ? Colors.blue : Colors.grey,
-          backgroundColor: isSelected ? Colors.blue.shade50 : Colors.transparent,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-          ),
+    return TextButton(
+      onPressed: () {
+        setState(() {
+          _selectedTabIndex = index;
+        });
+      },
+      style: TextButton.styleFrom(
+        foregroundColor: isSelected ? Colors.blue : Colors.grey,
+        backgroundColor: isSelected ? Colors.blue.shade50 : Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
         ),
       ),
     );
@@ -940,7 +997,7 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Posts Section
+        // Posts Section (social posts only)
         _buildSectionHeader('Posts', Icons.post_add_outlined),
         _buildPostsContent(),
 
@@ -992,10 +1049,7 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
           const SizedBox(width: 8),
           Text(
             title,
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
         ],
       ),
@@ -1016,10 +1070,7 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 4,
-          ),
+          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4),
         ],
       ),
       child: Column(
@@ -1028,17 +1079,17 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
             leading: Icon(icon, color: Colors.blue),
             title: Text(
               title,
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-              ),
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             ),
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (itemCount > 0)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.blue.shade100,
                       borderRadius: BorderRadius.circular(12),
@@ -1115,12 +1166,10 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
                 _formatDateRange(exp['start_date'], exp['end_date']),
                 style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
               ),
-              if (exp['description'] != null && exp['description'].toString().isNotEmpty) ...[
+              if (exp['description'] != null &&
+                  exp['description'].toString().isNotEmpty) ...[
                 const SizedBox(height: 8),
-                Text(
-                  exp['description'],
-                  style: const TextStyle(fontSize: 13),
-                ),
+                Text(exp['description'], style: const TextStyle(fontSize: 13)),
               ],
             ],
           ),
@@ -1172,7 +1221,8 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
                 edu['qualification'] ?? 'Unknown Qualification',
                 style: TextStyle(color: Colors.grey.shade700, fontSize: 14),
               ),
-              if (edu['field_of_study'] != null && edu['field_of_study'].toString().isNotEmpty) ...[
+              if (edu['field_of_study'] != null &&
+                  edu['field_of_study'].toString().isNotEmpty) ...[
                 const SizedBox(height: 2),
                 Text(
                   edu['field_of_study'],
@@ -1184,12 +1234,10 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
                 _formatDateRange(edu['start_date'], edu['end_date']),
                 style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
               ),
-              if (edu['description'] != null && edu['description'].toString().isNotEmpty) ...[
+              if (edu['description'] != null &&
+                  edu['description'].toString().isNotEmpty) ...[
                 const SizedBox(height: 8),
-                Text(
-                  edu['description'],
-                  style: const TextStyle(fontSize: 13),
-                ),
+                Text(edu['description'], style: const TextStyle(fontSize: 13)),
               ],
             ],
           ),
@@ -1219,9 +1267,12 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
         children: _skills.map((skill) {
           final skillLevel = skill['skill_level'];
           Color levelColor = Colors.blue;
-          if (skillLevel == 'Beginner') levelColor = Colors.green;
-          else if (skillLevel == 'Intermediate') levelColor = Colors.orange;
-          else if (skillLevel == 'Advanced') levelColor = Colors.red;
+          if (skillLevel == 'Beginner')
+            levelColor = Colors.green;
+          else if (skillLevel == 'Intermediate')
+            levelColor = Colors.orange;
+          else if (skillLevel == 'Advanced')
+            levelColor = Colors.red;
 
           return Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -1253,10 +1304,7 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
                   const SizedBox(width: 6),
                   Text(
                     skillLevel,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: levelColor,
-                    ),
+                    style: TextStyle(fontSize: 11, color: levelColor),
                   ),
                 ],
               ],
@@ -1269,7 +1317,9 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
 
   String _formatDateRange(String? startDate, String? endDate) {
     final start = startDate != null ? _formatShortDate(startDate) : '';
-    final end = endDate != null && endDate.isNotEmpty ? _formatShortDate(endDate) : 'Present';
+    final end = endDate != null && endDate.isNotEmpty
+        ? _formatShortDate(endDate)
+        : 'Present';
     if (start.isEmpty) return end;
     return '$start - $end';
   }
@@ -1284,6 +1334,7 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
     }
   }
 
+  // Social posts (job_id IS NULL)
   Widget _buildPostsContent() {
     if (_recentPosts.isEmpty) {
       return Container(
@@ -1293,9 +1344,7 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
         ),
-        child: const Center(
-          child: Text('No posts yet'),
-        ),
+        child: const Center(child: Text('No posts yet')),
       );
     }
 
@@ -1316,10 +1365,7 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
             color: Colors.white,
             borderRadius: BorderRadius.circular(12),
             boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 4,
-              ),
+              BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4),
             ],
           ),
           child: Column(
@@ -1359,7 +1405,10 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.blue.shade50,
                       borderRadius: BorderRadius.circular(12),
@@ -1375,10 +1424,7 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
                 ],
               ),
               const SizedBox(height: 12),
-              Text(
-                post['content'] ?? '',
-                style: const TextStyle(fontSize: 14),
-              ),
+              Text(post['content'] ?? '', style: const TextStyle(fontSize: 14)),
               if (post['media_urls'] != null &&
                   (post['media_urls'] as List).isNotEmpty) ...[
                 const SizedBox(height: 8),
@@ -1439,9 +1485,7 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
         ),
-        child: const Center(
-          child: Text('No active job posts'),
-        ),
+        child: const Center(child: Text('No active job posts')),
       );
     }
 
@@ -1457,7 +1501,8 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
         final salaryMin = job['salary_min'];
         final salaryMax = job['salary_max'];
         if (salaryMin != null && salaryMax != null) {
-          salaryDisplay = 'RM ${_formatSalary(salaryMin)} - RM ${_formatSalary(salaryMax)}';
+          salaryDisplay =
+              'RM ${_formatSalary(salaryMin)} - RM ${_formatSalary(salaryMax)}';
         } else if (salaryMin != null) {
           salaryDisplay = 'From RM ${_formatSalary(salaryMin)}';
         } else if (salaryMax != null) {
@@ -1476,10 +1521,7 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
             color: Colors.white,
             borderRadius: BorderRadius.circular(12),
             boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 4,
-              ),
+              BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4),
             ],
           ),
           child: Column(
@@ -1496,25 +1538,27 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
               const SizedBox(height: 12),
               Row(
                 children: [
-                  Icon(Icons.location_on_outlined, size: 16, color: Colors.grey.shade600),
+                  Icon(
+                    Icons.location_on_outlined,
+                    size: 16,
+                    color: Colors.grey.shade600,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: Text(
-                      location,
-                      style: const TextStyle(fontSize: 13),
-                    ),
+                    child: Text(location, style: const TextStyle(fontSize: 13)),
                   ),
                 ],
               ),
               const SizedBox(height: 8),
               Row(
                 children: [
-                  Icon(Icons.work_outline, size: 16, color: Colors.grey.shade600),
-                  const SizedBox(width: 8),
-                  Text(
-                    jobType,
-                    style: const TextStyle(fontSize: 13),
+                  Icon(
+                    Icons.work_outline,
+                    size: 16,
+                    color: Colors.grey.shade600,
                   ),
+                  const SizedBox(width: 8),
+                  Text(jobType, style: const TextStyle(fontSize: 13)),
                 ],
               ),
               const SizedBox(height: 8),
@@ -1523,28 +1567,30 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
                   children: [
                     Icon(Icons.wifi, size: 16, color: Colors.grey.shade600),
                     const SizedBox(width: 8),
-                    const Text(
-                      'Remote',
-                      style: TextStyle(fontSize: 13),
-                    ),
+                    const Text('Remote', style: TextStyle(fontSize: 13)),
                   ],
                 ),
                 const SizedBox(height: 8),
               ],
               Row(
                 children: [
-                  Icon(Icons.trending_up, size: 16, color: Colors.grey.shade600),
-                  const SizedBox(width: 8),
-                  Text(
-                    experienceLevel,
-                    style: const TextStyle(fontSize: 13),
+                  Icon(
+                    Icons.trending_up,
+                    size: 16,
+                    color: Colors.grey.shade600,
                   ),
+                  const SizedBox(width: 8),
+                  Text(experienceLevel, style: const TextStyle(fontSize: 13)),
                 ],
               ),
               const SizedBox(height: 8),
               Row(
                 children: [
-                  Icon(Icons.attach_money, size: 16, color: Colors.green.shade700),
+                  Icon(
+                    Icons.attach_money,
+                    size: 16,
+                    color: Colors.green.shade700,
+                  ),
                   const SizedBox(width: 8),
                   Text(
                     salaryDisplay,
@@ -1559,7 +1605,11 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
               const SizedBox(height: 8),
               Row(
                 children: [
-                  Icon(Icons.access_time, size: 14, color: Colors.grey.shade500),
+                  Icon(
+                    Icons.access_time,
+                    size: 14,
+                    color: Colors.grey.shade500,
+                  ),
                   const SizedBox(width: 8),
                   Text(
                     'Posted ${_formatDate(job['created_at'])}',
@@ -1592,9 +1642,7 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
         ),
-        child: const Center(
-          child: Text('No branches found'),
-        ),
+        child: const Center(child: Text('No branches found')),
       );
     }
 
@@ -1611,12 +1659,11 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
           decoration: BoxDecoration(
             color: isHeadOffice ? Colors.blue.shade50 : Colors.white,
             borderRadius: BorderRadius.circular(12),
-            border: isHeadOffice ? Border.all(color: Colors.blue.shade200) : null,
+            border: isHeadOffice
+                ? Border.all(color: Colors.blue.shade200)
+                : null,
             boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 4,
-              ),
+              BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4),
             ],
           ),
           child: Column(
@@ -1637,7 +1684,10 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
                   ),
                   if (isHeadOffice)
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.blue,
                         borderRadius: BorderRadius.circular(12),
@@ -1655,79 +1705,20 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
               ),
               const SizedBox(height: 12),
               if (branch['address'] != null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Row(
-                    children: [
-                      Icon(Icons.location_on_outlined, size: 16, color: Colors.grey),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          branch['address'],
-                          style: const TextStyle(fontSize: 13),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                _branchRow(Icons.location_on_outlined, branch['address']),
               if (branch['city'] != null || branch['state'] != null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Row(
-                    children: [
-                      Icon(Icons.location_city, size: 16, color: Colors.grey),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          '${branch['city'] ?? ''}${branch['city'] != null && branch['state'] != null ? ', ' : ''}${branch['state'] ?? ''}',
-                          style: const TextStyle(fontSize: 13),
-                        ),
-                      ),
-                    ],
-                  ),
+                _branchRow(
+                  Icons.location_city,
+                  '${branch['city'] ?? ''}${branch['city'] != null && branch['state'] != null ? ', ' : ''}${branch['state'] ?? ''}',
                 ),
               if (branch['country'] != null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Row(
-                    children: [
-                      Icon(Icons.public, size: 16, color: Colors.grey),
-                      const SizedBox(width: 8),
-                      Text(
-                        branch['country'],
-                        style: const TextStyle(fontSize: 13),
-                      ),
-                    ],
-                  ),
-                ),
-              if (branch['phone'] != null && branch['phone'].toString().isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Row(
-                    children: [
-                      Icon(Icons.phone, size: 16, color: Colors.grey),
-                      const SizedBox(width: 8),
-                      Text(
-                        branch['phone'],
-                        style: const TextStyle(fontSize: 13),
-                      ),
-                    ],
-                  ),
-                ),
-              if (branch['email'] != null && branch['email'].toString().isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Row(
-                    children: [
-                      Icon(Icons.email, size: 16, color: Colors.grey),
-                      const SizedBox(width: 8),
-                      Text(
-                        branch['email'],
-                        style: const TextStyle(fontSize: 13),
-                      ),
-                    ],
-                  ),
-                ),
+                _branchRow(Icons.public, branch['country']),
+              if (branch['phone'] != null &&
+                  branch['phone'].toString().isNotEmpty)
+                _branchRow(Icons.phone, branch['phone']),
+              if (branch['email'] != null &&
+                  branch['email'].toString().isNotEmpty)
+                _branchRow(Icons.email, branch['email']),
             ],
           ),
         );
@@ -1735,8 +1726,47 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
     );
   }
 
+  Widget _branchRow(IconData icon, String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: Colors.grey),
+          const SizedBox(width: 8),
+          Expanded(child: Text(text, style: const TextStyle(fontSize: 13))),
+        ],
+      ),
+    );
+  }
+
+  // Followers list
   Widget _buildFollowersContent() {
-    if (_followers.isEmpty) {
+    return _buildUserList(
+      users: _followers,
+      emptyMessage: 'No followers yet',
+      emptySubMessage: "When someone follows this profile, they'll appear here",
+      subtitleLabel: 'Follower',
+    );
+  }
+
+  // Following list
+  Widget _buildFollowingContent() {
+    return _buildUserList(
+      users: _following,
+      emptyMessage: 'Not following anyone yet',
+      emptySubMessage: 'Companies and people followed will appear here',
+      subtitleLabel: 'Following',
+    );
+  }
+
+  // Shared user list UI for both followers and following tabs
+  Widget _buildUserList({
+    required List<Map<String, dynamic>> users,
+    required String emptyMessage,
+    required String emptySubMessage,
+    required String subtitleLabel,
+  }) {
+    if (users.isEmpty) {
       return Container(
         margin: const EdgeInsets.all(16),
         padding: const EdgeInsets.all(32),
@@ -1744,20 +1774,20 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
         ),
-        child: const Center(
+        child: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.people_outline, size: 48, color: Colors.grey),
-              SizedBox(height: 12),
+              const Icon(Icons.people_outline, size: 48, color: Colors.grey),
+              const SizedBox(height: 12),
               Text(
-                'No followers yet',
-                style: TextStyle(color: Colors.grey, fontSize: 14),
+                emptyMessage,
+                style: const TextStyle(color: Colors.grey, fontSize: 14),
               ),
-              SizedBox(height: 4),
+              const SizedBox(height: 4),
               Text(
-                'When someone follows this profile, they\'ll appear here',
-                style: TextStyle(color: Colors.grey, fontSize: 12),
+                emptySubMessage,
+                style: const TextStyle(color: Colors.grey, fontSize: 12),
                 textAlign: TextAlign.center,
               ),
             ],
@@ -1769,14 +1799,14 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
     return ListView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      itemCount: _followers.length,
+      itemCount: users.length,
       itemBuilder: (context, index) {
-        final followerData = _followers[index];
-        final user = followerData['users'] as Map<String, dynamic>?;
-
+        final userData = users[index];
+        final user = userData['users'] as Map<String, dynamic>?;
         if (user == null) return const SizedBox.shrink();
 
         final isOwnProfile = _currentUserId == user['user_id'];
+        final isCompanyUser = user['role'] == 'POSTER';
 
         return Container(
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -1785,22 +1815,25 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
             color: Colors.white,
             borderRadius: BorderRadius.circular(12),
             boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.02),
-                blurRadius: 4,
-              ),
+              BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 4),
             ],
           ),
           child: Row(
             children: [
-              CircleAvatar(
-                radius: 24,
-                backgroundImage: user['profile_image_url'] != null
-                    ? CachedNetworkImageProvider(user['profile_image_url'])
-                    : null,
-                child: user['profile_image_url'] == null
-                    ? Icon(Icons.person, size: 24, color: Colors.blue)
-                    : null,
+              // Avatar – tappable to view profile
+              GestureDetector(
+                onTap: isOwnProfile
+                    ? null
+                    : () => _navigateToUserProfile(user, isCompanyUser),
+                child: CircleAvatar(
+                  radius: 24,
+                  backgroundImage: user['profile_image_url'] != null
+                      ? CachedNetworkImageProvider(user['profile_image_url'])
+                      : null,
+                  child: user['profile_image_url'] == null
+                      ? Icon(Icons.person, size: 24, color: Colors.blue)
+                      : null,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -1817,10 +1850,14 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
                     const SizedBox(height: 2),
                     Row(
                       children: [
-                        Icon(Icons.person_outline, size: 12, color: Colors.grey.shade500),
+                        Icon(
+                          Icons.person_outline,
+                          size: 12,
+                          color: Colors.grey.shade500,
+                        ),
                         const SizedBox(width: 4),
                         Text(
-                          'Follower',
+                          subtitleLabel,
                           style: TextStyle(
                             fontSize: 11,
                             color: Colors.grey.shade500,
@@ -1833,31 +1870,16 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
               ),
               if (!isOwnProfile)
                 OutlinedButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => ViewProfilePage(
-                          userId: user['user_id'],
-                          companyId: null,
-                          name: user['fullname'],
-                          avatarUrl: user['profile_image_url'],
-                          isCompany: false,
-                          onFollowChanged: () {
-                            // Refresh current page when follow status changes
-                            _loadFollowers();
-                            _loadStats();
-                          },
-                        ),
-                      ),
-                    );
-                  },
+                  onPressed: () => _navigateToUserProfile(user, isCompanyUser),
                   style: OutlinedButton.styleFrom(
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(20),
                     ),
                     side: BorderSide(color: Colors.blue.shade200),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 6,
+                    ),
                   ),
                   child: const Text('View Profile'),
                 ),
@@ -1867,6 +1889,47 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
       },
     );
   }
+
+  // Navigate to another user's ViewProfilePage
+  void _navigateToUserProfile(
+    Map<String, dynamic> user,
+    bool isCompanyUser,
+  ) async {
+    String? targetCompanyId;
+    if (isCompanyUser) {
+      // Fetch company_id for this poster
+      try {
+        final company = await supabase
+            .from('company_profile')
+            .select('company_id')
+            .eq('user_id', user['user_id'])
+            .maybeSingle();
+        targetCompanyId = company?['company_id'];
+      } catch (e) {
+        debugPrint('Error fetching company for user: $e');
+      }
+    }
+
+    if (!mounted) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ViewProfilePage(
+          userId: user['user_id'],
+          companyId: targetCompanyId,
+          name: user['fullname'],
+          avatarUrl: user['profile_image_url'],
+          isCompany: isCompanyUser,
+          onFollowChanged: () {
+            _loadFollowers();
+            _loadFollowing();
+            _loadStats();
+          },
+        ),
+      ),
+    );
+  }
+
   String _formatDate(String? dateString) {
     if (dateString == null) return '';
     try {

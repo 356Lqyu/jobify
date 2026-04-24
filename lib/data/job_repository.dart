@@ -15,10 +15,6 @@ class JobRepository {
   final SupabaseClient _sb = Supabase.instance.client;
   String? get _uid => _sb.auth.currentUser?.id;
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // REFERENCE DATA (cached locally, fetched once per session)
-  // ══════════════════════════════════════════════════════════════════════════
-
   Future<List<Map<String, dynamic>>> fetchJobCategories() async {
     try {
       final rows = await _sb.from('job_category').select() as List<dynamic>;
@@ -55,7 +51,10 @@ class JobRepository {
     }
   }
 
-  Future<List<Map<String, dynamic>>> fetchCompanyBranches(String companyId, {bool forceRefresh = false}) async {
+  Future<List<Map<String, dynamic>>> fetchCompanyBranches(
+    String companyId, {
+    bool forceRefresh = false,
+  }) async {
     try {
       if (!forceRefresh) {
         final cached = await LocalDB.getCachedBranches(companyId);
@@ -95,10 +94,6 @@ class JobRepository {
     ]);
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // COMPANY PROFILE (needed for job creation)
-  // ══════════════════════════════════════════════════════════════════════════
-
   Future<Map<String, dynamic>?> fetchMyCompanyProfile({String? userId}) async {
     final uid = userId ?? _uid;
     if (uid == null) return null;
@@ -114,28 +109,26 @@ class JobRepository {
     }
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // JOB POSTS – EMPLOYER MANAGEMENT
-  // ══════════════════════════════════════════════════════════════════════════
-
+  // EMPLOYER JOB MANAGEMENT
   Future<List<Map<String, dynamic>>> fetchMyJobPosts({String? userId}) async {
     final uid = userId ?? _uid;
     if (uid == null) return [];
     try {
-      final rows = await _sb
-          .from('job_post')
-          .select('''
+      final rows =
+          await _sb
+                  .from('job_post')
+                  .select('''
           *,
           job_category_id(job_category_id, name),
           job_type_id(job_type_id, name),
           experience_level_id(experience_level_id, name)
         ''')
-          .eq('created_by', uid)
-          .order('created_at', ascending: false) as List<dynamic>;
+                  .eq('created_by', uid)
+                  .order('created_at', ascending: false)
+              as List<dynamic>;
       return rows.cast<Map<String, dynamic>>();
     } catch (e) {
       debugPrint('fetchMyJobPosts error: $e');
-      // Fallback to cached flat maps
       return await LocalDB.getCachedJobMapsByUser(uid);
     }
   }
@@ -159,15 +152,15 @@ class JobRepository {
     }
   }
 
-  /// Create a job post and optionally auto-create a social feed post
-  Future<String?> createJobPost(Map<String, dynamic> data,
-      {bool autoCreateSocialPost = true}) async {
+  Future<String?> createJobPost(
+    Map<String, dynamic> data, {
+    bool autoCreateSocialPost = true,
+  }) async {
     try {
       final resp = await _sb.from('job_post').insert(data).select().single();
       final jobId = resp['job_id'] as String;
 
       if (autoCreateSocialPost) {
-        // Get company name for the social post
         final company = await fetchMyCompanyProfile(userId: data['created_by']);
         final companyName = company?['company_name'] ?? 'the company';
         final jobTitle = data['job_title'] ?? 'New Position';
@@ -209,12 +202,13 @@ class JobRepository {
   }
 
   Future<void> incrementApplicationCount(String jobId) async {
-    await _sb.rpc('increment_application_count', params: {'job_id_param': jobId});
+    await _sb.rpc(
+      'increment_application_count',
+      params: {'job_id_param': jobId},
+    );
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // JOB POSTS – DISCOVERY / LISTING (cached subset)
-  // ══════════════════════════════════════════════════════════════════════════
+  // ─── JOB POSTS – DISCOVERY / LISTING (SERVER‑SIDE SEARCH & FILTER) ───────
 
   Future<List<JobPost>> fetchJobs({
     String? keyword,
@@ -223,6 +217,7 @@ class JobRepository {
     String? location,
     double? salaryMin,
     bool remoteOnly = false,
+    int? daysAgo,
     int limit = 30,
     int offset = 0,
   }) async {
@@ -233,23 +228,55 @@ class JobRepository {
         vacancy_count, application_deadline, status,
         view_count, application_count, created_at,
         image_urls, video_url,
-        company_profile!job_post_company_id_fkey ( company_name, logo_url, industry ),
-        job_type!job_post_job_type_id_fkey ( name ),
-        job_category!job_post_job_category_id_fkey ( name ),
-        experience_level!job_post_experience_level_id_fkey ( name )
-      ''').eq('status', 'active');
+        company_profile!inner ( company_name, logo_url, industry ),
+        job_type!inner ( name ),
+        job_category!inner ( name ),
+        experience_level!inner ( name )
+      ''');
 
-      if (remoteOnly) query = query.eq('remote_option', true);
-      if (location != null && location.isNotEmpty) {
-        query = query.ilike('location', '%$location%');
+      // Always only active jobs
+      query = query.eq('status', 'active');
+
+      // ── Keyword search ────────────
+      if (keyword != null && keyword.trim().isNotEmpty) {
+        final kw = keyword.trim();
+        query = query.or('job_title.ilike.%$kw%,location.ilike.%$kw%');
       }
+
+      // ── Remote only ───────────────────────────────────────────────────
+      if (remoteOnly) {
+        query = query.eq('remote_option', true);
+      }
+
+      // ── Location filter ───────────────────────────────────────────────
+      if (location != null && location.trim().isNotEmpty) {
+        query = query.ilike('location', '%${location.trim()}%');
+      }
+
+      // ── Salary min ────────────────────────────────────────────────────
       if (salaryMin != null) {
         query = query.gte('salary_max', salaryMin);
       }
 
-      final rows = await query
-          .order('created_at', ascending: false)
-          .range(offset, offset + limit - 1) as List<dynamic>;
+      // ── Job type & Experience (exact matches) ─────────────────────────
+      if (jobType != null && jobType != 'All') {
+        query = query.eq('job_type.name', jobType);
+      }
+      if (experienceLevel != null && experienceLevel != 'All') {
+        query = query.eq('experience_level.name', experienceLevel);
+      }
+
+      // ── Post Release Date ─────────────────────────────────────────────
+      if (daysAgo != null && daysAgo > 0) {
+        final pastDate = DateTime.now().subtract(Duration(days: daysAgo));
+        query = query.gte('created_at', pastDate.toIso8601String());
+      }
+
+      final rows =
+          await query
+                  .order('created_at', ascending: false)
+                  .range(offset, offset + limit - 1)
+              as List<dynamic>;
 
       final savedIds = _uid != null
           ? (await LocalDB.getSavedJobIds(_uid!)).toSet()
@@ -259,31 +286,29 @@ class JobRepository {
       for (final row in rows) {
         final r = row as Map<String, dynamic>;
         final compRow = r['company_profile'] as Map<String, dynamic>?;
-        final jt = (r['job_type'] as Map<String, dynamic>?)?['name'] as String? ?? '';
-        final jc = (r['job_category'] as Map<String, dynamic>?)?['name'] as String? ?? '';
-        final el = (r['experience_level'] as Map<String, dynamic>?)?['name'] as String? ?? '';
-
-        // Client‑side filters
-        if (jobType != null && jobType != 'All' && jt != jobType) continue;
-        if (experienceLevel != null && experienceLevel != 'All' && el != experienceLevel) continue;
-        if (keyword != null && keyword.isNotEmpty) {
-          final q = keyword.toLowerCase();
-          final title = (r['job_title'] as String).toLowerCase();
-          final cname = (compRow?['company_name'] as String? ?? '').toLowerCase();
-          if (!title.contains(q) && !cname.contains(q)) continue;
-        }
+        final jt =
+            (r['job_type'] as Map<String, dynamic>?)?['name'] as String? ?? '';
+        final jc =
+            (r['job_category'] as Map<String, dynamic>?)?['name'] as String? ??
+            '';
+        final el =
+            (r['experience_level'] as Map<String, dynamic>?)?['name']
+                as String? ??
+            '';
 
         final jid = r['job_id'] as String;
-        jobs.add(JobPost.fromSupabase(
-          r,
-          companyName: compRow?['company_name'] as String? ?? '',
-          companyLogoUrl: compRow?['logo_url'] as String?,
-          companyIndustry: compRow?['industry'] as String?,
-          jobType: jt,
-          jobCategory: jc,
-          experienceLevel: el,
-          isSaved: savedIds.contains(jid),
-        ));
+        jobs.add(
+          JobPost.fromSupabase(
+            r,
+            companyName: compRow?['company_name'] as String? ?? '',
+            companyLogoUrl: compRow?['logo_url'] as String?,
+            companyIndustry: compRow?['industry'] as String?,
+            jobType: jt,
+            jobCategory: jc,
+            experienceLevel: el,
+            isSaved: savedIds.contains(jid),
+          ),
+        );
       }
 
       await LocalDB.insertJobs(jobs);
@@ -291,8 +316,8 @@ class JobRepository {
     } catch (e, st) {
       debugPrint('fetchJobs error: $e\n$st');
       return LocalDB.getCachedJobs(
-        jobType: jobType == 'All' ? null : jobType,
-        experienceLevel: experienceLevel == 'All' ? null : experienceLevel,
+        jobType: (jobType == 'All') ? null : jobType,
+        experienceLevel: (experienceLevel == 'All') ? null : experienceLevel,
         salaryMin: salaryMin,
         keyword: keyword,
         remoteOnly: remoteOnly,
@@ -302,9 +327,13 @@ class JobRepository {
     }
   }
 
+  // ─── FETCH SINGLE JOB BY ID ──────────────────────────────────────────────
+
   Future<JobPost?> fetchJobById(String jobId) async {
     try {
-      final r = await _sb.from('job_post').select('''
+      final r = await _sb
+          .from('job_post')
+          .select('''
         job_id, company_id, created_by, job_title, description,
         location, remote_option, salary_min, salary_max,
         vacancy_count, application_deadline, status,
@@ -314,19 +343,35 @@ class JobRepository {
         job_type!job_post_job_type_id_fkey ( name ),
         job_category!job_post_job_category_id_fkey ( name ),
         experience_level!job_post_experience_level_id_fkey ( name )
-      ''').eq('job_id', jobId).maybeSingle();
+      ''')
+          .eq('job_id', jobId)
+          .maybeSingle();
 
       if (r == null) return null;
 
       final compRow = r['company_profile'] as Map<String, dynamic>?;
+
+      bool isSaved = false;
+      if (_uid != null) {
+        final savedIds = await LocalDB.getSavedJobIds(_uid!);
+        isSaved = savedIds.contains(jobId);
+      }
+
       return JobPost.fromSupabase(
         r,
         companyName: compRow?['company_name'] as String? ?? '',
         companyLogoUrl: compRow?['logo_url'] as String?,
         companyIndustry: compRow?['industry'] as String?,
-        jobType: (r['job_type'] as Map<String, dynamic>?)?['name'] as String? ?? '',
-        jobCategory: (r['job_category'] as Map<String, dynamic>?)?['name'] as String? ?? '',
-        experienceLevel: (r['experience_level'] as Map<String, dynamic>?)?['name'] as String? ?? '',
+        jobType:
+            (r['job_type'] as Map<String, dynamic>?)?['name'] as String? ?? '',
+        jobCategory:
+            (r['job_category'] as Map<String, dynamic>?)?['name'] as String? ??
+            '',
+        experienceLevel:
+            (r['experience_level'] as Map<String, dynamic>?)?['name']
+                as String? ??
+            '',
+        isSaved: isSaved,
       );
     } catch (e) {
       debugPrint('fetchJobById error: $e');
@@ -334,20 +379,23 @@ class JobRepository {
     }
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // SAVE JOB (remote post_saved table)
-  // ══════════════════════════════════════════════════════════════════════════
+  // ─── SAVE JOB ────────────────────────────────────────────────────────────
+
   Future<bool> toggleSaveJob(String jobId, bool currentlySaved) async {
     if (_uid == null) return currentlySaved;
 
     final postId = await _findPostIdForJob(jobId);
     if (postId == null) {
+      debugPrint('toggleSaveJob: No social post found for job $jobId');
       return currentlySaved;
     }
 
     final feedRepo = FeedRepository();
-    final newSaved = await feedRepo.toggleSavePost(postId, currentlySaved);
-
+    final newSaved = await feedRepo.toggleSavePost(
+      postId,
+      currentlySaved,
+      jobId: jobId,
+    );
     await LocalDB.setJobSaved(jobId, newSaved, _uid!);
 
     return newSaved;

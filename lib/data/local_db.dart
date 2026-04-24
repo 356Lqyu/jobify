@@ -262,7 +262,6 @@ class LocalDB {
   }
 
   static Future<void> _onUpgrade(Database db, int oldV, int newV) async {
-    // Check if we need to add the cached_job_applications table
     if (oldV < 5) {
       try {
         await db.execute('''
@@ -288,7 +287,6 @@ class LocalDB {
           )
         ''');
       } catch (e) {
-        // Table might already exist, ignore error
         print('Error creating cached_job_applications during upgrade: $e');
       }
     }
@@ -394,7 +392,6 @@ class LocalDB {
     await batch.commit(noResult: true);
   }
 
-  /// Insert a list of flat job maps directly into the cache (full replace for the user)
   static Future<void> insertJobMaps(List<Map<String, dynamic>> jobs) async {
     if (jobs.isEmpty) return;
     final dbInstance = await LocalDB.db;
@@ -454,10 +451,12 @@ class LocalDB {
       conditions.add('job_type = ?');
       args.add(jobType);
     }
+
     if (experienceLevel != null && experienceLevel != 'All') {
       conditions.add('experience_level = ?');
       args.add(experienceLevel);
     }
+
     if (salaryMin != null) {
       conditions.add('(salary_max IS NOT NULL AND salary_max >= ?)');
       args.add(salaryMin);
@@ -466,8 +465,8 @@ class LocalDB {
       conditions.add('remote_option = 1');
     }
     if (keyword != null && keyword.isNotEmpty) {
-      conditions.add('(job_title LIKE ? OR company_name LIKE ?)');
-      args.addAll(['%$keyword%', '%$keyword%']);
+      conditions.add('(job_title LIKE ? OR company_name LIKE ? OR location LIKE ?)');
+      args.addAll(['%$keyword%', '%$keyword%', '%$keyword%']);
     }
 
     final rows = await d.rawQuery(
@@ -488,7 +487,6 @@ class LocalDB {
     return rows.map(JobPost.fromLocalDb).toList();
   }
 
-  /// Get a single cached job as a Map (no JobPost model needed)
   static Future<Map<String, dynamic>?> getCachedJobMapById(String jobId) async {
     final d = await db;
     final rows = await d.query(
@@ -526,7 +524,6 @@ class LocalDB {
     };
   }
 
-  /// Get cached job posts for a specific user as Maps (no JobPost model)
   static Future<List<Map<String, dynamic>>> getCachedJobMapsByUser(String userId) async {
     final d = await db;
     final rows = await d.query(
@@ -728,8 +725,7 @@ class LocalDB {
   // ══════════════════════════════════════════════════════════════════════════
   // USER PROFILES
   // ══════════════════════════════════════════════════════════════════════════
-  // cache invalidation trigger when user update profile (clearUserCache / logout / TTL expire(5 minutes))
-  static const int _userCacheTTLMinutes = 5; // Cache valid for 5 minutes
+  static const int _userCacheTTLMinutes = 5;
 
   static Future<void> cacheUser(Users user) async {
     final db = await LocalDB.db;
@@ -821,7 +817,6 @@ class LocalDB {
 
   static Future<void> cacheSkills(String userId, List<Map<String, dynamic>> skills) async {
     final db = await LocalDB.db;
-    // Delete old skills for this user first
     await db.delete('skills', where: 'user_id = ?', whereArgs: [userId]);
 
     final batch = db.batch();

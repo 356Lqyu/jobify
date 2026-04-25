@@ -85,14 +85,14 @@ class _ApplicantListPageState extends State<ApplicantListPage>
           widget.jobTitle,
           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white),
         ),
-        backgroundColor: const Color(0xFF2563EB),
+        backgroundColor: Colors.blue,
         elevation: 0,
         foregroundColor: Colors.white,
         automaticallyImplyLeading: true,
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(50),
           child: Container(
-            color: const Color(0xFF2563EB),
+            color: Colors.blue,
             child: Column(
               children: [
                 Container(
@@ -103,7 +103,7 @@ class _ApplicantListPageState extends State<ApplicantListPage>
                       const SizedBox(width: 8),
                       _buildStatusTab('Accepted', acceptedCount, 1, Colors.green),
                       const SizedBox(width: 8),
-                      _buildStatusTab('Rejected', rejectedCount, 2, Colors.red),
+                      _buildStatusTab('Rejected', rejectedCount, 2, const Color(0xFFFF1100)),
                     ],
                   ),
                 ),
@@ -184,7 +184,7 @@ class _ApplicantListPageState extends State<ApplicantListPage>
       case 1:
         return Colors.green;
       case 2:
-        return Colors.red;
+        return const Color(0xFFFF1100);
       default:
         return Colors.orange;
     }
@@ -322,7 +322,7 @@ class _ApplicantCard extends StatelessWidget {
       case 'accepted':
         return Color(0xFF00F109);
       case 'rejected':
-        return Colors.red;
+        return const Color(0xFFFF1100);
       default:
         return Colors.grey;
     }
@@ -532,7 +532,7 @@ class _ApplicantCard extends StatelessWidget {
                             Text(
                               'View Resume',
                               style: TextStyle(
-                                color: const Color(0xFF2563EB),
+                                color: Colors.blue,
                                 fontSize: 13,
                                 fontWeight: FontWeight.w500,
                               ),
@@ -541,7 +541,7 @@ class _ApplicantCard extends StatelessWidget {
                             const Icon(
                               Icons.open_in_new,
                               size: 14,
-                              color: Color(0xFF2563EB),
+                              color: Colors.blue,
                             ),
                           ],
                         ),
@@ -555,7 +555,7 @@ class _ApplicantCard extends StatelessWidget {
                       Text(
                         'View Details',
                         style: TextStyle(
-                          color: const Color(0xFF2563EB),
+                          color: Colors.blue,
                           fontSize: 13,
                           fontWeight: FontWeight.w500,
                         ),

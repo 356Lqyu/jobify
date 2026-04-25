@@ -336,3 +336,146 @@ class _ResumeManagementPageState extends State<ResumeManagementPage> {
     }
   }
 }
+
+// Resume Preview Dialog - Reusable component
+class ResumePreviewDialog extends StatelessWidget {
+  final String resumeUrl;
+  final String fileName;
+
+  const ResumePreviewDialog({
+    super.key,
+    required this.resumeUrl,
+    required this.fileName,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Container(
+        width: MediaQuery.of(context).size.width * 0.9,
+        height: MediaQuery.of(context).size.height * 0.7,
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    fileName,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+            const Divider(),
+            const SizedBox(height: 8),
+            Expanded(
+              child: FutureBuilder(
+                future: _downloadResume(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  if (snapshot.hasError) {
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.error_outline, size: 64, color: Colors.red.shade400),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'Failed to load resume',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            snapshot.error.toString(),
+                            style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+                  if (snapshot.hasData) {
+                    return Container(
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.picture_as_pdf,
+                            size: 80,
+                            color: Colors.red.shade400,
+                          ),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'PDF Ready to View',
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            fileName,
+                            style: TextStyle(color: Colors.white, fontSize: 12),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 24),
+                          ElevatedButton.icon(
+                            onPressed: () => _openFullScreen(context, snapshot.data!),
+                            icon: const Icon(Icons.open_in_new),
+                            label: const Text('Open Full Screen'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF2563EB),
+                              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+                  return const SizedBox.shrink();
+                },
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<File> _downloadResume() async {
+    final cleanUrl = resumeUrl.trim();
+    final response = await http.get(Uri.parse(cleanUrl));
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to download resume (HTTP ${response.statusCode})');
+    }
+
+    final tempDir = await getTemporaryDirectory();
+    final file = File('${tempDir.path}/$fileName');
+    await file.writeAsBytes(response.bodyBytes);
+    return file;
+  }
+
+  Future<void> _openFullScreen(BuildContext context, File file) async {
+    await OpenFilex.open(file.path);
+  }
+}

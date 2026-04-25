@@ -248,41 +248,41 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
           children: [
             // Handle bar
             Container(
-              margin: const EdgeInsets.only(top: 12),
+              margin: const EdgeInsets.only(top: 8),
               width: 40,
-              height: 4,
+              height: 3,
               decoration: BoxDecoration(
                 color: Colors.grey.shade300,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             // Title
             const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20),
+              padding: EdgeInsets.symmetric(horizontal: 16),
               child: Text(
                 'Profile Visibility',
                 style: TextStyle(
-                  fontSize: 20,
+                  fontSize: 18,
                   fontWeight: FontWeight.bold,
                 ),
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 4),
             const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20),
+              padding: EdgeInsets.symmetric(horizontal: 16),
               child: Text(
                 'Choose who can view your profile',
                 style: TextStyle(
-                  fontSize: 14,
+                  fontSize: 12,
                   color: Colors.grey,
                 ),
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
             // Options
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Column(
                 children: [
                   // Public Option
@@ -299,7 +299,7 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
                       if (mounted) Navigator.pop(context);
                     },
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 8),
                   // Employers Only Option
                   _buildVisibilityCard(
                     context: context,
@@ -314,7 +314,7 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
                       if (mounted) Navigator.pop(context);
                     },
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 8),
                   // Hidden Option
                   _buildVisibilityCard(
                     context: context,
@@ -332,7 +332,7 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
                 ],
               ),
             ),
-            const SizedBox(height: 34),
+            const SizedBox(height: 20),
           ],
         ),
       ),
@@ -355,32 +355,32 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: isSelected ? color.withOpacity(0.1) : Colors.grey.shade50,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isSelected ? color : Colors.grey.shade200,
-            width: isSelected ? 2 : 1,
+            width: isSelected ? 1.5 : 1,
           ),
         ),
         child: Row(
           children: [
             // Icon Container
             Container(
-              width: 56,
-              height: 56,
+              width: 44,
+              height: 44,
               decoration: BoxDecoration(
                 color: isSelected ? color : Colors.grey.shade200,
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
                 icon,
-                size: 28,
+                size: 25,
                 color: isSelected ? Colors.white : Colors.grey.shade600,
               ),
             ),
-            const SizedBox(width: 16),
+            const SizedBox(width: 12),
             // Text Content
             Expanded(
               child: Column(
@@ -398,14 +398,16 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 2),
                   Text(
                     description,
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: 14,
                       color: Colors.grey.shade600,
                       height: 1.3,
                     ),
+                    maxLines: 2, // Limit to 2 lines
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),

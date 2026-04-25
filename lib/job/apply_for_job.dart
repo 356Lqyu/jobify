@@ -7,178 +7,6 @@ import 'package:http/http.dart' as http;
 import 'package:jobify/data/applicantion_respository.dart';
 import 'resume_management_page.dart';
 
-// Resume Preview Dialog
-class ResumePreviewDialog extends StatefulWidget {
-  final String resumeUrl;
-  final String fileName;
-
-  const ResumePreviewDialog({
-    super.key,
-    required this.resumeUrl,
-    required this.fileName,
-  });
-
-  @override
-  State<ResumePreviewDialog> createState() => _ResumePreviewDialogState();
-}
-
-class _ResumePreviewDialogState extends State<ResumePreviewDialog> {
-  bool _isLoading = true;
-  File? _pdfFile;
-  String? _errorMessage;
-
-  @override
-  void initState() {
-    super.initState();
-    _downloadResume();
-  }
-
-  Future<void> _downloadResume() async {
-    try {
-      final cleanUrl = widget.resumeUrl.trim();
-      final response = await http.get(Uri.parse(cleanUrl));
-      if (response.statusCode == 200) {
-        final tempDir = await getTemporaryDirectory();
-        final file = File('${tempDir.path}/${widget.fileName}');
-        await file.writeAsBytes(response.bodyBytes);
-        setState(() {
-          _pdfFile = file;
-          _isLoading = false;
-        });
-      } else {
-        throw Exception('HTTP ${response.statusCode}: Failed to download');
-      }
-    } catch (e) {
-      debugPrint('Error downloading resume: $e');
-      setState(() {
-        _errorMessage = e.toString();
-        _isLoading = false;
-      });
-    }
-  }
-
-  Future<void> _openFullScreen() async {
-    if (_pdfFile != null) {
-      await OpenFilex.open(_pdfFile!.path);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      child: Container(
-        width: MediaQuery.of(context).size.width * 0.9,
-        height: MediaQuery.of(context).size.height * 0.7,
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Text(
-                    widget.fileName,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                      color: Color(0xFF1E293B),
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close),
-                  onPressed: () => Navigator.pop(context),
-                ),
-              ],
-            ),
-            const Divider(),
-            const SizedBox(height: 8),
-            if (_isLoading)
-              const Expanded(
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else if (_errorMessage != null)
-              Expanded(
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.error_outline, size: 64, color: Colors.red.shade400),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Failed to load resume',
-                        style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red.shade700),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        _errorMessage!,
-                        style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ),
-                ),
-              )
-            else if (_pdfFile != null)
-                Expanded(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.description_outlined,
-                            size: 80,
-                            color: Colors.blue.shade400,
-                          ),
-                          const SizedBox(height: 16),
-                          const Text(
-                            'PDF Ready to View',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Color(0xFF1E293B)),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            widget.fileName,
-                            style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 24),
-                          ElevatedButton.icon(
-                            onPressed: _openFullScreen,
-                            icon: const Icon(Icons.open_in_new),
-                            label: const Text('Open Full Screen'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF2563EB),
-                              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                )
-              else
-                const Expanded(
-                  child: Center(
-                    child: Text('Failed to load resume'),
-                  ),
-                ),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class ApplyForJobPage extends StatefulWidget {
   final Map<String, dynamic> job;
   final String userId;
@@ -443,7 +271,7 @@ class _ApplyForJobPageState extends State<ApplyForJobPage> {
         backgroundColor: const Color(0xFFF8FAFC),
         appBar: AppBar(
           title: const Text('Apply for Job'),
-          backgroundColor: Colors.blue.shade700,
+          backgroundColor: Colors.blue,
           elevation: 0,
           foregroundColor: Colors.white,
           automaticallyImplyLeading: true,
@@ -483,7 +311,7 @@ class _ApplyForJobPageState extends State<ApplyForJobPage> {
                   style: TextStyle(color: Colors.white),
                 ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue.shade700,
+                  backgroundColor: Colors.blue,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                   shape: RoundedRectangleBorder(
@@ -984,5 +812,179 @@ class _ApplyForJobPageState extends State<ApplyForJobPage> {
     } catch (e) {
       return 'Unknown';
     }
+  }
+}
+
+// Resume Preview Dialog
+class ResumePreviewDialog extends StatefulWidget {
+  final String resumeUrl;
+  final String fileName;
+
+  const ResumePreviewDialog({
+    super.key,
+    required this.resumeUrl,
+    required this.fileName,
+  });
+
+  @override
+  State<ResumePreviewDialog> createState() => _ResumePreviewDialogState();
+}
+
+class _ResumePreviewDialogState extends State<ResumePreviewDialog> {
+  bool _isLoading = true;
+  File? _pdfFile;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _downloadResume();
+  }
+
+  Future<void> _downloadResume() async {
+    try {
+      final cleanUrl = widget.resumeUrl.trim();
+      final response = await http.get(Uri.parse(cleanUrl));
+      if (response.statusCode == 200) {
+        final tempDir = await getTemporaryDirectory();
+        final file = File('${tempDir.path}/${widget.fileName}');
+        await file.writeAsBytes(response.bodyBytes);
+        setState(() {
+          _pdfFile = file;
+          _isLoading = false;
+        });
+      } else {
+        throw Exception('HTTP ${response.statusCode}: Failed to download');
+      }
+    } catch (e) {
+      debugPrint('Error downloading resume: $e');
+      setState(() {
+        _errorMessage = e.toString();
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _openFullScreen() async {
+    if (_pdfFile != null) {
+      await OpenFilex.open(_pdfFile!.path);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      child: Container(
+        width: MediaQuery.of(context).size.width * 0.9,
+        height: MediaQuery.of(context).size.height * 0.7,
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    widget.fileName,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: Color(0xFF1E293B),
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+            const Divider(),
+            const SizedBox(height: 8),
+            if (_isLoading)
+              const Expanded(
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (_errorMessage != null)
+              Expanded(
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.error_outline, size: 64, color: Colors.red.shade400),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Failed to load resume',
+                        style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red.shade700),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _errorMessage!,
+                        style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else if (_pdfFile != null)
+                Expanded(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.picture_as_pdf,
+                            size: 80,
+                            color: Colors.red.shade400,
+                          ),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'PDF Ready to View',
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Color(0xFF1E293B)),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            widget.fileName,
+                            style: TextStyle(color: Colors.white, fontSize: 12),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 24),
+                          ElevatedButton.icon(
+                            onPressed: _openFullScreen,
+                            icon: const Icon(Icons.open_in_new),
+                            label: const Text('Open Full Screen'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF2563EB),
+                              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                )
+              else
+                const Expanded(
+                  child: Center(
+                    child: Text('Failed to load resume'),
+                  ),
+                ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
   }
 }

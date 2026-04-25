@@ -34,7 +34,7 @@ class _SocialPostBottomSheetState extends State<SocialPostBottomSheet> {
 
   PostType _selectedType  = PostType.post;
   final List<String> _hashtags  = [];
-  final List<File>   _imageFiles = [];   // local file previews
+  final List<File>   _imageFiles = [];
   bool _isPosting = false;
 
   static const _allowedTypes = [
@@ -48,7 +48,7 @@ class _SocialPostBottomSheetState extends State<SocialPostBottomSheet> {
     super.dispose();
   }
 
-  // ── Image picker ──────────────────────────────────────────────────────────
+  // Image picker
 
   Future<void> _pickImages() async {
     final List<XFile> picked = await _picker.pickMultiImage(
@@ -82,7 +82,7 @@ class _SocialPostBottomSheetState extends State<SocialPostBottomSheet> {
     }
   }
 
-  // ── Hashtag helpers ───────────────────────────────────────────────────────
+  // Hashtag helpers
 
   void _addHashtag() {
     final tag = _hashtagCtrl.text.trim().replaceAll('#', '');
@@ -104,8 +104,7 @@ class _SocialPostBottomSheetState extends State<SocialPostBottomSheet> {
     }
   }
 
-  // ── Submit ────────────────────────────────────────────────────────────────
-
+ //Submit
   Future<void> _submit() async {
     final content = _contentCtrl.text.trim();
     if (content.isEmpty) {
@@ -127,7 +126,7 @@ class _SocialPostBottomSheetState extends State<SocialPostBottomSheet> {
         final fileName = 'posts/${widget.userId}_${_uuid.v4()}.$ext';
 
         final url = await repo.uploadImage(
-          bucket:    'post-media',
+          bucket:    'post_media',
           fileName:  fileName,
           fileBytes: bytes,
         );
@@ -172,8 +171,6 @@ class _SocialPostBottomSheetState extends State<SocialPostBottomSheet> {
     }
   }
 
-  // ── Build ─────────────────────────────────────────────────────────────────
-
   @override
   Widget build(BuildContext context) {
     final bottomPad = MediaQuery.of(context).viewInsets.bottom;
@@ -190,7 +187,6 @@ class _SocialPostBottomSheetState extends State<SocialPostBottomSheet> {
         ),
         child: Column(
           children: [
-            // ── Handle & header ──────────────────────────────────────────
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
               child: Column(
@@ -232,7 +228,6 @@ class _SocialPostBottomSheetState extends State<SocialPostBottomSheet> {
             ),
             const Divider(height: 16),
 
-            // ── Scrollable body ──────────────────────────────────────────
             Expanded(
               child: ListView(
                 controller: scrollCtrl,
@@ -256,7 +251,6 @@ class _SocialPostBottomSheetState extends State<SocialPostBottomSheet> {
                   ),
                   const SizedBox(height: 14),
 
-                  // ── Post type chips ──────────────────────────────────
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: Row(
@@ -296,7 +290,6 @@ class _SocialPostBottomSheetState extends State<SocialPostBottomSheet> {
                   ),
                   const SizedBox(height: 14),
 
-                  // ── Content input ────────────────────────────────────
                   TextField(
                     controller: _contentCtrl,
                     maxLines: 6,
@@ -395,7 +388,7 @@ class _SocialPostBottomSheetState extends State<SocialPostBottomSheet> {
                   ],
                   const SizedBox(height: 16),
 
-                  // ── Image picker area ────────────────────────────────
+                  // Image picker area
                   GestureDetector(
                     onTap: _imageFiles.length < 4 ? _pickImages : null,
                     child: Container(
@@ -495,7 +488,6 @@ class _SocialPostBottomSheetState extends State<SocialPostBottomSheet> {
 // ─────────────────────────────────────────────────────────────────────────────
 // SHARED AVATAR WIDGET
 // ─────────────────────────────────────────────────────────────────────────────
-
 class _Avatar extends StatelessWidget {
   final String name;
   final String? url;

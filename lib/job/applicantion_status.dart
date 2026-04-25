@@ -1,4 +1,3 @@
-// lib/job/applicantion_status.dart
 import 'package:flutter/material.dart';
 
 class ApplicationStatusTimeline extends StatelessWidget {

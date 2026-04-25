@@ -230,6 +230,7 @@ class _LoginState extends State<Login> {
     }
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {

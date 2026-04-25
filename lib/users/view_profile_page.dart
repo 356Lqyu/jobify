@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:jobify/users/users.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:jobify/data/user_repository.dart';
+import '../discovery/job_details.dart';
+import '../job_post/job_detail_employer.dart';
+import '../social/post_feed_setting.dart';
+import '../social/social_post_details.dart';
 
 class ViewProfilePage extends StatefulWidget {
   final String userId;
@@ -18,9 +23,8 @@ class ViewProfilePage extends StatefulWidget {
     this.name,
     this.avatarUrl,
     required this.isCompany,
-    this.onFollowChanged,  // Add this
+    this.onFollowChanged,
   });
-
 
   @override
   State<ViewProfilePage> createState() => _ViewProfilePageState();
@@ -33,8 +37,13 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
   bool _isLoading = true;
   bool _isFollowing = false;
 
-  // Selected tab for content section (for company view)
-  int _selectedTabIndex = 0; // 0: Posts, 1: Jobs, 2: Branches, 3: Followers
+  String _profileVisibility = 'public';
+  bool _isLoadingVisibility = false;
+
+  // Track which section is selected
+  // For company: 0: Posts, 1: Jobs, 2: Branches, 3: Followers, 4: Following
+  // For job seeker: 0: Posts, 1: Following
+  int _selectedSection = 0;
 
   // For job seeker - expanded sections
   bool _showExperience = true;
@@ -47,6 +56,8 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
   String? _bio;
   String? _profileImageUrl;
   String? _phone;
+  String? _dateOfBirth;
+  String? _gender;
 
   // Company data
   String? _companyName;
@@ -72,6 +83,7 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
   List<Map<String, dynamic>> _jobPosts = [];
   List<Map<String, dynamic>> _branches = [];
   List<Map<String, dynamic>> _followers = [];
+  List<Map<String, dynamic>> _following = [];
   List<Map<String, dynamic>> _skills = [];
   List<Map<String, dynamic>> _education = [];
   List<Map<String, dynamic>> _experience = [];
@@ -88,8 +100,10 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
     _loadJobPosts();
     _loadBranches();
     _loadFollowers();
+    _loadFollowing();
     _loadHeadOffice();
     _checkFollowStatus();
+    _loadVisibilitySetting();
     if (!widget.isCompany) {
       _loadJobSeekerDetails();
     }
@@ -128,7 +142,6 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
 
   Future<void> _loadJobSeekerDetails() async {
     try {
-      // Load skills
       final skillsData = await supabase
           .from('skills')
           .select()
@@ -138,7 +151,6 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
         _skills = List<Map<String, dynamic>>.from(skillsData);
       });
 
-      // Load education
       final educationData = await supabase
           .from('education')
           .select()
@@ -148,7 +160,6 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
         _education = List<Map<String, dynamic>>.from(educationData);
       });
 
-      // Load experience
       final experienceData = await supabase
           .from('experience')
           .select()
@@ -162,21 +173,381 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
     }
   }
 
+  Future<void> _loadVisibilitySetting() async {
+    if (_currentUserId == null) return;
+
+    try {
+      final data = await supabase
+          .from('users')
+          .select('profile_visibility')
+          .eq('user_id', _currentUserId!)
+          .maybeSingle();
+
+      if (data != null && mounted) {
+        setState(() {
+          _profileVisibility = data['profile_visibility'] ?? 'public';
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading visibility: $e');
+    }
+  }
+
+  Future<void> _updateVisibility(String newVisibility) async {
+    if (_currentUserId == null) return;
+
+    setState(() => _isLoadingVisibility = true);
+
+    try {
+      await supabase
+          .from('users')
+          .update({'profile_visibility': newVisibility})
+          .eq('user_id', _currentUserId!);
+
+      setState(() {
+        _profileVisibility = newVisibility;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Profile visibility updated to ${_getVisibilityLabel(newVisibility)}'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      setState(() => _isLoadingVisibility = false);
+    }
+  }
+
+  void _showVisibilityDialog() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Handle bar
+            Container(
+              margin: const EdgeInsets.only(top: 12),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 16),
+            // Title
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 20),
+              child: Text(
+                'Profile Visibility',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 20),
+              child: Text(
+                'Choose who can view your profile',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey,
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            // Options
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Column(
+                children: [
+                  // Public Option
+                  _buildVisibilityCard(
+                    context: context,
+                    icon: Icons.public,
+                    title: 'Public',
+                    description: 'Everyone can view your profile',
+                    value: 'public',
+                    currentValue: _profileVisibility,
+                    color: Colors.green,
+                    onTap: () async {
+                      await _updateVisibility('public');
+                      if (mounted) Navigator.pop(context);
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  // Employers Only Option
+                  _buildVisibilityCard(
+                    context: context,
+                    icon: Icons.business,
+                    title: 'Employers Only',
+                    description: 'All employers can view your profile',
+                    value: 'employers_only',
+                    currentValue: _profileVisibility,
+                    color: Colors.orange,
+                    onTap: () async {
+                      await _updateVisibility('employers_only');
+                      if (mounted) Navigator.pop(context);
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  // Hidden Option
+                  _buildVisibilityCard(
+                    context: context,
+                    icon: Icons.visibility_off,
+                    title: 'Hidden',
+                    description: 'Only employers this user has applied to can view the profile',
+                    value: 'hidden',
+                    currentValue: _profileVisibility,
+                    color: Colors.red,
+                    onTap: () async {
+                      await _updateVisibility('hidden');
+                      if (mounted) Navigator.pop(context);
+                    },
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 34),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVisibilityCard({
+    required BuildContext context,
+    required IconData icon,
+    required String title,
+    required String description,
+    required String value,
+    required String currentValue,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    final isSelected = currentValue == value;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isSelected ? color.withOpacity(0.1) : Colors.grey.shade50,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isSelected ? color : Colors.grey.shade200,
+            width: isSelected ? 2 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            // Icon Container
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                color: isSelected ? color : Colors.grey.shade200,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Icon(
+                icon,
+                size: 28,
+                color: isSelected ? Colors.white : Colors.grey.shade600,
+              ),
+            ),
+            const SizedBox(width: 16),
+            // Text Content
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: isSelected ? color : Colors.black87,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    description,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                      height: 1.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _getVisibilityLabel(String visibility) {
+    switch (visibility) {
+      case 'public': return 'Public';
+      case 'employers_only': return 'Employers Only';
+      case 'hidden': return 'Hidden';
+      default: return 'Public';
+    }
+  }
+
+  IconData _getVisibilityIcon(String visibility) {
+    switch (visibility) {
+      case 'public': return Icons.public;
+      case 'employers_only': return Icons.business;
+      case 'hidden': return Icons.visibility_off;
+      default: return Icons.public;
+    }
+  }
+
+  Future<Map<String, dynamic>> _checkProfileAccess() async {
+    // If viewing own profile, always allow
+    if (_currentUserId == widget.userId) {
+      return {'canView': true, 'visibility': 'public'};
+    }
+
+    try {
+      // Get profile visibility setting and role for the target user
+      final userData = await supabase
+          .from('users')
+          .select('profile_visibility, role')
+          .eq('user_id', widget.userId)
+          .maybeSingle();
+
+      if (userData == null) return {'canView': true, 'visibility': 'public'};
+
+      final visibility = userData['profile_visibility'] ?? 'public';
+      final userRole = userData['role'];
+
+      // If profile is public, always show
+      if (visibility == 'public') {
+        return {'canView': true, 'visibility': visibility};
+      }
+
+      // If profile is hidden, check if current user is employer who received application
+      if (visibility == 'hidden') {
+        // If current user is not logged in, cannot view
+        if (_currentUserId == null)
+          return {'canView': false, 'visibility': visibility};
+
+        // Get current user's role
+        final currentUserData = await supabase
+            .from('users')
+            .select('role')
+            .eq('user_id', _currentUserId!)
+            .maybeSingle();
+
+        if (currentUserData == null)
+          return {'canView': false, 'visibility': visibility};
+
+        // If current user is not an employer, cannot view
+        if (currentUserData['role'] != 'POSTER') {
+          return {'canView': false, 'visibility': visibility};
+        }
+
+        // Get the employer's job posts (posted by current user)
+        final employerJobs = await supabase
+            .from('job_post')
+            .select('job_id')
+            .eq('created_by', _currentUserId!);
+
+        final employerJobIds = (employerJobs as List)
+            .map((job) => job['job_id'] as String)
+            .toList();
+
+        if (employerJobIds.isEmpty) {
+          return {'canView': false, 'visibility': visibility};
+        }
+
+        // Check if the profile owner (job seeker) has applied to any of this employer's jobs
+        final applications = await supabase
+            .from('job_application')
+            .select('application_id')
+            .eq('user_id', widget.userId)  // The profile owner (job seeker)
+            .inFilter('job_id', employerJobIds);
+
+        final canView = (applications as List).isNotEmpty;
+
+        debugPrint('Hidden profile check: Profile owner ${widget.userId} has applied to employer jobs: $canView');
+
+        return {'canView': canView, 'visibility': visibility};
+      }
+
+      // If employers_only, check if current user is employer (any employer)
+      if (visibility == 'employers_only') {
+        if (_currentUserId == null)
+          return {'canView': false, 'visibility': visibility};
+
+        // Get current user's role
+        final currentUserData = await supabase
+            .from('users')
+            .select('role')
+            .eq('user_id', _currentUserId!)
+            .maybeSingle();
+
+        if (currentUserData == null)
+          return {'canView': false, 'visibility': visibility};
+
+        // Only employers can view
+        final canView = currentUserData['role'] == 'POSTER';
+        return {'canView': canView, 'visibility': visibility};
+      }
+
+      return {'canView': true, 'visibility': visibility};
+    } catch (e) {
+      debugPrint('Error checking visibility: $e');
+      return {'canView': true, 'visibility': 'public'};
+    }
+  }
+
   Future<void> _loadProfile() async {
     setState(() => _isLoading = true);
 
     try {
       if (widget.isCompany && widget.companyId != null) {
-        // Load company profile
         final companyData = await supabase
             .from('company_profile')
             .select('''
-              *,
-              users!company_profile_user_id_fkey (
-                email,
-                phone
-              )
-            ''')
+            *,
+            users!company_profile_user_id_fkey (
+              email,
+              phone
+            )
+          ''')
             .eq('company_id', widget.companyId!)
             .maybeSingle();
 
@@ -193,28 +564,53 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
           });
         }
       } else {
-        // Load user profile
         final userData = await supabase
             .from('users')
             .select('''
-              *,
-              job_seeker_profile!job_seeker_profile_user_id_fkey (
-                bio,
-                address,
-                gender,
-                date_of_birth
-              )
-            ''')
+            user_id,
+            fullname,
+            email,
+            phone,
+            profile_image_url,
+            role
+          ''')
             .eq('user_id', widget.userId)
             .maybeSingle();
 
         if (userData != null && mounted) {
+          // Try to get existing profile
+          var profileData = await supabase
+              .from('job_seeker_profile')
+              .select('bio, address, gender, date_of_birth')
+              .eq('user_id', widget.userId)
+              .maybeSingle();
+
+          // If profile doesn't exist, create it
+          if (profileData == null) {
+            await supabase.from('job_seeker_profile').insert({
+              'user_id': widget.userId,
+              'bio': null,
+              'address': null,
+              'gender': _gender,
+              'date_of_birth': _dateOfBirth,
+            });
+
+            // Fetch the newly created profile
+            profileData = await supabase
+                .from('job_seeker_profile')
+                .select('bio, address, gender, date_of_birth')
+                .eq('user_id', widget.userId)
+                .maybeSingle();
+          }
+
           setState(() {
             _fullname = userData['fullname'];
             _email = userData['email'];
             _profileImageUrl = userData['profile_image_url'];
-            _bio = userData['job_seeker_profile']?['bio'];
             _phone = userData['phone'];
+            _bio = profileData?['bio'];
+            _dateOfBirth = profileData?['date_of_birth'];
+            _gender = profileData?['gender'];
           });
         }
       }
@@ -228,49 +624,43 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
   Future<void> _loadStats() async {
     try {
       if (widget.isCompany && widget.companyId != null) {
-        // Count posts
         final postsResult = await supabase
             .from('post')
             .select('post_id')
-            .eq('company_id', widget.companyId!);
+            .eq('company_id', widget.companyId!)
+            .isFilter('job_id', null);
         _postsCount = (postsResult as List).length;
 
-        // Count job posts
         final jobPostsResult = await supabase
             .from('job_post')
             .select('job_id')
             .eq('company_id', widget.companyId!);
         _jobPostsCount = (jobPostsResult as List).length;
 
-        // IMPORTANT FIX: Count followers using userId, not companyId
-        // The follows table stores following_id as user_id from users table
-        final followersResult = await supabase
-            .from('follows')
-            .select('follow_id')
-            .eq('following_id', widget.userId);  // Use userId here!
-        _followersCount = (followersResult as List).length;
-
-        // Count branches
-        final branchesResult = await supabase
-            .from('company_branch')
-            .select('branch_id')
-            .eq('company_id', widget.companyId!);
-        _branchesCount = (branchesResult as List).length;
-
-        debugPrint('Stats - Posts: $_postsCount, Job Posts: $_jobPostsCount, Followers: $_followersCount, Branches: $_branchesCount');
-      } else {
-        // For user profile
-        final postsResult = await supabase
-            .from('post')
-            .select('post_id')
-            .eq('user_id', widget.userId);
-        _postsCount = (postsResult as List).length;
-
         final followersResult = await supabase
             .from('follows')
             .select('follow_id')
             .eq('following_id', widget.userId);
         _followersCount = (followersResult as List).length;
+
+        final followingResult = await supabase
+            .from('follows')
+            .select('follow_id')
+            .eq('follower_id', widget.userId);
+        _followingCount = (followingResult as List).length;
+
+        final branchesResult = await supabase
+            .from('company_branch')
+            .select('branch_id')
+            .eq('company_id', widget.companyId!);
+        _branchesCount = (branchesResult as List).length;
+      } else {
+        final postsResult = await supabase
+            .from('post')
+            .select('post_id')
+            .eq('user_id', widget.userId)
+            .isFilter('job_id', null);
+        _postsCount = (postsResult as List).length;
 
         final followingResult = await supabase
             .from('follows')
@@ -285,6 +675,7 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
       if (mounted) setState(() {});
     }
   }
+
   Future<void> _loadRecentPosts() async {
     try {
       final posts = await supabase
@@ -297,15 +688,16 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
             created_at,
             users!post_user_id_fkey (fullname, profile_image_url)
           ''')
-          .eq(widget.isCompany ? 'company_id' : 'user_id',
-          widget.isCompany ? widget.companyId! : widget.userId)
+          .eq(
+        widget.isCompany ? 'company_id' : 'user_id',
+        widget.isCompany ? widget.companyId! : widget.userId,
+      )
+          .isFilter('job_id', null)
           .order('created_at', ascending: false)
           .limit(10);
 
       if (mounted) {
         final postsList = List<Map<String, dynamic>>.from(posts);
-
-        // Get like counts for each post
         final postIds = postsList.map((p) => p['post_id'] as String).toList();
         if (postIds.isNotEmpty) {
           final likeCounts = await supabase
@@ -319,7 +711,6 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
             likeCountMap[postId] = (likeCountMap[postId] ?? 0) + 1;
           }
 
-          // Get comment counts for each post
           final commentCounts = await supabase
               .from('post_comment')
               .select('post_id')
@@ -331,7 +722,6 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
             commentCountMap[postId] = (commentCountMap[postId] ?? 0) + 1;
           }
 
-          // Attach counts to posts
           for (final post in postsList) {
             final pid = post['post_id'] as String;
             post['like_count'] = likeCountMap[pid] ?? 0;
@@ -368,13 +758,11 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
             created_at
           ''')
           .eq('company_id', widget.companyId!)
-          .eq('status', 'active')
           .order('created_at', ascending: false);
 
       if (mounted) {
         final jobList = List<Map<String, dynamic>>.from(jobPosts);
 
-        // Process each job to extract nested data
         for (final job in jobList) {
           final jobTypeData = job['job_type_id'];
           if (jobTypeData is List && jobTypeData.isNotEmpty) {
@@ -430,32 +818,33 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
 
   Future<void> _loadFollowers() async {
     try {
-      late final List<dynamic> followersData;
+      final followersData = await supabase
+          .from('follows')
+          .select('follower_id')
+          .eq('following_id', widget.userId);
 
-      if (widget.isCompany && widget.companyId != null) {
-        // FIX: Use userId, not companyId
-        followersData = await supabase
-            .from('follows')
-            .select('follower_id')
-            .eq('following_id', widget.userId);  // Use userId here!
-      } else {
-        followersData = await supabase
-            .from('follows')
-            .select('follower_id')
-            .eq('following_id', widget.userId);
-      }
-
-      if (mounted && followersData.isNotEmpty) {
-        final followerIds = followersData.map((f) => f['follower_id'] as String).toList();
+      if (mounted && (followersData as List).isNotEmpty) {
+        final followerIds = followersData
+            .map((f) => f['follower_id'] as String)
+            .toList();
 
         if (followerIds.isNotEmpty) {
           final usersData = await supabase
               .from('users')
-              .select('user_id, fullname, profile_image_url')
+              .select('user_id, fullname, profile_image_url, role, company_profile(company_name, logo_url)')
               .inFilter('user_id', followerIds);
 
-          final followersList = usersData.map((user) => {
-            'users': user,
+          final followersList = usersData.map((userData) {
+            final user = Map<String, dynamic>.from(userData);
+            if (user['role'] == 'POSTER' && user['company_profile'] != null) {
+              final cp = user['company_profile'];
+              final companyMap = (cp is List && cp.isNotEmpty) ? cp[0] : (cp is Map ? cp : null);
+              if (companyMap != null) {
+                user['fullname'] = companyMap['company_name'] ?? user['fullname'];
+                user['profile_image_url'] = companyMap['logo_url'] ?? user['profile_image_url'];
+              }
+            }
+            return {'users': user};
           }).toList();
 
           setState(() {
@@ -478,13 +867,64 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
       });
     }
   }
+
+  Future<void> _loadFollowing() async {
+    try {
+      final followingData = await supabase
+          .from('follows')
+          .select('following_id')
+          .eq('follower_id', widget.userId);
+
+      if (mounted && (followingData as List).isNotEmpty) {
+        final followingIds = followingData
+            .map((f) => f['following_id'] as String)
+            .toList();
+
+        if (followingIds.isNotEmpty) {
+          final usersData = await supabase
+              .from('users')
+              .select('user_id, fullname, profile_image_url, role, company_profile(company_name, logo_url)')
+              .inFilter('user_id', followingIds);
+
+          final followingList = usersData.map((userData) {
+            final user = Map<String, dynamic>.from(userData);
+            if (user['role'] == 'POSTER' && user['company_profile'] != null) {
+              final cp = user['company_profile'];
+              final companyMap = (cp is List && cp.isNotEmpty) ? cp[0] : (cp is Map ? cp : null);
+              if (companyMap != null) {
+                user['fullname'] = companyMap['company_name'] ?? user['fullname'];
+                user['profile_image_url'] = companyMap['logo_url'] ?? user['profile_image_url'];
+              }
+            }
+            return {'users': user};
+          }).toList();
+
+          setState(() {
+            _following = List<Map<String, dynamic>>.from(followingList);
+          });
+        } else {
+          setState(() {
+            _following = [];
+          });
+        }
+      } else {
+        setState(() {
+          _following = [];
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading following: $e');
+      setState(() {
+        _following = [];
+      });
+    }
+  }
+
   Future<void> _checkFollowStatus() async {
     if (_currentUserId == null) return;
 
     try {
-      // Always use userId for following_id
       final followingId = widget.userId;
-
       final result = await supabase
           .from('follows')
           .select()
@@ -501,6 +941,7 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
       debugPrint('Error checking follow status: $e');
     }
   }
+
   Future<void> _toggleFollow() async {
     if (_currentUserId == null) {
       if (mounted) {
@@ -511,30 +952,20 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
       return;
     }
 
-    // Always follow the user_id (for both individuals and companies)
     final followingId = widget.userId;
-
     setState(() => _isFollowing = !_isFollowing);
 
     try {
       if (_isFollowing) {
-        // Follow
         await supabase.from('follows').insert({
           'follower_id': _currentUserId,
           'following_id': followingId,
         });
-
-        // Update UI
         setState(() {
           _followersCount++;
         });
-
-        // Reload followers list
         await _loadFollowers();
-
-        // Notify parent if callback exists
         widget.onFollowChanged?.call();
-
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -545,24 +976,16 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
           );
         }
       } else {
-        // Unfollow
         await supabase
             .from('follows')
             .delete()
             .eq('follower_id', _currentUserId!)
             .eq('following_id', followingId);
-
-        // Update UI
         setState(() {
           _followersCount--;
         });
-
-        // Reload followers list
         await _loadFollowers();
-
-        // Notify parent if callback exists
         widget.onFollowChanged?.call();
-
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -573,32 +996,378 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
           );
         }
       }
-
-      // Refresh stats
       await _loadStats();
-
     } catch (e) {
-      // Revert on error
       setState(() => _isFollowing = !_isFollowing);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: ${e.toString()}')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
       }
     }
   }
-  @override
-  Widget build(BuildContext context) {
-    final bool isOwnProfile = _currentUserId == widget.userId;
+
+  // Hidden page
+  Widget _buildHiddenRestrictedPage() {
     final String displayName = widget.isCompany
         ? (_companyName ?? widget.name ?? 'Company')
         : (_fullname ?? widget.name ?? 'User');
 
+    final String profileImage = widget.isCompany
+        ? (_profileImageUrl ?? '')
+        : (_profileImageUrl ?? '');
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-
+        elevation: 0,
+        automaticallyImplyLeading: true,
         actions: [
+          // Follow button for non-own profile
+          if (_currentUserId != widget.userId)
+            Padding(
+              padding: const EdgeInsets.only(right: 16),
+              child: ElevatedButton.icon(
+                onPressed: _toggleFollow,
+                icon: Icon(
+                  _isFollowing ? Icons.check : Icons.person_add,
+                  size: 18,
+                ),
+                label: Text(_isFollowing ? 'Following' : 'Follow'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _isFollowing ? Colors.white : Colors.blue,
+                  foregroundColor: _isFollowing ? Colors.blue : Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+      body: SingleChildScrollView(
+        child: Column(
+          children: [
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
+              child: Column(
+                children: [
+                  CircleAvatar(
+                    radius: 60,
+                    backgroundColor: Colors.grey[200],
+                    backgroundImage: profileImage.isNotEmpty
+                        ? CachedNetworkImageProvider(profileImage)
+                        : null,
+                    child: profileImage.isEmpty
+                        ? Icon(
+                      widget.isCompany ? Icons.business : Icons.person,
+                      size: 60,
+                      color: Colors.blue,
+                    )
+                        : null,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    displayName,
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
+                  // Role Badge
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: widget.isCompany
+                          ? Colors.purple.shade50
+                          : Colors.blue.shade50,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: widget.isCompany
+                            ? Colors.purple.shade200
+                            : Colors.blue.shade200,
+                      ),
+                    ),
+                    child: Text(
+                      widget.isCompany ? 'Employer' : 'Job Seeker',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: widget.isCompany
+                            ? Colors.purple.shade700
+                            : Colors.blue.shade700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Hidden Message Card
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              child: Container(
+                padding: const EdgeInsets.all(42),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 10,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    Icon(
+                      Icons.visibility_off,
+                      size: 64,
+                      color: Colors.grey.shade400,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Hidden Profile',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Only employers this user has applied to can view the profile',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey.shade500,
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmployersOnlyRestrictedPage() {
+    final String displayName = widget.isCompany
+        ? (_companyName ?? widget.name ?? 'Company')
+        : (_fullname ?? widget.name ?? 'User');
+
+    final String profileImage = widget.isCompany
+        ? (_profileImageUrl ?? '')
+        : (_profileImageUrl ?? '');
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
+      appBar: AppBar(
+        elevation: 0,
+        automaticallyImplyLeading: true,
+        actions: [
+          // Follow button for non-own profile
+          if (_currentUserId != widget.userId)
+            Padding(
+              padding: const EdgeInsets.only(right: 16),
+              child: ElevatedButton.icon(
+                onPressed: _toggleFollow,
+                icon: Icon(
+                  _isFollowing ? Icons.check : Icons.person_add,
+                  size: 18,
+                ),
+                label: Text(_isFollowing ? 'Following' : 'Follow'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _isFollowing ? Colors.white : Colors.blue,
+                  foregroundColor: _isFollowing ? Colors.blue : Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+      body: SingleChildScrollView(
+        child: Column(
+          children: [
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
+              child: Column(
+                children: [
+                  CircleAvatar(
+                    radius: 60,
+                    backgroundColor: Colors.grey[200],
+                    backgroundImage: profileImage.isNotEmpty
+                        ? CachedNetworkImageProvider(profileImage)
+                        : null,
+                    child: profileImage.isEmpty
+                        ? Icon(
+                      widget.isCompany ? Icons.business : Icons.person,
+                      size: 60,
+                      color: Colors.blue,
+                    )
+                        : null,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    displayName,
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
+                  // Role Badge
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: widget.isCompany
+                          ? Colors.purple.shade50
+                          : Colors.blue.shade50,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: widget.isCompany
+                            ? Colors.purple.shade200
+                            : Colors.blue.shade200,
+                      ),
+                    ),
+                    child: Text(
+                      widget.isCompany ? 'Employer' : 'Job Seeker',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: widget.isCompany
+                            ? Colors.purple.shade700
+                            : Colors.blue.shade700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Employers Only Message Card
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              child: Container(
+                padding: const EdgeInsets.all(42),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 10,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    Icon(
+                      Icons.business,
+                      size: 64,
+                      color: Colors.grey.shade400,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Employers Only',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'This profile is only visible to employers.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey.shade500,
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bool isOwnProfile = _currentUserId == widget.userId;
+
+    return FutureBuilder<Map<String, dynamic>>(
+      future: _checkProfileAccess(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            backgroundColor: Color(0xFFF8FAFC),
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        final result = snapshot.data ?? {'canView': true, 'visibility': 'public'};
+        final canView = result['canView'] as bool;
+        final visibility = result['visibility'] as String;
+
+        if (!canView && !isOwnProfile) {
+          if (visibility == 'employers_only') {
+            return _buildEmployersOnlyRestrictedPage();
+          }
+          return _buildHiddenRestrictedPage();
+        }
+        return _buildProfileContent(isOwnProfile);
+      },
+    );
+  }
+
+  Widget _buildProfileContent(bool isOwnProfile) {
+    final String displayName = widget.isCompany
+        ? (_companyName ?? widget.name ?? 'Company')
+        : (_fullname ?? widget.name ?? 'User');
+
+    // Only show visibility button for job seekers (not companies)
+    final bool showVisibilityButton = isOwnProfile && !widget.isCompany;
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
+      appBar: AppBar(
+        actions: [
+          // Visibility button for own profile (job seeker only)
+          if (showVisibilityButton)
+            Padding(
+              padding: const EdgeInsets.only(right: 16),
+              child: ElevatedButton.icon(
+                onPressed: _showVisibilityDialog,
+                icon: Icon(
+                  _getVisibilityIcon(_profileVisibility),
+                  size: 18,
+                ),
+                label: Text(_getVisibilityLabel(_profileVisibility)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: Colors.blue,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                ),
+              ),
+            ),
+          // Follow button for non-own profile
           if (!isOwnProfile)
             Padding(
               padding: const EdgeInsets.only(right: 16),
@@ -630,6 +1399,8 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
           await _loadJobPosts();
           await _loadBranches();
           await _loadFollowers();
+          await _loadFollowing();
+          await _loadVisibilitySetting();
           if (!widget.isCompany) {
             await _loadJobSeekerDetails();
           }
@@ -639,7 +1410,8 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
           child: Column(
             children: [
               _buildHeaderSection(displayName),
-              if (widget.isCompany) _buildCompanyInfoSection(),
+              if (widget.isCompany) _buildCompanyInfoSection()
+              else _buildContactInfoSection(isOwnProfile: isOwnProfile),
               _buildAboutSection(),
               _buildStatsRow(),
               if (widget.isCompany)
@@ -655,6 +1427,8 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
   }
 
   Widget _buildHeaderSection(String displayName) {
+    final bool isOwnProfile = _currentUserId == widget.userId;
+
     return Container(
       padding: const EdgeInsets.fromLTRB(24, 0, 24, 10),
       child: Column(
@@ -662,7 +1436,8 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
           CircleAvatar(
             radius: 60,
             backgroundColor: Colors.grey[200],
-            backgroundImage: _profileImageUrl != null && _profileImageUrl!.isNotEmpty
+            backgroundImage:
+            _profileImageUrl != null && _profileImageUrl!.isNotEmpty
                 ? CachedNetworkImageProvider(_profileImageUrl!)
                 : null,
             child: (_profileImageUrl == null || _profileImageUrl!.isEmpty)
@@ -676,13 +1451,9 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
           const SizedBox(height: 16),
           Text(
             displayName,
-            style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-            ),
+            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 8),
         ],
       ),
     );
@@ -710,7 +1481,11 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (headOfficeLocation.isNotEmpty)
-            _buildInfoRow(Icons.location_on_outlined, 'Head Office', headOfficeLocation),
+            _buildInfoRow(
+              Icons.location_on_outlined,
+              'Head Office',
+              headOfficeLocation,
+            ),
           if (_industry != null && _industry!.isNotEmpty)
             _buildInfoRow(Icons.category_outlined, 'Industry', _industry!),
           if (_companySize != null && _companySize!.isNotEmpty)
@@ -743,11 +1518,37 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
             ),
           ),
           Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(color: Colors.grey),
-            ),
+            child: Text(value, style: const TextStyle(color: Colors.grey)),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildContactInfoSection({required bool isOwnProfile})  {
+    final bool hasEmail = _email != null && _email!.isNotEmpty;
+    final bool hasPhone = _phone != null && _phone!.isNotEmpty;
+    final bool hasDateOfBirth = _dateOfBirth != null && _dateOfBirth!.isNotEmpty;
+    final bool hasGender = _gender != null && _gender!.isNotEmpty;
+
+    if (!hasEmail && !hasPhone && !hasDateOfBirth && !hasGender) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (hasEmail)
+            _buildInfoRow(Icons.email_outlined, 'Email', _email!),
+          if (hasPhone && isOwnProfile)
+            _buildInfoRow(Icons.phone_outlined, 'Phone', _phone!),
+          if (hasDateOfBirth)
+            _buildInfoRow(Icons.cake_outlined, 'Date of Birth', _dateOfBirth!),
+          if (hasGender)
+            _buildInfoRow(Icons.person_outline, 'Gender', _gender!),
         ],
       ),
     );
@@ -765,10 +1566,7 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-          ),
+          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8),
         ],
       ),
       child: Column(
@@ -780,18 +1578,12 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
               const SizedBox(width: 8),
               const Text(
                 'About',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
               ),
             ],
           ),
           const SizedBox(height: 12),
-          Text(
-            displayBio,
-            style: const TextStyle(height: 1.5),
-          ),
+          Text(displayBio, style: const TextStyle(height: 1.5)),
         ],
       ),
     );
@@ -806,10 +1598,7 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 8,
-            ),
+            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8),
           ],
         ),
         child: Row(
@@ -819,11 +1608,11 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
             _buildStatItem(_jobPostsCount, 'Jobs', 1),
             _buildStatItem(_branchesCount, 'Branches', 2),
             _buildStatItem(_followersCount, 'Followers', 3),
+            _buildStatItem(_followingCount, 'Following', 4),
           ],
         ),
       );
     } else {
-      // For job seeker - only show Posts and Followers in stats row
       return Container(
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         padding: const EdgeInsets.all(16),
@@ -831,153 +1620,142 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 8,
-            ),
+            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8),
           ],
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
-            _buildStatItem(_postsCount, 'Posts', -1),
-            _buildStatItem(_followingCount, 'Following', -1),
+            _buildStatItem(_postsCount, 'Posts', 0),
+            _buildStatItem(_followingCount, 'Following', 1),
           ],
         ),
       );
     }
   }
 
-  Widget _buildStatItem(int count, String label, int index) {
+  Widget _buildStatItem(int count, String label, int sectionIndex) {
+    final bool isSelected = _selectedSection == sectionIndex;
+
     return Expanded(
-      child: Column(
-        children: [
-          Text(
-            count.toString(),
-            style: const TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: Colors.blue,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey.shade600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Company content section with tabs
-  Widget _buildCompanyContentSection() {
-    return Column(
-      children: [
-        _buildCompanyTabs(),
-        if (_selectedTabIndex == 0)
-          _buildPostsContent()
-        else if (_selectedTabIndex == 1)
-          _buildJobPostsContent()
-        else if (_selectedTabIndex == 2)
-            _buildBranchesContent()
-          else if (_selectedTabIndex == 3)
-              _buildFollowersContent(),
-      ],
-    );
-  }
-
-  Widget _buildCompanyTabs() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: [
-          _buildTabButton('Posts', 0),
-          _buildTabButton('Jobs', 1),
-          _buildTabButton('Branches', 2),
-          _buildTabButton('Followers', 3),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTabButton(String label, int index) {
-    final isSelected = _selectedTabIndex == index;
-    return Expanded(
-      child: TextButton(
-        onPressed: () {
+      child: GestureDetector(
+        onTap: () {
           setState(() {
-            _selectedTabIndex = index;
+            _selectedSection = sectionIndex;
           });
         },
-        style: TextButton.styleFrom(
-          foregroundColor: isSelected ? Colors.blue : Colors.grey,
-          backgroundColor: isSelected ? Colors.blue.shade50 : Colors.transparent,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            border: isSelected
+                ? Border(
+              bottom: BorderSide(
+                color: Colors.blue,
+                width: 2,
+              ),
+            )
+                : null,
           ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          child: Column(
+            children: [
+              Text(
+                count.toString(),
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: isSelected ? Colors.blue : Colors.blue,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isSelected ? Colors.blue : Colors.grey.shade600,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
           ),
         ),
       ),
     );
   }
 
-  // Job Seeker content section with expandable sections
+  Widget _buildCompanyContentSection() {
+    // If nothing is selected, don't show any content
+    if (_selectedSection == -1) {
+      return const SizedBox.shrink();
+    }
+
+    // Show the content based on selection
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      child: Column(
+        children: [
+          if (_selectedSection == 0)
+            _buildPostsContent()
+          else if (_selectedSection == 1)
+            _buildJobPostsContent()
+          else if (_selectedSection == 2)
+              _buildBranchesContent()
+            else if (_selectedSection == 3)
+                _buildFollowersContent()
+              else if (_selectedSection == 4)
+                  _buildFollowingContent(),
+        ],
+      ),
+    );
+  }
+
   Widget _buildJobSeekerContentSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Posts Section
-        _buildSectionHeader('Posts', Icons.post_add_outlined),
-        _buildPostsContent(),
+        if (_selectedSection == 0) ...[
+          _buildSectionHeader('Posts', Icons.post_add_outlined),
+          _buildPostsContent(),
+          const SizedBox(height: 16),
+        ],
 
-        const SizedBox(height: 16),
+        // Following Section - only shown when Following stat is clicked
+        if (_selectedSection == 1) ...[
+          _buildSectionHeader('Following', Icons.people_outline),
+          _buildFollowingContent(),
+          const SizedBox(height: 16),
+        ],
 
-        // Experience Section
+        // Experience Section - always visible
         _buildExpandableSection(
           title: 'Work Experience',
           icon: Icons.work_outline,
           isExpanded: _showExperience,
           onToggle: () => setState(() => _showExperience = !_showExperience),
           content: _buildExperienceContent(),
-          itemCount: _experience.length,
         ),
 
         const SizedBox(height: 16),
 
-        // Education Section
+        // Education Section - always visible
         _buildExpandableSection(
           title: 'Education',
           icon: Icons.school_outlined,
           isExpanded: _showEducation,
           onToggle: () => setState(() => _showEducation = !_showEducation),
           content: _buildEducationContent(),
-          itemCount: _education.length,
         ),
 
         const SizedBox(height: 16),
 
-        // Skills Section
+        // Skills Section - always visible
         _buildExpandableSection(
           title: 'Skills',
           icon: Icons.code_outlined,
           isExpanded: _showSkills,
           onToggle: () => setState(() => _showSkills = !_showSkills),
           content: _buildSkillsContent(),
-          itemCount: _skills.length,
         ),
       ],
     );
@@ -992,10 +1770,7 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
           const SizedBox(width: 8),
           Text(
             title,
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
         ],
       ),
@@ -1008,7 +1783,6 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
     required bool isExpanded,
     required VoidCallback onToggle,
     required Widget content,
-    required int itemCount,
   }) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -1016,10 +1790,7 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 4,
-          ),
+          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4),
         ],
       ),
       child: Column(
@@ -1028,36 +1799,11 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
             leading: Icon(icon, color: Colors.blue),
             title: Text(
               title,
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-              ),
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             ),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (itemCount > 0)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.shade100,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      '$itemCount',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.blue.shade700,
-                      ),
-                    ),
-                  ),
-                const SizedBox(width: 8),
-                Icon(
-                  isExpanded ? Icons.expand_less : Icons.expand_more,
-                  color: Colors.grey,
-                ),
-              ],
+            trailing: Icon(
+              isExpanded ? Icons.expand_less : Icons.expand_more,
+              color: Colors.grey,
             ),
             onTap: onToggle,
           ),
@@ -1115,12 +1861,10 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
                 _formatDateRange(exp['start_date'], exp['end_date']),
                 style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
               ),
-              if (exp['description'] != null && exp['description'].toString().isNotEmpty) ...[
+              if (exp['description'] != null &&
+                  exp['description'].toString().isNotEmpty) ...[
                 const SizedBox(height: 8),
-                Text(
-                  exp['description'],
-                  style: const TextStyle(fontSize: 13),
-                ),
+                Text(exp['description'], style: const TextStyle(fontSize: 13)),
               ],
             ],
           ),
@@ -1172,7 +1916,8 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
                 edu['qualification'] ?? 'Unknown Qualification',
                 style: TextStyle(color: Colors.grey.shade700, fontSize: 14),
               ),
-              if (edu['field_of_study'] != null && edu['field_of_study'].toString().isNotEmpty) ...[
+              if (edu['field_of_study'] != null &&
+                  edu['field_of_study'].toString().isNotEmpty) ...[
                 const SizedBox(height: 2),
                 Text(
                   edu['field_of_study'],
@@ -1184,12 +1929,10 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
                 _formatDateRange(edu['start_date'], edu['end_date']),
                 style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
               ),
-              if (edu['description'] != null && edu['description'].toString().isNotEmpty) ...[
+              if (edu['description'] != null &&
+                  edu['description'].toString().isNotEmpty) ...[
                 const SizedBox(height: 8),
-                Text(
-                  edu['description'],
-                  style: const TextStyle(fontSize: 13),
-                ),
+                Text(edu['description'], style: const TextStyle(fontSize: 13)),
               ],
             ],
           ),
@@ -1219,9 +1962,12 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
         children: _skills.map((skill) {
           final skillLevel = skill['skill_level'];
           Color levelColor = Colors.blue;
-          if (skillLevel == 'Beginner') levelColor = Colors.green;
-          else if (skillLevel == 'Intermediate') levelColor = Colors.orange;
-          else if (skillLevel == 'Advanced') levelColor = Colors.red;
+          if (skillLevel == 'Beginner')
+            levelColor = Colors.green;
+          else if (skillLevel == 'Intermediate')
+            levelColor = Colors.orange;
+          else if (skillLevel == 'Advanced')
+            levelColor = Colors.red;
 
           return Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -1253,10 +1999,7 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
                   const SizedBox(width: 6),
                   Text(
                     skillLevel,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: levelColor,
-                    ),
+                    style: TextStyle(fontSize: 11, color: levelColor),
                   ),
                 ],
               ],
@@ -1269,7 +2012,9 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
 
   String _formatDateRange(String? startDate, String? endDate) {
     final start = startDate != null ? _formatShortDate(startDate) : '';
-    final end = endDate != null && endDate.isNotEmpty ? _formatShortDate(endDate) : 'Present';
+    final end = endDate != null && endDate.isNotEmpty
+        ? _formatShortDate(endDate)
+        : 'Present';
     if (start.isEmpty) return end;
     return '$start - $end';
   }
@@ -1286,15 +2031,42 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
 
   Widget _buildPostsContent() {
     if (_recentPosts.isEmpty) {
+      final bool isOwnProfile = _currentUserId == widget.userId;
+
       return Container(
         margin: const EdgeInsets.all(16),
         padding: const EdgeInsets.all(32),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4),
+          ],
         ),
-        child: const Center(
-          child: Text('No posts yet'),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.post_add_outlined,
+                size: 48,
+                color: Colors.grey.shade400,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'No posts yet',
+                style: const TextStyle(color: Colors.grey, fontSize: 14, fontWeight: FontWeight.w500),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                isOwnProfile
+                    ? 'When you share posts, they\'ll appear here'
+                    : 'When this user shares posts, they\'ll appear here',
+                style: const TextStyle(color: Colors.grey, fontSize: 12),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -1309,121 +2081,150 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
             ? (_companyName ?? widget.name ?? 'Company')
             : (_fullname ?? widget.name ?? 'User');
 
-        return Container(
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 4,
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  CircleAvatar(
-                    radius: 16,
-                    backgroundImage: _profileImageUrl != null
-                        ? CachedNetworkImageProvider(_profileImageUrl!)
-                        : null,
-                    child: _profileImageUrl == null
-                        ? Icon(Icons.person, size: 16, color: Colors.blue)
-                        : null,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          displayName,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                          ),
-                        ),
-                        Text(
-                          _formatDate(post['created_at']),
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: Colors.grey,
-                          ),
-                        ),
-                      ],
+        final postType = post['post_type'] as String? ?? 'post';
+        final postTypeColor = _getPostTypeColor(postType);
+
+        return GestureDetector(
+          onTap: () => _navigateToPostDetail(post),
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 16,
+                      backgroundImage: _profileImageUrl != null
+                          ? CachedNetworkImageProvider(_profileImageUrl!)
+                          : null,
+                      child: _profileImageUrl == null
+                          ? Icon(Icons.person, size: 16, color: Colors.blue)
+                          : null,
                     ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.shade50,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      post['post_type'] ?? 'post',
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: Colors.blue.shade700,
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            displayName,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          ),
+                          Text(
+                            _formatDate(post['created_at']),
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: postTypeColor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: postTypeColor.withOpacity(0.3),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            _getPostTypeIcon(postType),
+                            size: 10,
+                            color: postTypeColor,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            _getPostTypeLabel(postType),
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: postTypeColor,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  post['content'] ?? '',
+                  style: const TextStyle(fontSize: 14),
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (post['media_urls'] != null &&
+                    (post['media_urls'] as List).isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    height: 200,
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: (post['media_urls'] as List).length,
+                      itemBuilder: (context, mediaIndex) {
+                        final mediaUrl = (post['media_urls'] as List)[mediaIndex];
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: CachedNetworkImage(
+                              imageUrl: mediaUrl,
+                              width: 150,
+                              height: 200,
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
                   ),
                 ],
-              ),
-              const SizedBox(height: 12),
-              Text(
-                post['content'] ?? '',
-                style: const TextStyle(fontSize: 14),
-              ),
-              if (post['media_urls'] != null &&
-                  (post['media_urls'] as List).isNotEmpty) ...[
                 const SizedBox(height: 8),
-                SizedBox(
-                  height: 200,
-                  child: ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: (post['media_urls'] as List).length,
-                    itemBuilder: (context, mediaIndex) {
-                      final mediaUrl = (post['media_urls'] as List)[mediaIndex];
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: CachedNetworkImage(
-                            imageUrl: mediaUrl,
-                            width: 150,
-                            height: 200,
-                            fit: BoxFit.cover,
-                          ),
-                        ),
-                      );
-                    },
-                  ),
+                Row(
+                  children: [
+                    Icon(Icons.favorite_border, size: 16, color: Colors.grey),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${post['like_count'] ?? 0}',
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                    const SizedBox(width: 16),
+                    Icon(Icons.comment_outlined, size: 16, color: Colors.grey),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${post['comment_count'] ?? 0}',
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                    const Spacer(),
+                    Icon(
+                      Icons.chevron_right,
+                      size: 20,
+                      color: Colors.grey.shade400,
+                    ),
+                  ],
                 ),
               ],
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Icon(Icons.favorite_border, size: 16, color: Colors.grey),
-                  const SizedBox(width: 4),
-                  Text(
-                    '${post['like_count'] ?? 0}',
-                    style: const TextStyle(fontSize: 12, color: Colors.grey),
-                  ),
-                  const SizedBox(width: 16),
-                  Icon(Icons.comment_outlined, size: 16, color: Colors.grey),
-                  const SizedBox(width: 4),
-                  Text(
-                    '${post['comment_count'] ?? 0}',
-                    style: const TextStyle(fontSize: 12, color: Colors.grey),
-                  ),
-                ],
-              ),
-            ],
+            ),
           ),
         );
       },
@@ -1439,9 +2240,7 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
         ),
-        child: const Center(
-          child: Text('No active job posts'),
-        ),
+        child: const Center(child: Text('No job posts')),
       );
     }
 
@@ -1451,13 +2250,14 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
       itemCount: _jobPosts.length,
       itemBuilder: (context, index) {
         final job = _jobPosts[index];
+        final isActive = job['status'] == 'active';
 
-        // Format salary display
         String salaryDisplay = 'Not specified';
         final salaryMin = job['salary_min'];
         final salaryMax = job['salary_max'];
         if (salaryMin != null && salaryMax != null) {
-          salaryDisplay = 'RM ${_formatSalary(salaryMin)} - RM ${_formatSalary(salaryMax)}';
+          salaryDisplay =
+          'RM ${_formatSalary(salaryMin)} - RM ${_formatSalary(salaryMax)}';
         } else if (salaryMin != null) {
           salaryDisplay = 'From RM ${_formatSalary(salaryMin)}';
         } else if (salaryMax != null) {
@@ -1469,105 +2269,181 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
         final experienceLevel = job['experience_level'] ?? 'Not specified';
         final location = job['location'] ?? 'Location not specified';
 
-        return Container(
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 4,
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                job['job_title'] ?? 'Untitled Position',
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.blue,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Icon(Icons.location_on_outlined, size: 16, color: Colors.grey.shade600),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      location,
-                      style: const TextStyle(fontSize: 13),
+        return GestureDetector(
+          onTap: () => _navigateToJobDetail(job),
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: isActive ? Colors.white : Colors.grey.shade50,
+              borderRadius: BorderRadius.circular(12),
+              border: isActive
+                  ? null
+                  : Border.all(color: Colors.grey.shade300),
+              boxShadow: [
+                BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        job['job_title'] ?? 'Untitled Position',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: isActive ? Colors.blue : Colors.grey.shade700,
+                        ),
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Icon(Icons.work_outline, size: 16, color: Colors.grey.shade600),
-                  const SizedBox(width: 8),
-                  Text(
-                    jobType,
-                    style: const TextStyle(fontSize: 13),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              if (remoteOption) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: isActive
+                            ? Colors.green.shade50
+                            : Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        isActive ? 'Active' : 'Closed',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: isActive ? Colors.green.shade700 : Colors.grey.shade600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
                 Row(
                   children: [
-                    Icon(Icons.wifi, size: 16, color: Colors.grey.shade600),
+                    Icon(
+                      Icons.location_on_outlined,
+                      size: 16,
+                      color: isActive ? Colors.grey.shade600 : Colors.grey.shade500,
+                    ),
                     const SizedBox(width: 8),
-                    const Text(
-                      'Remote',
-                      style: TextStyle(fontSize: 13),
+                    Expanded(
+                      child: Text(
+                        location,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: isActive ? Colors.grey.shade700 : Colors.grey.shade600,
+                        ),
+                      ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 8),
-              ],
-              Row(
-                children: [
-                  Icon(Icons.trending_up, size: 16, color: Colors.grey.shade600),
-                  const SizedBox(width: 8),
-                  Text(
-                    experienceLevel,
-                    style: const TextStyle(fontSize: 13),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Icon(Icons.attach_money, size: 16, color: Colors.green.shade700),
-                  const SizedBox(width: 8),
-                  Text(
-                    salaryDisplay,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.green.shade700,
+                Row(
+                  children: [
+                    Icon(
+                      Icons.work_outline,
+                      size: 16,
+                      color: isActive ? Colors.grey.shade600 : Colors.grey.shade500,
                     ),
+                    const SizedBox(width: 8),
+                    Text(
+                      jobType,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: isActive ? Colors.grey.shade700 : Colors.grey.shade600,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                if (remoteOption) ...[
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.wifi,
+                        size: 16,
+                        color: isActive ? Colors.grey.shade600 : Colors.grey.shade500,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Remote',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: isActive ? Colors.grey.shade700 : Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
                   ),
+                  const SizedBox(height: 8),
                 ],
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Icon(Icons.access_time, size: 14, color: Colors.grey.shade500),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Posted ${_formatDate(job['created_at'])}',
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
-                  ),
-                ],
-              ),
-            ],
+                Row(
+                  children: [
+                    Icon(
+                      Icons.trending_up,
+                      size: 16,
+                      color: isActive ? Colors.grey.shade600 : Colors.grey.shade500,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      experienceLevel,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: isActive ? Colors.grey.shade700 : Colors.grey.shade600,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.attach_money,
+                      size: 16,
+                      color: isActive ? Colors.green.shade700 : Colors.green.shade400,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      salaryDisplay,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: isActive ? Colors.green.shade700 : Colors.green.shade500,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.access_time,
+                          size: 14,
+                          color: isActive ? Colors.grey.shade500 : Colors.grey.shade400,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Posted ${_formatDate(job['created_at'])}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: isActive ? Colors.grey.shade500 : Colors.grey.shade400,
+                          ),
+                        ),
+                      ],
+                    ),
+                    Icon(
+                      Icons.chevron_right,
+                      size: 20,
+                      color: isActive ? Colors.blue.shade400 : Colors.grey.shade400,
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         );
       },
@@ -1583,6 +2459,57 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
     return num.toString();
   }
 
+  Color _getPostTypeColor(String postType) {
+    switch (postType.toLowerCase()) {
+      case 'post':
+        return const Color(0xFF2563EB);
+      case 'job':
+        return const Color(0xFF8B5CF6);
+      case 'tip':
+        return const Color(0xFF10B981);
+      case 'event':
+        return const Color(0xFFF59E0B);
+      case 'news':
+        return const Color(0xFFEC4899);
+      default:
+        return const Color(0xFF2563EB);
+    }
+  }
+
+  IconData _getPostTypeIcon(String postType) {
+    switch (postType.toLowerCase()) {
+      case 'post':
+        return Icons.chat_bubble_outline;
+      case 'job':
+        return Icons.work_outline;
+      case 'tip':
+        return Icons.lightbulb_outline;
+      case 'event':
+        return Icons.event_outlined;
+      case 'news':
+        return Icons.article_outlined;
+      default:
+        return Icons.chat_bubble_outline;
+    }
+  }
+
+  String _getPostTypeLabel(String postType) {
+    switch (postType.toLowerCase()) {
+      case 'post':
+        return 'Post';
+      case 'job':
+        return 'Hiring';
+      case 'tip':
+        return 'Tip';
+      case 'event':
+        return 'Event';
+      case 'news':
+        return 'News';
+      default:
+        return postType.toUpperCase();
+    }
+  }
+
   Widget _buildBranchesContent() {
     if (_branches.isEmpty) {
       return Container(
@@ -1592,9 +2519,7 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
         ),
-        child: const Center(
-          child: Text('No branches found'),
-        ),
+        child: const Center(child: Text('No branches found')),
       );
     }
 
@@ -1611,12 +2536,11 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
           decoration: BoxDecoration(
             color: isHeadOffice ? Colors.blue.shade50 : Colors.white,
             borderRadius: BorderRadius.circular(12),
-            border: isHeadOffice ? Border.all(color: Colors.blue.shade200) : null,
+            border: isHeadOffice
+                ? Border.all(color: Colors.blue.shade200)
+                : null,
             boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 4,
-              ),
+              BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4),
             ],
           ),
           child: Column(
@@ -1637,7 +2561,10 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
                   ),
                   if (isHeadOffice)
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.blue,
                         borderRadius: BorderRadius.circular(12),
@@ -1655,79 +2582,20 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
               ),
               const SizedBox(height: 12),
               if (branch['address'] != null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Row(
-                    children: [
-                      Icon(Icons.location_on_outlined, size: 16, color: Colors.grey),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          branch['address'],
-                          style: const TextStyle(fontSize: 13),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                _branchRow(Icons.location_on_outlined, branch['address']),
               if (branch['city'] != null || branch['state'] != null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Row(
-                    children: [
-                      Icon(Icons.location_city, size: 16, color: Colors.grey),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          '${branch['city'] ?? ''}${branch['city'] != null && branch['state'] != null ? ', ' : ''}${branch['state'] ?? ''}',
-                          style: const TextStyle(fontSize: 13),
-                        ),
-                      ),
-                    ],
-                  ),
+                _branchRow(
+                  Icons.location_city,
+                  '${branch['city'] ?? ''}${branch['city'] != null && branch['state'] != null ? ', ' : ''}${branch['state'] ?? ''}',
                 ),
               if (branch['country'] != null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Row(
-                    children: [
-                      Icon(Icons.public, size: 16, color: Colors.grey),
-                      const SizedBox(width: 8),
-                      Text(
-                        branch['country'],
-                        style: const TextStyle(fontSize: 13),
-                      ),
-                    ],
-                  ),
-                ),
-              if (branch['phone'] != null && branch['phone'].toString().isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Row(
-                    children: [
-                      Icon(Icons.phone, size: 16, color: Colors.grey),
-                      const SizedBox(width: 8),
-                      Text(
-                        branch['phone'],
-                        style: const TextStyle(fontSize: 13),
-                      ),
-                    ],
-                  ),
-                ),
-              if (branch['email'] != null && branch['email'].toString().isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Row(
-                    children: [
-                      Icon(Icons.email, size: 16, color: Colors.grey),
-                      const SizedBox(width: 8),
-                      Text(
-                        branch['email'],
-                        style: const TextStyle(fontSize: 13),
-                      ),
-                    ],
-                  ),
-                ),
+                _branchRow(Icons.public, branch['country']),
+              if (branch['phone'] != null &&
+                  branch['phone'].toString().isNotEmpty)
+                _branchRow(Icons.phone, branch['phone']),
+              if (branch['email'] != null &&
+                  branch['email'].toString().isNotEmpty)
+                _branchRow(Icons.email, branch['email']),
             ],
           ),
         );
@@ -1735,8 +2603,44 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
     );
   }
 
+  Widget _branchRow(IconData icon, String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: Colors.grey),
+          const SizedBox(width: 8),
+          Expanded(child: Text(text, style: const TextStyle(fontSize: 13))),
+        ],
+      ),
+    );
+  }
+
   Widget _buildFollowersContent() {
-    if (_followers.isEmpty) {
+    return _buildUserList(
+      users: _followers,
+      emptyMessage: 'No followers yet',
+      emptySubMessage: "When someone follows this profile, they'll appear here",
+      subtitleLabel: 'Follower',
+    );
+  }
+
+  Widget _buildFollowingContent() {
+    return _buildUserList(
+      users: _following,
+      emptyMessage: 'Not following anyone yet',
+      emptySubMessage: 'Companies and people followed will appear here',
+      subtitleLabel: 'Following',
+    );
+  }
+
+  Widget _buildUserList({
+    required List<Map<String, dynamic>> users,
+    required String emptyMessage,
+    required String emptySubMessage,
+    required String subtitleLabel,
+  }) {
+    if (users.isEmpty) {
       return Container(
         margin: const EdgeInsets.all(16),
         padding: const EdgeInsets.all(32),
@@ -1744,20 +2648,20 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
         ),
-        child: const Center(
+        child: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.people_outline, size: 48, color: Colors.grey),
-              SizedBox(height: 12),
+              const Icon(Icons.people_outline, size: 48, color: Colors.grey),
+              const SizedBox(height: 12),
               Text(
-                'No followers yet',
-                style: TextStyle(color: Colors.grey, fontSize: 14),
+                emptyMessage,
+                style: const TextStyle(color: Colors.grey, fontSize: 14),
               ),
-              SizedBox(height: 4),
+              const SizedBox(height: 4),
               Text(
-                'When someone follows this profile, they\'ll appear here',
-                style: TextStyle(color: Colors.grey, fontSize: 12),
+                emptySubMessage,
+                style: const TextStyle(color: Colors.grey, fontSize: 12),
                 textAlign: TextAlign.center,
               ),
             ],
@@ -1769,14 +2673,14 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
     return ListView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      itemCount: _followers.length,
+      itemCount: users.length,
       itemBuilder: (context, index) {
-        final followerData = _followers[index];
-        final user = followerData['users'] as Map<String, dynamic>?;
-
+        final userData = users[index];
+        final user = userData['users'] as Map<String, dynamic>?;
         if (user == null) return const SizedBox.shrink();
 
         final isOwnProfile = _currentUserId == user['user_id'];
+        final isCompanyUser = user['role'] == 'POSTER';
 
         return Container(
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -1785,22 +2689,24 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
             color: Colors.white,
             borderRadius: BorderRadius.circular(12),
             boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.02),
-                blurRadius: 4,
-              ),
+              BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 4),
             ],
           ),
           child: Row(
             children: [
-              CircleAvatar(
-                radius: 24,
-                backgroundImage: user['profile_image_url'] != null
-                    ? CachedNetworkImageProvider(user['profile_image_url'])
-                    : null,
-                child: user['profile_image_url'] == null
-                    ? Icon(Icons.person, size: 24, color: Colors.blue)
-                    : null,
+              GestureDetector(
+                onTap: isOwnProfile
+                    ? null
+                    : () => _navigateToUserProfile(user, isCompanyUser),
+                child: CircleAvatar(
+                  radius: 24,
+                  backgroundImage: user['profile_image_url'] != null
+                      ? CachedNetworkImageProvider(user['profile_image_url'])
+                      : null,
+                  child: user['profile_image_url'] == null
+                      ? Icon(Icons.person, size: 24, color: Colors.blue)
+                      : null,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -1817,10 +2723,14 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
                     const SizedBox(height: 2),
                     Row(
                       children: [
-                        Icon(Icons.person_outline, size: 12, color: Colors.grey.shade500),
+                        Icon(
+                          user['role'] == 'POSTER' ? Icons.business : Icons.person_outline,
+                          size: 12,
+                          color: Colors.grey.shade500,
+                        ),
                         const SizedBox(width: 4),
                         Text(
-                          'Follower',
+                          user['role'] == 'POSTER' ? 'Employer' : 'Job Seeker',
                           style: TextStyle(
                             fontSize: 11,
                             color: Colors.grey.shade500,
@@ -1832,34 +2742,21 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
                 ),
               ),
               if (!isOwnProfile)
-                OutlinedButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => ViewProfilePage(
-                          userId: user['user_id'],
-                          companyId: null,
-                          name: user['fullname'],
-                          avatarUrl: user['profile_image_url'],
-                          isCompany: false,
-                          onFollowChanged: () {
-                            // Refresh current page when follow status changes
-                            _loadFollowers();
-                            _loadStats();
-                          },
-                        ),
-                      ),
-                    );
-                  },
-                  style: OutlinedButton.styleFrom(
+                IconButton(
+                  onPressed: () => _navigateToUserProfile(user, isCompanyUser),
+                  icon: Icon(
+                    Icons.visibility,
+                    color: Colors.blue.shade400,
+                    size: 20,
+                  ),
+                  tooltip: 'View Profile',
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.blue.shade50,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(20),
                     ),
-                    side: BorderSide(color: Colors.blue.shade200),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                    padding: const EdgeInsets.all(8),
                   ),
-                  child: const Text('View Profile'),
                 ),
             ],
           ),
@@ -1867,6 +2764,177 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
       },
     );
   }
+
+  void _navigateToPostDetail(Map<String, dynamic> post) async {
+    final feedPost = FeedPost(
+      postId: post['post_id'] as String,
+      userId: widget.userId,
+      companyId: widget.isCompany ? widget.companyId : null,
+      jobId: null,
+      content: post['content'] ?? '',
+      postType: postTypeFromString(post['post_type'] as String?),
+      hashtags: [],
+      mediaUrls: post['media_urls'] != null
+          ? List<String>.from(post['media_urls'] as List)
+          : [],
+      createdAt: DateTime.parse(post['created_at'] as String),
+      updatedAt: DateTime.parse(post['created_at'] as String),
+      authorName: widget.isCompany
+          ? (_companyName ?? widget.name ?? 'Company')
+          : (_fullname ?? widget.name ?? 'User'),
+      authorAvatar: _profileImageUrl ?? '',
+      authorSubtitle: widget.isCompany ? (_industry ?? '') : '',
+      isVerified: widget.isCompany,
+      likeCount: post['like_count'] ?? 0,
+      commentCount: post['comment_count'] ?? 0,
+      isLiked: false,
+      isSaved: false,
+      isFollowing: _isFollowing,
+      linkedJob: null,
+    );
+
+    final currentUserId = supabase.auth.currentUser?.id;
+
+    if (currentUserId == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please login to view post details')),
+        );
+      }
+      return;
+    }
+
+    final currentUserData = await supabase
+        .from('users')
+        .select()
+        .eq('user_id', currentUserId)
+        .maybeSingle();
+
+    if (currentUserData == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('User data not found')),
+        );
+      }
+      return;
+    }
+
+    final currentUser = Users.fromJson(currentUserData);
+
+    if (mounted) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => SocialPostDetails(
+            post: feedPost,
+            currentUser: currentUser,
+          ),
+        ),
+      );
+    }
+  }
+
+  void _navigateToJobDetail(Map<String, dynamic> job) async {
+    final jobId = job['job_id'];
+
+    try {
+      final fullJob = await supabase
+          .from('job_post')
+          .select('''
+          *,
+          job_category_id (name),
+          job_type_id (name),
+          experience_level_id (name),
+          company_profile (company_name, logo_url, industry)
+        ''')
+          .eq('job_id', jobId)
+          .maybeSingle();
+
+      if (fullJob != null && mounted) {
+        final isOwnProfile = _currentUserId == widget.userId;
+
+        if (isOwnProfile) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => JobDetailEmployer(job: fullJob),
+            ),
+          );
+        } else {
+          final jobPost = JobPost.fromSupabase(
+            fullJob,
+            companyName: fullJob['company_profile']?['company_name'] ?? '',
+            companyLogoUrl: fullJob['company_profile']?['logo_url'],
+            companyIndustry: fullJob['company_profile']?['industry'],
+            jobType: fullJob['job_type_id']?['name'] ?? '',
+            jobCategory: fullJob['job_category_id']?['name'] ?? '',
+            experienceLevel: fullJob['experience_level_id']?['name'] ?? '',
+          );
+
+          final currentUserId = supabase.auth.currentUser?.id;
+          if (currentUserId != null) {
+            final currentUserData = await supabase
+                .from('users')
+                .select()
+                .eq('user_id', currentUserId)
+                .single();
+            final currentUser = Users.fromJson(currentUserData);
+
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => JobDetailPage(job: jobPost, currentUser: currentUser),
+              ),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading job details: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error loading job details: $e')),
+      );
+    }
+  }
+
+  void _navigateToUserProfile(
+      Map<String, dynamic> user,
+      bool isCompanyUser,
+      ) async {
+    String? targetCompanyId;
+    if (isCompanyUser) {
+      try {
+        final company = await supabase
+            .from('company_profile')
+            .select('company_id')
+            .eq('user_id', user['user_id'])
+            .maybeSingle();
+        targetCompanyId = company?['company_id'];
+      } catch (e) {
+        debugPrint('Error fetching company for user: $e');
+      }
+    }
+
+    if (!mounted) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ViewProfilePage(
+          userId: user['user_id'],
+          companyId: targetCompanyId,
+          name: user['fullname'],
+          avatarUrl: user['profile_image_url'],
+          isCompany: isCompanyUser,
+          onFollowChanged: () {
+            _loadFollowers();
+            _loadFollowing();
+            _loadStats();
+          },
+        ),
+      ),
+    );
+  }
+
   String _formatDate(String? dateString) {
     if (dateString == null) return '';
     try {

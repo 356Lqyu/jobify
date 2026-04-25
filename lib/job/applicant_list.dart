@@ -1,4 +1,3 @@
-// lib/job/applicant_list.dart
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:open_filex/open_filex.dart';
@@ -524,7 +523,11 @@ class _ApplicantCard extends StatelessWidget {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.picture_as_pdf, size: 16, color: Colors.red.shade600),
+                            Icon(
+                              Icons.description_outlined,
+                              size: 16,
+                              color: const Color(0xFF2563EB),
+                            ),
                             const SizedBox(width: 8),
                             Text(
                               'View Resume',
@@ -544,8 +547,7 @@ class _ApplicantCard extends StatelessWidget {
                         ),
                       ),
                     ),
-                  ],
-                  const SizedBox(height: 16),
+                  ],                  const SizedBox(height: 16),
                   // View Details Link
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,

@@ -118,6 +118,7 @@ class CompanyInfoCard extends StatelessWidget {
   final String companyName;
   final String industry;
   final String companySize;
+  final String phone;
   final VoidCallback onEdit;
 
   const CompanyInfoCard({
@@ -125,6 +126,7 @@ class CompanyInfoCard extends StatelessWidget {
     required this.companyName,
     required this.industry,
     required this.companySize,
+    required this.phone,
     required this.onEdit,
   });
 
@@ -137,6 +139,7 @@ class CompanyInfoCard extends StatelessWidget {
       child: Column(
         children: [
           buildInfoRow("Company Name", companyName.isNotEmpty ? companyName : "Not set"),
+          buildInfoRow("Phone", phone.isNotEmpty ? phone : "Not set"),
           buildInfoRow("Industry", industry.isNotEmpty ? industry : "Not set"),
           buildInfoRow("Company Size", companySize.isNotEmpty ? companySize : "Not set"),
         ],
@@ -2504,6 +2507,7 @@ Future<void> showEditCompanyInfoBottomSheet({
   required String companyName,
   required String industry,
   required String companySize,
+  required String phone,
   required List<Map<String, dynamic>> jobCategories,
   required List<String> companySizeOptions,
   required String? userId,
@@ -2513,6 +2517,7 @@ Future<void> showEditCompanyInfoBottomSheet({
   required Widget Function({required String label, required TextEditingController controller, IconData? icon, String? hintText, int maxLines, TextInputType keyboardType, void Function(String)? onChanged}) buildFormField,
 }) async {
   final TextEditingController companyNameCtrl = TextEditingController(text: companyName);
+  final TextEditingController phoneCtrl = TextEditingController(text: phone);
   String tempIndustry = industry;
   String tempCompanySize = companySize;
   bool isSaving = false;
@@ -2524,7 +2529,7 @@ Future<void> showEditCompanyInfoBottomSheet({
     builder: (context) => StatefulBuilder(
       builder: (context, setStateBottom) {
         return DraggableScrollableSheet(
-          initialChildSize: 0.75,
+          initialChildSize: 0.85,
           maxChildSize: 0.85,
           minChildSize: 0.5,
           expand: false,
@@ -2564,6 +2569,7 @@ Future<void> showEditCompanyInfoBottomSheet({
                       children: [
                         buildFormField(label: 'Company Name', controller: companyNameCtrl, icon: Icons.business_outlined),
                         const SizedBox(height: 16),
+                        buildFormField(label: 'Phone Number', controller: phoneCtrl, icon: Icons.phone_outlined, keyboardType: TextInputType.phone),                        const SizedBox(height: 16),
                         if (jobCategories.isNotEmpty)
                           DropdownButtonFormField<String>(
                             value: tempIndustry.isNotEmpty ? tempIndustry : null,
@@ -2600,6 +2606,10 @@ Future<void> showEditCompanyInfoBottomSheet({
                                 }
                                 if (updates.isNotEmpty) {
                                   await userRepo.updateCompanyProfile(userId!, updates);
+                                }
+                                // Update phone in users table
+                                if (phoneCtrl.text.trim() != phone) {
+                                  await userRepo.updateUser(userId!, {'phone': phoneCtrl.text.trim()});
                                 }
                                 await onRefresh();
                                 if (context.mounted) {

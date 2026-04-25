@@ -4,6 +4,38 @@ import 'package:jobify/data/feed_repository.dart';
 import 'package:jobify/data/job_repository.dart';
 import 'package:jobify/data/local_db.dart';
 
+// SNACKBAR
+void showFeedSnackBar(
+  BuildContext context,
+  String message, {
+  bool isError = false,
+  IconData? icon,
+}) {
+  final messenger = ScaffoldMessenger.maybeOf(context);
+  if (messenger == null) return;
+  messenger.clearSnackBars();
+  messenger.showSnackBar(
+    SnackBar(
+      content: Row(
+        children: [
+          if (icon != null) ...[
+            Icon(icon, color: Colors.white, size: 18),
+            const SizedBox(width: 8),
+          ],
+          Expanded(child: Text(message)),
+        ],
+      ),
+      backgroundColor: isError
+          ? const Color(0xFFEF4444)
+          : const Color(0xFF1D4ED8),
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      duration: const Duration(seconds: 2),
+    ),
+  );
+}
+
 class SocialFeedProvider extends ChangeNotifier {
   final FeedRepository _repository;
   final String userId;
@@ -11,7 +43,7 @@ class SocialFeedProvider extends ChangeNotifier {
   SocialFeedProvider({required FeedRepository repository, required this.userId})
     : _repository = repository;
 
-  //State
+  // State
   List<FeedPost> _forYouPosts = [];
   List<FeedPost> _followingPosts = [];
   bool _isLoadingForYou = false;
@@ -20,11 +52,12 @@ class SocialFeedProvider extends ChangeNotifier {
   bool _hasMoreFollowing = true;
   String? _error;
   String _activeFilter = 'All';
+  String _followingFilter = 'All'; // new
   int _forYouOffset = 0;
   int _followingOffset = 0;
   static const int _pageSize = 20;
 
-  //getter
+  // Getters
   List<FeedPost> get forYouPosts => _forYouPosts;
   List<FeedPost> get followingPosts => _followingPosts;
   bool get isLoadingForYou => _isLoadingForYou;
@@ -33,10 +66,10 @@ class SocialFeedProvider extends ChangeNotifier {
   bool get hasMoreFollowing => _hasMoreFollowing;
   String? get error => _error;
   String get activeFilter => _activeFilter;
+  String get followingFilter => _followingFilter; // new
 
-  //init and refresh
+  // Init
   Future<void> init() async {
-    // Show local cache immediately
     final cached = await LocalDB.getCachedPosts(limit: _pageSize);
     if (cached.isNotEmpty) {
       _forYouPosts = cached;
@@ -45,12 +78,20 @@ class SocialFeedProvider extends ChangeNotifier {
     await refreshForYou();
   }
 
+  // Filters
   void setFilter(String filter) {
     if (_activeFilter == filter) return;
     _activeFilter = filter;
     refreshForYou();
   }
 
+  void setFollowingFilter(String filter) {
+    if (_followingFilter == filter) return;
+    _followingFilter = filter;
+    refreshFollowing();
+  }
+
+  // For You data
   Future<void> refreshForYou() async {
     _isLoadingForYou = true;
     _forYouOffset = 0;
@@ -100,6 +141,7 @@ class SocialFeedProvider extends ChangeNotifier {
     }
   }
 
+  // Following data
   Future<void> refreshFollowing() async {
     _isLoadingFollowing = true;
     _followingOffset = 0;
@@ -110,6 +152,7 @@ class SocialFeedProvider extends ChangeNotifier {
       final posts = await _repository.fetchPosts(
         followingOnly: true,
         followingUsersOnly: true,
+        postTypeFilter: _followingFilter == 'All' ? null : _followingFilter,
         limit: _pageSize,
         offset: 0,
       );
@@ -131,6 +174,7 @@ class SocialFeedProvider extends ChangeNotifier {
       final posts = await _repository.fetchPosts(
         followingOnly: true,
         followingUsersOnly: true,
+        postTypeFilter: _followingFilter == 'All' ? null : _followingFilter,
         limit: _pageSize,
         offset: _followingOffset,
       );
@@ -143,7 +187,7 @@ class SocialFeedProvider extends ChangeNotifier {
     }
   }
 
-  //interactions
+  // Interactions
   void _updateInLists(String postId, void Function(FeedPost p) fn) {
     for (final p in _forYouPosts) {
       if (p.postId == postId) fn(p);
@@ -153,61 +197,122 @@ class SocialFeedProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> toggleLike(FeedPost post) async {
-    // Optimistic update
+  /// Toggle like with optimistic update + snackbar feedback.
+  Future<void> toggleLike(FeedPost post, [BuildContext? context]) async {
     final wasLiked = post.isLiked;
     final newLiked = !wasLiked;
+
     _updateInLists(post.postId, (p) {
       p.isLiked = newLiked;
       p.likeCount = newLiked ? p.likeCount + 1 : p.likeCount - 1;
     });
     notifyListeners();
 
+    if (context != null && context.mounted) {
+      showFeedSnackBar(
+        context,
+        newLiked ? 'Post liked' : 'Like removed',
+        icon: newLiked ? Icons.favorite : Icons.favorite_border,
+      );
+    }
+
     final serverResult = await _repository.toggleLike(post.postId, wasLiked);
     if (serverResult != newLiked) {
-      // Server failed → revert optimistic update
       _updateInLists(post.postId, (p) {
         p.isLiked = wasLiked;
         p.likeCount = wasLiked ? p.likeCount + 1 : p.likeCount - 1;
       });
       notifyListeners();
+      if (context != null && context.mounted) {
+        showFeedSnackBar(context, 'Failed to update like', isError: true);
+      }
     }
   }
 
-  Future<void> toggleSave(FeedPost post) async {
+  /// Toggle save with optimistic update + snackbar feedback.
+  Future<void> toggleSave(FeedPost post, [BuildContext? context]) async {
     final wasSaved = post.isSaved;
-    _updateInLists(post.postId, (p) => p.isSaved = !p.isSaved);
+    final newSaved = !wasSaved;
+
+    // UPDATED: Sync the nested job as well!
+    _updateInLists(post.postId, (p) {
+      p.isSaved = newSaved;
+      if (p.linkedJob != null) {
+        p.linkedJob!.isSaved = newSaved;
+      }
+    });
     notifyListeners();
+
+    if (context != null && context.mounted) {
+      showFeedSnackBar(
+        context,
+        newSaved ? 'Post saved' : 'Post unsaved',
+        icon: newSaved ? Icons.bookmark : Icons.bookmark_outline,
+      );
+    }
 
     final serverResult = await _repository.toggleSavePost(
       post.postId,
       wasSaved,
+      jobId: post.jobId,
     );
     if (serverResult == wasSaved) {
-      // Revert
-      _updateInLists(post.postId, (p) => p.isSaved = wasSaved);
+      _updateInLists(post.postId, (p) {
+        p.isSaved = wasSaved;
+        if (p.linkedJob != null) {
+          p.linkedJob!.isSaved = wasSaved;
+        }
+      });
       notifyListeners();
+      if (context != null && context.mounted) {
+        showFeedSnackBar(context, 'Failed to save post', isError: true);
+      }
     }
   }
 
-  // Follow the author's user ID
-  // In SocialFeedProvider class, update the toggleFollow method:
-  Future<void> toggleFollow(FeedPost post) async {
-    // The targetUserId is always the user_id (for both individuals and companies)
-    final targetUserId = post.userId; // This is always the user_id from users table
+  /// Toggle follow with optimistic update + snackbar feedback.
+  Future<void> toggleFollow(FeedPost post, [BuildContext? context]) async {
+    final targetUserId = post.userId;
     final wasFollowing = post.isFollowing;
+    final newFollowing = !wasFollowing;
 
-    _updateInLists(post.postId, (p) => p.isFollowing = !p.isFollowing);
+    // Update all posts from the same author
+    void setAllFollowing(bool value) {
+      for (final p in _forYouPosts) {
+        if (p.userId == targetUserId) p.isFollowing = value;
+      }
+      for (final p in _followingPosts) {
+        if (p.userId == targetUserId) p.isFollowing = value;
+      }
+    }
+
+    setAllFollowing(newFollowing);
     notifyListeners();
 
-    final result = await _repository.toggleFollowUser(targetUserId, wasFollowing);
+    if (context != null && context.mounted) {
+      showFeedSnackBar(
+        context,
+        newFollowing
+            ? 'Now following ${post.authorName}'
+            : 'Unfollowed ${post.authorName}',
+        icon: newFollowing ? Icons.person_add : Icons.person_remove_outlined,
+      );
+    }
 
-    // If the operation failed, revert the optimistic update
+    final result = await _repository.toggleFollowUser(
+      targetUserId,
+      wasFollowing,
+    );
     if (result == wasFollowing) {
-      _updateInLists(post.postId, (p) => p.isFollowing = wasFollowing);
+      setAllFollowing(wasFollowing);
       notifyListeners();
+      if (context != null && context.mounted) {
+        showFeedSnackBar(context, 'Failed to update follow', isError: true);
+      }
     }
   }
+
+  // Create / delete posts
   Future<FeedPost?> createPost({
     required String content,
     required PostType postType,
@@ -244,7 +349,7 @@ class SocialFeedProvider extends ChangeNotifier {
     return ok;
   }
 
-  //comment
+  // Comments
   Future<List<PostComment>> fetchComments(String postId) =>
       _repository.fetchComments(postId);
 
@@ -258,7 +363,7 @@ class SocialFeedProvider extends ChangeNotifier {
   }
 }
 
-//job provider
+// JOB PROVIDER
 class JobProvider extends ChangeNotifier {
   final JobRepository _repository;
   final String userId;
@@ -273,13 +378,13 @@ class JobProvider extends ChangeNotifier {
   int _offset = 0;
   static const int _pageSize = 20;
 
-  // Filters
   String _keyword = '';
   String _jobTypeFilter = 'All';
   String _expLevelFilter = 'All';
   String _locationFilter = '';
   double? _salaryMin;
   bool _remoteOnly = false;
+  int _postDaysFilter = 0;
 
   List<JobPost> get jobs => _jobs;
   bool get isLoading => _isLoading;
@@ -291,13 +396,15 @@ class JobProvider extends ChangeNotifier {
   String get locationFilter => _locationFilter;
   double? get salaryMin => _salaryMin;
   bool get remoteOnly => _remoteOnly;
+  int get postDaysFilter => _postDaysFilter;
 
   bool get hasActiveFilters =>
       _jobTypeFilter != 'All' ||
       _expLevelFilter != 'All' ||
       _locationFilter.isNotEmpty ||
       _salaryMin != null ||
-      _remoteOnly;
+      _remoteOnly ||
+      _postDaysFilter > 0;
 
   Future<void> init() async {
     final cached = await LocalDB.getCachedJobs(limit: _pageSize);
@@ -323,6 +430,7 @@ class JobProvider extends ChangeNotifier {
         location: _locationFilter.isEmpty ? null : _locationFilter,
         salaryMin: _salaryMin,
         remoteOnly: _remoteOnly,
+        daysAgo: _postDaysFilter > 0 ? _postDaysFilter : null,
         limit: _pageSize,
         offset: 0,
       );
@@ -358,6 +466,7 @@ class JobProvider extends ChangeNotifier {
         location: _locationFilter.isEmpty ? null : _locationFilter,
         salaryMin: _salaryMin,
         remoteOnly: _remoteOnly,
+        daysAgo: _postDaysFilter > 0 ? _postDaysFilter : null,
         limit: _pageSize,
         offset: _offset,
       );
@@ -370,8 +479,9 @@ class JobProvider extends ChangeNotifier {
     }
   }
 
-  void search(String q) {
-    _keyword = q;
+  void search(String keyword) {
+    if (_keyword == keyword) return;
+    _keyword = keyword;
     refresh();
   }
 
@@ -400,24 +510,43 @@ class JobProvider extends ChangeNotifier {
     refresh();
   }
 
+  void setPostDays(int days) {
+    _postDaysFilter = days;
+    refresh();
+  }
+
   void clearFilters() {
     _jobTypeFilter = 'All';
     _expLevelFilter = 'All';
     _locationFilter = '';
     _salaryMin = null;
     _remoteOnly = false;
+    _postDaysFilter = 0;
     refresh();
   }
 
-  Future<void> toggleSaveJob(JobPost job) async {
+  Future<void> toggleSaveJob(JobPost job, [BuildContext? context]) async {
     final wasSaved = job.isSaved;
-    job.isSaved = !job.isSaved;
+    final newSaved = !wasSaved;
+
+    job.isSaved = newSaved;
     notifyListeners();
+
+    if (context != null && context.mounted) {
+      showFeedSnackBar(
+        context,
+        newSaved ? 'Job saved' : 'Job unsaved',
+        icon: newSaved ? Icons.bookmark : Icons.bookmark_outline,
+      );
+    }
 
     final result = await _repository.toggleSaveJob(job.jobId, wasSaved);
     if (result == wasSaved) {
       job.isSaved = wasSaved;
       notifyListeners();
+      if (context != null && context.mounted) {
+        showFeedSnackBar(context, 'Failed to save job', isError: true);
+      }
     }
   }
 }

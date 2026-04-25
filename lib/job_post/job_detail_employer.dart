@@ -128,7 +128,9 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: Text(_job['job_title'] ?? 'Job Details'),
+        title: Text(_job['job_title'] ?? 'Job Details',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
         elevation: 0,

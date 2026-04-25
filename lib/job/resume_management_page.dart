@@ -1,7 +1,6 @@
-
-// lib/job/resume_management_page.dart
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
@@ -49,6 +48,72 @@ class _ResumeManagementPageState extends State<ResumeManagementPage> {
           SnackBar(content: Text('Error loading resumes: $e')),
         );
       }
+    }
+  }
+
+  Future<void> _uploadResume() async {
+    try {
+      FilePickerResult? result = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf', 'doc', 'docx'],
+      );
+
+      if (result == null) return;
+
+      final file = File(result.files.single.path!);
+      final fileName = result.files.single.name;
+      final userId = supabase.auth.currentUser?.id;
+
+      if (userId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please login first')),
+        );
+        return;
+      }
+
+      setState(() => _isUploading = true);
+
+      final bytes = await file.readAsBytes();
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final extension = fileName.substring(fileName.lastIndexOf('.'));
+      final storagePath = '${userId}_$timestamp$extension';
+
+      await supabase.storage.from('resumes').uploadBinary(
+        storagePath,
+        bytes,
+        fileOptions: const FileOptions(cacheControl: '3600', upsert: true),
+      );
+
+      final publicUrl = supabase.storage.from('resumes').getPublicUrl(storagePath);
+
+      // Insert with is_default field
+      await supabase.from('resume').insert({
+        'user_id': userId,
+        'file_url': publicUrl,
+        'file_name': fileName,
+        'uploaded_at': DateTime.now().toIso8601String(),
+        'is_default': false,
+      });
+
+      await _loadResumes();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Resume uploaded successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      print('Upload error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error uploading resume: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isUploading = false);
     }
   }
 
@@ -106,12 +171,10 @@ class _ResumeManagementPageState extends State<ResumeManagementPage> {
     if (confirmed == true) {
       setState(() => _isLoading = true);
       try {
-        // Delete from storage
         final url = resume['file_url'] as String;
         final path = url.split('/resumes/').last;
         await supabase.storage.from('resumes').remove([path]);
 
-        // Delete from database
         await supabase
             .from('resume')
             .delete()
@@ -135,24 +198,29 @@ class _ResumeManagementPageState extends State<ResumeManagementPage> {
     }
   }
 
-  void _showPreviewDialog(String url, String fileName) {
-    showDialog(
-      context: context,
-      builder: (context) => ResumePreviewDialog(
-        resumeUrl: url,
-        fileName: fileName,
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('My Resumes'),
-        backgroundColor: const Color(0xFF2563EB),
+        title: const Text('My Resumes',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
         elevation: 0,
+        actions: [
+          IconButton(
+            icon: _isUploading
+                ? const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+            )
+                : const Icon(Icons.upload_file),
+            onPressed: _isUploading ? null : _uploadResume,
+            tooltip: 'Upload Resume',
+          ),
+        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -175,12 +243,12 @@ class _ResumeManagementPageState extends State<ResumeManagementPage> {
                 leading: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Colors.red.shade50,
+                    color: Colors.blue.shade50,
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(
-                    Icons.picture_as_pdf,
-                    color: Colors.red.shade600,
+                    Icons.description_outlined,
+                    color: Colors.blue.shade700,
                     size: 28,
                   ),
                 ),
@@ -199,7 +267,7 @@ class _ResumeManagementPageState extends State<ResumeManagementPage> {
                   children: [
                     IconButton(
                       icon: const Icon(Icons.visibility, color: Color(0xFF2563EB)),
-                      onPressed: () => _showPreviewDialog(resume['file_url'], resume['file_name']),
+                      onPressed: () => _viewResume(resume['file_url'], resume['file_name']),
                       tooltip: 'Preview Resume',
                     ),
                     IconButton(
@@ -229,9 +297,29 @@ class _ResumeManagementPageState extends State<ResumeManagementPage> {
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
           ),
           const SizedBox(height: 8),
-          Text(
-            'Upload your resume from your profile page',
-            style: TextStyle(color: Colors.grey.shade600),
+          const Text(
+            'Tap the upload button to add your resume',
+            style: TextStyle(color: Colors.grey),
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton.icon(
+            onPressed: _isUploading ? null : _uploadResume,
+            icon: _isUploading
+                ? const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+                : const Icon(Icons.upload_file),
+            label: const Text('Upload Resume'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
           ),
         ],
       ),

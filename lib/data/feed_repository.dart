@@ -31,20 +31,26 @@ class FeedRepository {
     }
     String mime;
     switch (ext) {
-      case 'png': mime = 'image/png'; break;
-      case 'webp': mime = 'image/webp'; break;
-      default: mime = 'image/jpeg';
+      case 'png':
+        mime = 'image/png';
+        break;
+      case 'webp':
+        mime = 'image/webp';
+        break;
+      default:
+        mime = 'image/jpeg';
     }
     try {
-      await _sb.storage.from(bucket).uploadBinary(
-        fileName,
-        fileBytes,
-        fileOptions: FileOptions(contentType: mime, upsert: true),
-      );
+      await _sb.storage
+          .from(bucket)
+          .uploadBinary(
+            fileName,
+            fileBytes,
+            fileOptions: FileOptions(contentType: mime, upsert: true),
+          );
       return _sb.storage.from(bucket).getPublicUrl(fileName);
     } catch (e) {
       print('Detailed upload error: $e');
-      // Also print response body if available
       throw Exception('Storage upload failed: ${e.toString()}');
     }
   }
@@ -91,16 +97,16 @@ class FeedRepository {
       }
 
       final rows =
-      await query
-          .order('created_at', ascending: false)
-          .range(offset, offset + limit - 1)
-      as List<dynamic>;
+          await query
+                  .order('created_at', ascending: false)
+                  .range(offset, offset + limit - 1)
+              as List<dynamic>;
 
       // Fetch like / save / follow state for current user
       final likedIds = _uid != null ? await _getLikedPostIds() : <String>{};
       final savedIds = _uid != null
-          ? await LocalDB.getSavedPostIds(_uid!)
-          : <String>{};
+          ? await _getSavedPostIds()
+          : <String>{}; // UPDATED
       final followedUserIds = _uid != null
           ? await _getFollowedUserIds()
           : <String>{};
@@ -118,7 +124,7 @@ class FeedRepository {
         postIds,
       );
 
-      // Build FeedPost list
+      // FeedPost list
       final posts = <FeedPost>[];
       for (final row in rows) {
         final r = row as Map<String, dynamic>;
@@ -150,11 +156,11 @@ class FeedRepository {
               r['updated_at'] as String? ?? r['created_at'] as String,
             ),
             authorName:
-            compRow?['company_name'] as String? ??
+                compRow?['company_name'] as String? ??
                 userRow?['fullname'] as String? ??
                 'Unknown',
             authorAvatar:
-            compRow?['logo_url'] as String? ??
+                compRow?['logo_url'] as String? ??
                 userRow?['profile_image_url'] as String? ??
                 '',
             authorSubtitle: compRow?['industry'] as String? ?? '',
@@ -185,15 +191,15 @@ class FeedRepository {
 
   // Batch count helper
   Future<Map<String, int>> _batchCountMap(
-      String table,
-      String column,
-      List<String> ids,
-      ) async {
+    String table,
+    String column,
+    List<String> ids,
+  ) async {
     if (ids.isEmpty) return {};
     try {
       final rows =
-      await _sb.from(table).select(column).inFilter(column, ids)
-      as List<dynamic>;
+          await _sb.from(table).select(column).inFilter(column, ids)
+              as List<dynamic>;
       final map = <String, int>{};
       for (final r in rows) {
         final id = (r as Map<String, dynamic>)[column] as String;
@@ -209,8 +215,8 @@ class FeedRepository {
   Future<Set<String>> _getLikedPostIds() async {
     try {
       final rows =
-      await _sb.from('post_like').select('post_id').eq('user_id', _uid!)
-      as List<dynamic>;
+          await _sb.from('post_like').select('post_id').eq('user_id', _uid!)
+              as List<dynamic>;
       return rows.map((r) => (r as Map)['post_id'] as String).toSet();
     } catch (e) {
       debugPrint('_getLikedPostIds error: $e');
@@ -218,16 +224,28 @@ class FeedRepository {
     }
   }
 
-  //get followed user IDs
+  // UPDATED HELPER FOR GETTING SAVED POSTS
+  Future<Set<String>> _getSavedPostIds() async {
+    if (_uid == null) return {};
+    try {
+      final rows =
+          await _sb.from('post_saved').select('post_id').eq('user_id', _uid!)
+              as List<dynamic>;
+      return rows.map((r) => (r as Map)['post_id'] as String).toSet();
+    } catch (e) {
+      return await LocalDB.getSavedPostIds(_uid!);
+    }
+  }
+
   Future<Set<String>> _getFollowedUserIds() async {
     if (_uid == null) return {};
     try {
       final rows =
-      await _sb
-          .from('follows')
-          .select('following_id')
-          .eq('follower_id', _uid!)
-      as List<dynamic>;
+          await _sb
+                  .from('follows')
+                  .select('following_id')
+                  .eq('follower_id', _uid!)
+              as List<dynamic>;
       return rows.map((r) => (r as Map)['following_id'] as String).toSet();
     } catch (e) {
       debugPrint('_getFollowedUserIds error: $e');
@@ -238,25 +256,39 @@ class FeedRepository {
   // POSTS  –  FETCH / CREATE / UPDATE / DELETE
   Future<List<FeedPost>> fetchUserPosts(String userId) async {
     try {
-      final rows = await _sb
-          .from('post')
-          .select('''
+      final rows =
+          await _sb
+                  .from('post')
+                  .select('''
           post_id, user_id, company_id, job_id,
           content, post_type, hashtags, media_urls,
           created_at, updated_at,
           users!post_user_id_fkey ( fullname, profile_image_url ),
           company_profile!post_company_id_fkey ( company_name, logo_url, industry )
         ''')
-          .eq('user_id', userId)
-          .order('created_at', ascending: false) as List<dynamic>;
+                  .eq('user_id', userId)
+                  .order('created_at', ascending: false)
+              as List<dynamic>;
 
       final likedIds = _uid != null ? await _getLikedPostIds() : <String>{};
-      final savedIds = _uid != null ? await LocalDB.getSavedPostIds(_uid!) : <String>{};
-      final followedUserIds = _uid != null ? await _getFollowedUserIds() : <String>{};
+      final savedIds = _uid != null
+          ? await _getSavedPostIds()
+          : <String>{}; // UPDATED
+      final followedUserIds = _uid != null
+          ? await _getFollowedUserIds()
+          : <String>{};
       final postIds = rows.map((r) => (r as Map)['post_id'] as String).toList();
 
-      final likeCountMap = await _batchCountMap('post_like', 'post_id', postIds);
-      final commentCountMap = await _batchCountMap('post_comment', 'post_id', postIds);
+      final likeCountMap = await _batchCountMap(
+        'post_like',
+        'post_id',
+        postIds,
+      );
+      final commentCountMap = await _batchCountMap(
+        'post_comment',
+        'post_id',
+        postIds,
+      );
 
       final posts = <FeedPost>[];
       for (final row in rows) {
@@ -270,28 +302,38 @@ class FeedRepository {
           linkedJob = await _jobRepo.fetchJobById(r['job_id'] as String);
         }
 
-        posts.add(FeedPost(
-          postId: pid,
-          userId: r['user_id'] as String,
-          companyId: r['company_id'] as String?,
-          jobId: r['job_id'] as String?,
-          content: r['content'] as String? ?? '',
-          postType: postTypeFromString(r['post_type'] as String?),
-          hashtags: List<String>.from(r['hashtags'] as List? ?? []),
-          mediaUrls: List<String>.from(r['media_urls'] as List? ?? []),
-          createdAt: DateTime.parse(r['created_at'] as String),
-          updatedAt: DateTime.parse(r['updated_at'] as String? ?? r['created_at'] as String),
-          authorName: compRow?['company_name'] as String? ?? userRow?['fullname'] as String? ?? 'Unknown',
-          authorAvatar: compRow?['logo_url'] as String? ?? userRow?['profile_image_url'] as String? ?? '',
-          authorSubtitle: compRow?['industry'] as String? ?? '',
-          isVerified: compRow != null,
-          likeCount: likeCountMap[pid] ?? 0,
-          commentCount: commentCountMap[pid] ?? 0,
-          isLiked: likedIds.contains(pid),
-          isSaved: savedIds.contains(pid),
-          isFollowing: followedUserIds.contains(r['user_id'] as String),
-          linkedJob: linkedJob,
-        ));
+        posts.add(
+          FeedPost(
+            postId: pid,
+            userId: r['user_id'] as String,
+            companyId: r['company_id'] as String?,
+            jobId: r['job_id'] as String?,
+            content: r['content'] as String? ?? '',
+            postType: postTypeFromString(r['post_type'] as String?),
+            hashtags: List<String>.from(r['hashtags'] as List? ?? []),
+            mediaUrls: List<String>.from(r['media_urls'] as List? ?? []),
+            createdAt: DateTime.parse(r['created_at'] as String),
+            updatedAt: DateTime.parse(
+              r['updated_at'] as String? ?? r['created_at'] as String,
+            ),
+            authorName:
+                compRow?['company_name'] as String? ??
+                userRow?['fullname'] as String? ??
+                'Unknown',
+            authorAvatar:
+                compRow?['logo_url'] as String? ??
+                userRow?['profile_image_url'] as String? ??
+                '',
+            authorSubtitle: compRow?['industry'] as String? ?? '',
+            isVerified: compRow != null,
+            likeCount: likeCountMap[pid] ?? 0,
+            commentCount: commentCountMap[pid] ?? 0,
+            isLiked: likedIds.contains(pid),
+            isSaved: savedIds.contains(pid),
+            isFollowing: followedUserIds.contains(r['user_id'] as String),
+            linkedJob: linkedJob,
+          ),
+        );
       }
       return posts;
     } catch (e) {
@@ -351,11 +393,11 @@ class FeedRepository {
           row['updated_at'] as String? ?? row['created_at'] as String,
         ),
         authorName:
-        compData?['company_name'] as String? ??
+            compData?['company_name'] as String? ??
             userData?['fullname'] as String? ??
             'You',
         authorAvatar:
-        compData?['logo_url'] as String? ??
+            compData?['logo_url'] as String? ??
             userData?['profile_image_url'] as String? ??
             '',
         authorSubtitle: compData?['industry'] as String? ?? '',
@@ -369,7 +411,6 @@ class FeedRepository {
     }
   }
 
-  /// Auto-create a social post when a job is posted (linked via job_id)
   Future<void> autoCreateJobPost({
     required String userId,
     required String companyId,
@@ -384,7 +425,7 @@ class FeedRepository {
         'job_id': jobId,
         'post_type': 'job',
         'content':
-        '🚀 We\'re hiring! Check out our open position: $jobTitle at $companyName.',
+            '🚀 We\'re hiring! Check out our open position: $jobTitle at $companyName.',
         'hashtags': [
           'hiring',
           'jobs',
@@ -433,36 +474,56 @@ class FeedRepository {
     }
   }
 
-  // SAVES
-  Future<bool> toggleSavePost(String postId, bool currentlySaved) async {
+  // UPDATED SAVES LOGIC
+  Future<bool> toggleSavePost(
+    String postId,
+    bool currentlySaved, {
+    String? jobId,
+  }) async {
     if (_uid == null) return currentlySaved;
-    final newSaved = !currentlySaved;
+
     try {
-      if (newSaved) {
-        await _sb.from('post_saved').insert({
-          'post_id': postId,
-          'user_id': _uid,
-        });
-      } else {
-        await _sb
-            .from('post_saved')
-            .delete()
-            .eq('post_id', postId)
-            .eq('user_id', _uid!);
-      }
-
-      final postData = await _sb
-          .from('post')
-          .select('job_id')
+      final existing = await _sb
+          .from('post_saved')
+          .select('post_saved_id')
           .eq('post_id', postId)
+          .eq('user_id', _uid!)
           .maybeSingle();
-      final jobId = postData?['job_id'] as String?;
-      if (jobId != null) {
-        await LocalDB.setJobSaved(jobId, newSaved, _uid!);
-      }
 
-      await LocalDB.setPostSaved(postId, newSaved, _uid!);
-      return newSaved;
+      final actuallySaved = existing != null;
+      final desiredSaved = !currentlySaved;
+
+      if (desiredSaved) {
+        if (!actuallySaved) {
+          try {
+            await _sb.from('post_saved').insert({
+              'post_id': postId,
+              'user_id': _uid!,
+              'created_at': DateTime.now().toIso8601String(),
+            });
+          } on PostgrestException catch (e) {
+            if (e.code != '23505') rethrow; // ignore duplicates
+          }
+        }
+        await LocalDB.setPostSaved(postId, true, _uid!);
+        if (jobId != null) {
+          await LocalDB.setJobSaved(jobId, true, _uid!);
+        }
+        return true;
+      } else {
+        if (actuallySaved) {
+          await _sb
+              .from('post_saved')
+              .delete()
+              .eq('post_id', postId)
+              .eq('user_id', _uid!);
+        }
+        await LocalDB.setPostSaved(postId, false, _uid!);
+        if (jobId != null) {
+          await LocalDB.setJobSaved(jobId, false, _uid!);
+        }
+        return false;
+      }
     } catch (e) {
       debugPrint('toggleSavePost error: $e');
       return currentlySaved;
@@ -474,12 +535,12 @@ class FeedRepository {
     if (_uid == null) return [];
     try {
       final savedRows =
-      await _sb
-          .from('post_saved')
-          .select('post_id')
-          .eq('user_id', _uid!)
-          .order('created_at', ascending: false)
-      as List<dynamic>;
+          await _sb
+                  .from('post_saved')
+                  .select('post_id')
+                  .eq('user_id', _uid!)
+                  .order('created_at', ascending: false)
+              as List<dynamic>;
 
       final postIds = savedRows
           .map((r) => (r as Map)['post_id'] as String)
@@ -487,18 +548,18 @@ class FeedRepository {
       if (postIds.isEmpty) return [];
 
       final rows =
-      await _sb
-          .from('post')
-          .select('''
+          await _sb
+                  .from('post')
+                  .select('''
         post_id, user_id, company_id, job_id,
         content, post_type, hashtags, media_urls,
         created_at, updated_at,
         users!post_user_id_fkey ( fullname, profile_image_url ),
         company_profile!post_company_id_fkey ( company_name, logo_url, industry )
       ''')
-          .inFilter('post_id', postIds)
-          .order('created_at', ascending: false)
-      as List<dynamic>;
+                  .inFilter('post_id', postIds)
+                  .order('created_at', ascending: false)
+              as List<dynamic>;
 
       final likedIds = await _getLikedPostIds();
       final savedIds = postIds.toSet();
@@ -538,11 +599,11 @@ class FeedRepository {
               r['updated_at'] as String? ?? r['created_at'] as String,
             ),
             authorName:
-            compRow?['company_name'] as String? ??
+                compRow?['company_name'] as String? ??
                 userRow?['fullname'] as String? ??
                 'Unknown',
             authorAvatar:
-            compRow?['logo_url'] as String? ??
+                compRow?['logo_url'] as String? ??
                 userRow?['profile_image_url'] as String? ??
                 '',
             authorSubtitle: compRow?['industry'] as String? ?? '',
@@ -567,14 +628,16 @@ class FeedRepository {
   // COMMENTS
   Future<List<PostComment>> fetchComments(String postId) async {
     try {
-      final rows = await _sb
-          .from('post_comment')
-          .select('''
+      final rows =
+          await _sb
+                  .from('post_comment')
+                  .select('''
           comment_id, post_id, user_id, comment_text, created_at,
           users!post_comment_user_id_fkey ( fullname, profile_image_url, email )
         ''')
-          .eq('post_id', postId)
-          .order('created_at', ascending: false) as List<dynamic>;
+                  .eq('post_id', postId)
+                  .order('created_at', ascending: false)
+              as List<dynamic>;
 
       return rows.map((row) {
         final r = row as Map<String, dynamic>;
@@ -583,7 +646,8 @@ class FeedRepository {
         if (userRow != null) {
           authorName = (userRow['fullname'] as String?)?.trim() ?? '';
           if (authorName.isEmpty) {
-            authorName = (userRow['email'] as String?)?.split('@').first ?? 'User';
+            authorName =
+                (userRow['email'] as String?)?.split('@').first ?? 'User';
           }
         }
         return PostComment(
@@ -632,19 +696,17 @@ class FeedRepository {
     }
   }
 
-  // FOLLOW USER (follows the user account, which is the correct approach for both individuals and companies)
-  // In FeedRepository class
   Future<bool> toggleFollowUser(
-      String targetUserId,
-      bool currentlyFollowing,
-      ) async {
+    String targetUserId,
+    bool currentlyFollowing,
+  ) async {
     if (_uid == null) return currentlyFollowing;
     final newFollowing = !currentlyFollowing;
     try {
       if (newFollowing) {
         await _sb.from('follows').insert({
           'follower_id': _uid,
-          'following_id': targetUserId,  // Must be a valid user_id from users table
+          'following_id': targetUserId,
         });
       } else {
         await _sb

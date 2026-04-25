@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -7,7 +8,6 @@ import 'package:jobify/data/job_repository.dart';
 import 'package:jobify/users/users.dart';
 import 'package:jobify/discovery/job_details.dart';
 
-
 class DiscoveryJob extends StatefulWidget {
   final Users user;
   const DiscoveryJob({super.key, required this.user});
@@ -16,13 +16,16 @@ class DiscoveryJob extends StatefulWidget {
   State<DiscoveryJob> createState() => _DiscoveryJobState();
 }
 
-class _DiscoveryJobState extends State<DiscoveryJob> {
+class _DiscoveryJobState extends State<DiscoveryJob>
+    with WidgetsBindingObserver {
   late final JobProvider _provider;
   final _searchCtrl = TextEditingController();
+  Timer? _debounce;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _provider = JobProvider(
       repository: JobRepository(),
       userId: widget.user.userId,
@@ -32,9 +35,28 @@ class _DiscoveryJobState extends State<DiscoveryJob> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _searchCtrl.dispose();
+    _debounce?.cancel();
     _provider.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _provider.refresh();
+    }
+  }
+
+  void refresh() => _provider.refresh();
+
+  /// Debounced search – triggers after the user stops typing for 300 ms
+  void _onSearchChanged(String value) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 300), () {
+      _provider.search(value.trim());
+    });
   }
 
   void _showFilterSheet() {
@@ -49,18 +71,13 @@ class _DiscoveryJobState extends State<DiscoveryJob> {
     );
   }
 
-  // Helper to navigate to job details and refresh on return
   Future<void> _navigateToJobDetail(BuildContext context, JobPost job) async {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => JobDetailPage(
-          job: job,
-          currentUser: widget.user,
-        ),
+        builder: (_) => JobDetailPage(job: job, currentUser: widget.user),
       ),
     );
-    // Refresh the job list when returning (e.g., after save/unsave)
     _provider.refresh();
   }
 
@@ -71,7 +88,9 @@ class _DiscoveryJobState extends State<DiscoveryJob> {
       child: Scaffold(
         backgroundColor: const Color(0xFFF1F5F9),
         appBar: AppBar(
-          title: const Text('Jobs Discovery'),
+          title: const Text('Jobs Discovery',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
           backgroundColor: Colors.blue,
           foregroundColor: Colors.white,
           elevation: 0,
@@ -81,92 +100,135 @@ class _DiscoveryJobState extends State<DiscoveryJob> {
           bottom: false,
           child: Column(
             children: [
+              // Unified Header: Search Bar + Active Filters
               Material(
                 color: Colors.white,
-                elevation: 1,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF1F5F9),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.search, size: 16, color: Colors.blueGrey),
-                              const SizedBox(width: 6),
-                              Expanded(
-                                child: TextField(
-                                  controller: _searchCtrl,
-                                  style: const TextStyle(fontSize: 13),
-                                  decoration: const InputDecoration.collapsed(
-                                    hintText: 'Search jobs, companies…',
-                                    hintStyle: TextStyle(
-                                        fontSize: 13, color: Colors.blueGrey),
-                                  ),
-                                  onSubmitted: (v) => _provider.search(v.trim()),
-                                  onChanged: (v) {
-                                    if (v.isEmpty) _provider.search('');
-                                  },
-                                ),
+                elevation: 2,
+                shadowColor: Colors.black.withOpacity(0.1), // Softer, nicer shadow
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start, // Aligns everything to the start
+                  children: [
+                    // 1. Search Bar & Filter Button Row
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 10,
                               ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF1F5F9),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.search,
+                                    size: 18, // Slightly larger for better proportions
+                                    color: Colors.blueGrey,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: TextField(
+                                      controller: _searchCtrl,
+                                      style: const TextStyle(fontSize: 14),
+                                      decoration: const InputDecoration.collapsed(
+                                        hintText: 'Search jobs, location…',
+                                        hintStyle: TextStyle(
+                                          fontSize: 14,
+                                          color: Colors.blueGrey,
+                                        ),
+                                      ),
+                                      onChanged: (v) => _onSearchChanged(v),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Consumer<JobProvider>(
+                            builder: (_, p, __) {
+                              return GestureDetector(
+                                onTap: _showFilterSheet,
+                                child: Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: p.hasActiveFilters
+                                        ? const Color(0xFF2563EB)
+                                        : const Color(0xFFF1F5F9),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Icon(
+                                    Icons.tune_rounded,
+                                    size: 20,
+                                    color: p.hasActiveFilters
+                                        ? Colors.white
+                                        : Colors.blueGrey,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // 2. Active Filter Chips Row
+                    Consumer<JobProvider>(
+                      builder: (_, p, __) {
+                        if (!p.hasActiveFilters) return const SizedBox.shrink();
+                        return Container(
+                          width: double.infinity, // Forces the white background to stretch fully
+                          padding: const EdgeInsets.fromLTRB(14, 0, 14, 14), // Bottom padding for spacing
+                          child: Wrap(
+                            alignment: WrapAlignment.start, // "Start with the first" (Left-aligned)
+                            spacing: 8, // Horizontal space between chips
+                            runSpacing: 8, // Vertical space if they wrap to a new line
+                            children: [
+                              if (p.jobTypeFilter != 'All')
+                                _ActiveChip(
+                                  label: p.jobTypeFilter,
+                                  onRemove: () => p.setJobType('All'),
+                                ),
+                              if (p.expLevelFilter != 'All')
+                                _ActiveChip(
+                                  label: p.expLevelFilter,
+                                  onRemove: () => p.setExpLevel('All'),
+                                ),
+                              if (p.locationFilter.isNotEmpty)
+                                _ActiveChip(
+                                  label: p.locationFilter,
+                                  onRemove: () => p.setLocation(''),
+                                ),
+                              if (p.salaryMin != null)
+                                _ActiveChip(
+                                  label: 'Min RM ${p.salaryMin!.toStringAsFixed(0)}',
+                                  onRemove: () => p.setSalaryMin(null),
+                                ),
+                              if (p.remoteOnly)
+                                _ActiveChip(
+                                  label: 'Remote',
+                                  onRemove: () => p.setRemoteOnly(false),
+                                ),
+                              if (p.postDaysFilter > 0)
+                                _ActiveChip(
+                                  label: p.postDaysFilter == 1
+                                      ? 'Last 24h'
+                                      : 'Last ${p.postDaysFilter} Days',
+                                  onRemove: () => p.setPostDays(0),
+                                ),
                             ],
                           ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Consumer<JobProvider>(builder: (_, p, __) {
-                        return GestureDetector(
-                          onTap: _showFilterSheet,
-                          child: Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: p.hasActiveFilters
-                                  ? const Color(0xFF2563EB)
-                                  : const Color(0xFFF1F5F9),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Icon(
-                              Icons.tune_rounded,
-                              size: 20,
-                              color: p.hasActiveFilters ? Colors.white : Colors.blueGrey,
-                            ),
-                          ),
                         );
-                      }),
-                    ],
-                  ),
+                      },
+                    ),
+                  ],
                 ),
               ),
-              Consumer<JobProvider>(builder: (_, p, __) {
-                if (!p.hasActiveFilters) return const SizedBox.shrink();
-                return Container(
-                  color: Colors.white,
-                  padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
-                  child: Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: [
-                      if (p.jobTypeFilter != 'All')
-                        _ActiveChip(label: p.jobTypeFilter, onRemove: () => p.setJobType('All')),
-                      if (p.expLevelFilter != 'All')
-                        _ActiveChip(label: p.expLevelFilter, onRemove: () => p.setExpLevel('All')),
-                      if (p.locationFilter.isNotEmpty)
-                        _ActiveChip(label: p.locationFilter, onRemove: () => p.setLocation('')),
-                      if (p.salaryMin != null)
-                        _ActiveChip(
-                            label: 'Min RM ${p.salaryMin!.toStringAsFixed(0)}',
-                            onRemove: () => p.setSalaryMin(null)),
-                      if (p.remoteOnly)
-                        _ActiveChip(label: 'Remote', onRemove: () => p.setRemoteOnly(false)),
-                    ],
-                  ),
-                );
-              }),
               Expanded(
                 child: Consumer<JobProvider>(
                   builder: (_, prov, __) {
@@ -180,26 +242,32 @@ class _DiscoveryJobState extends State<DiscoveryJob> {
                       onRefresh: prov.refresh,
                       child: NotificationListener<ScrollNotification>(
                         onNotification: (n) {
-                          if (n.metrics.pixels >= n.metrics.maxScrollExtent - 200) {
+                          if (n.metrics.pixels >=
+                              n.metrics.maxScrollExtent - 200) {
                             prov.loadMore();
                           }
                           return false;
                         },
                         child: ListView.builder(
                           padding: const EdgeInsets.only(top: 20, bottom: 100),
-                          itemCount: prov.jobs.length + (prov.isLoading ? 1 : 0),
+                          itemCount:
+                              prov.jobs.length + (prov.isLoading ? 1 : 0),
                           itemBuilder: (ctx, i) {
                             if (i >= prov.jobs.length) {
                               return const Padding(
                                 padding: EdgeInsets.all(20),
-                                child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                                child: Center(
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                ),
                               );
                             }
                             final job = prov.jobs[i];
                             return _JobCard(
                               job: job,
-                              onSaveTap: () => prov.toggleSaveJob(job),
-                              onTap: () => _navigateToJobDetail(ctx, job),  // <-- use new method
+                              onSaveTap: () => prov.toggleSaveJob(job, ctx),
+                              onTap: () => _navigateToJobDetail(ctx, job),
                             );
                           },
                         ),
@@ -216,13 +284,20 @@ class _DiscoveryJobState extends State<DiscoveryJob> {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
 // JOB CARD
+// ─────────────────────────────────────────────────────────────────────────────
+
 class _JobCard extends StatelessWidget {
   final JobPost job;
   final VoidCallback onSaveTap;
   final VoidCallback onTap;
 
-  const _JobCard({required this.job, required this.onSaveTap, required this.onTap});
+  const _JobCard({
+    required this.job,
+    required this.onSaveTap,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -235,9 +310,10 @@ class _JobCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(14),
           boxShadow: [
             BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 8,
-                offset: const Offset(0, 2)),
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
           ],
         ),
         child: Padding(
@@ -252,10 +328,15 @@ class _JobCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(8),
                     child: job.companyLogoUrl != null
                         ? CachedNetworkImage(
-                        imageUrl: job.companyLogoUrl!,
-                        width: 42, height: 42, fit: BoxFit.cover,
-                        placeholder: (_, __) => _LogoBox(name: job.companyName),
-                        errorWidget: (_, __, ___) => _LogoBox(name: job.companyName))
+                            imageUrl: job.companyLogoUrl!,
+                            width: 42,
+                            height: 42,
+                            fit: BoxFit.cover,
+                            placeholder: (_, __) =>
+                                _LogoBox(name: job.companyName),
+                            errorWidget: (_, __, ___) =>
+                                _LogoBox(name: job.companyName),
+                          )
                         : _LogoBox(name: job.companyName),
                   ),
                   const SizedBox(width: 10),
@@ -263,13 +344,21 @@ class _JobCard extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(job.companyName,
-                            style: const TextStyle(fontSize: 12, color: Colors.blueGrey)),
-                        Text(job.jobTitle,
-                            style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 15,
-                                color: Colors.black87)),
+                        Text(
+                          job.companyName,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.blueGrey,
+                          ),
+                        ),
+                        Text(
+                          job.jobTitle,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 15,
+                            color: Colors.black87,
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -277,52 +366,93 @@ class _JobCard extends StatelessWidget {
                     onTap: onSaveTap,
                     child: Icon(
                       job.isSaved ? Icons.bookmark : Icons.bookmark_border,
-                      color: job.isSaved ? const Color(0xFF2563EB) : Colors.blueGrey.shade300,
+                      color: job.isSaved
+                          ? const Color(0xFF2563EB)
+                          : Colors.blueGrey.shade300,
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 10),
               Wrap(
-                spacing: 6, runSpacing: 6,
+                spacing: 6,
+                runSpacing: 6,
                 children: [
                   if (job.jobType.isNotEmpty)
                     _JobTag(label: job.jobType, color: const Color(0xFF2563EB)),
                   if (job.experienceLevel.isNotEmpty)
-                    _JobTag(label: job.experienceLevel, color: const Color(0xFF8B5CF6)),
+                    _JobTag(
+                      label: job.experienceLevel,
+                      color: const Color(0xFF8B5CF6),
+                    ),
                   if (job.remoteOption)
                     _JobTag(label: 'Remote', color: const Color(0xFF10B981)),
                   if (job.jobCategory.isNotEmpty)
-                    _JobTag(label: job.jobCategory, color: const Color(0xFFF59E0B)),
+                    _JobTag(
+                      label: job.jobCategory,
+                      color: const Color(0xFFF59E0B),
+                    ),
                 ],
               ),
               const SizedBox(height: 10),
               Row(
                 children: [
-                  const Icon(Icons.location_on_outlined, size: 13, color: Colors.blueGrey),
+                  const Icon(
+                    Icons.location_on_outlined,
+                    size: 13,
+                    color: Colors.blueGrey,
+                  ),
                   const SizedBox(width: 3),
                   Expanded(
-                    child: Text(job.location,
-                        style: const TextStyle(fontSize: 12, color: Colors.blueGrey),
-                        overflow: TextOverflow.ellipsis),
+                    child: Text(
+                      job.location,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.blueGrey,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                  Text(job.timeAgo,
-                      style: const TextStyle(fontSize: 11, color: Colors.blueGrey)),
+                  Text(
+                    job.timeAgo,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: Colors.blueGrey,
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 4),
               Row(
                 children: [
-                  const Icon(Icons.attach_money, size: 13, color: Colors.blueGrey),
+                  const Icon(
+                    Icons.attach_money,
+                    size: 13,
+                    color: Colors.blueGrey,
+                  ),
                   const SizedBox(width: 3),
-                  Text(job.salaryDisplay,
-                      style: const TextStyle(
-                          fontSize: 12, color: Colors.blueGrey, fontWeight: FontWeight.w500)),
+                  Text(
+                    job.salaryDisplay,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Colors.blueGrey,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
                   const SizedBox(width: 10),
-                  const Icon(Icons.group_outlined, size: 13, color: Colors.blueGrey),
+                  const Icon(
+                    Icons.group_outlined,
+                    size: 13,
+                    color: Colors.blueGrey,
+                  ),
                   const SizedBox(width: 3),
-                  Text('${job.vacancyCount} vacancy',
-                      style: const TextStyle(fontSize: 12, color: Colors.blueGrey)),
+                  Text(
+                    '${job.vacancyCount} vacancy',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Colors.blueGrey,
+                    ),
+                  ),
                 ],
               ),
             ],
@@ -342,10 +472,33 @@ class _FilterSheet extends StatefulWidget {
 
 class _FilterSheetState extends State<_FilterSheet> {
   final _locationCtrl = TextEditingController();
-  static const _jobTypes = ['All', 'Full-Time', 'Part-Time', 'Contract', 'Internship', 'Freelance'];
-  static const _expLevels = ['All', 'Entry Level', 'Junior', 'Mid Level', 'Senior', 'Manager'];
-  static const _postTimes = {'All Time': 0, 'Last 24h': 1, 'Last 7 days': 7, 'Last 30 days': 30};
-  String _selectedPostTime = 'All Time';
+
+  static const _jobTypes = [
+    'All',
+    'Full-time',
+    'Part-time',
+    'Contract',
+    'Internship',
+    'Freelance',
+  ];
+
+  static const _expLevels = [
+    'All',
+    'Fresh Graduate / Entry Level',
+    'Junior (1-3 years)',
+    'Mid-Level (3-5 years)',
+    'Senior (5+ years)',
+    'Manager / Executive',
+  ];
+
+  // Map strings to day integers
+  static const _postTimes = {
+    'All Time': 0,
+    'Last 24h': 1,
+    'Last 7 days': 7,
+    'Last 14 days': 14,
+    'Last 30 days': 30,
+  };
 
   @override
   void initState() {
@@ -362,137 +515,177 @@ class _FilterSheetState extends State<_FilterSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<JobProvider>(builder: (_, prov, __) {
-      return Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        padding: EdgeInsets.only(
-          left: 20, right: 20, top: 20,
-          bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-        ),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40, height: 4,
-                  decoration: BoxDecoration(
-                      color: Colors.grey.shade300, borderRadius: BorderRadius.circular(10)),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  const Text('Filter Jobs',
-                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18)),
-                  const Spacer(),
-                  if (prov.hasActiveFilters)
-                    TextButton(
-                      onPressed: () {
-                        prov.clearFilters();
-                        setState(() => _selectedPostTime = 'All Time');
-                        Navigator.pop(context);
-                      },
-                      child: const Text('Clear all', style: TextStyle(color: Color(0xFFEF4444))),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              const _FilterLabel('Job Type'),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8, runSpacing: 8,
-                children: _jobTypes
-                    .map((t) => _SelectableChip(
-                  label: t,
-                  selected: prov.jobTypeFilter == t,
-                  onTap: () => prov.setJobType(t),
-                ))
-                    .toList(),
-              ),
-              const SizedBox(height: 16),
-              const _FilterLabel('Experience Level'),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8, runSpacing: 8,
-                children: _expLevels
-                    .map((l) => _SelectableChip(
-                  label: l,
-                  selected: prov.expLevelFilter == l,
-                  onTap: () => prov.setExpLevel(l),
-                ))
-                    .toList(),
-              ),
-              const SizedBox(height: 16),
-              const _FilterLabel('Post Time'),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8, runSpacing: 8,
-                children: _postTimes.keys
-                    .map((t) => _SelectableChip(
-                  label: t,
-                  selected: _selectedPostTime == t,
-                  onTap: () => setState(() => _selectedPostTime = t),
-                ))
-                    .toList(),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  const _FilterLabel('Remote Only'),
-                  const Spacer(),
-                  Switch(
-                    value: prov.remoteOnly,
-                    activeColor: const Color(0xFF2563EB),
-                    onChanged: prov.setRemoteOnly,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              const _FilterLabel('Location'),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _locationCtrl,
-                decoration: InputDecoration(
-                  hintText: 'e.g. Kuala Lumpur',
-                  hintStyle: const TextStyle(fontSize: 13, color: Colors.blueGrey),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  filled: true,
-                  fillColor: const Color(0xFFF1F5F9),
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-                ),
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF2563EB),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  onPressed: () {
-                    prov.setLocation(_locationCtrl.text.trim());
-                    Navigator.pop(context);
-                  },
-                  child: const Text('Apply Filters', style: TextStyle(fontWeight: FontWeight.w600)),
-                ),
-              ),
-            ],
+    return Consumer<JobProvider>(
+      builder: (_, prov, __) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
           ),
-        ),
-      );
-    });
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 20,
+            bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    const Text(
+                      'Filter Jobs',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 18,
+                      ),
+                    ),
+                    const Spacer(),
+                    if (prov.hasActiveFilters)
+                      TextButton(
+                        onPressed: () {
+                          prov.clearFilters();
+                          _locationCtrl.clear();
+                          Navigator.pop(context);
+                        },
+                        child: const Text(
+                          'Clear all',
+                          style: TextStyle(color: Color(0xFFEF4444)),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                const _FilterLabel('Job Type'),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _jobTypes
+                      .map(
+                        (t) => _SelectableChip(
+                          label: t,
+                          selected: prov.jobTypeFilter == t,
+                          onTap: () => prov.setJobType(t),
+                        ),
+                      )
+                      .toList(),
+                ),
+                const SizedBox(height: 16),
+                const _FilterLabel('Experience Level'),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _expLevels
+                      .map(
+                        (l) => _SelectableChip(
+                          label: l,
+                          selected: prov.expLevelFilter == l,
+                          onTap: () => prov.setExpLevel(l),
+                        ),
+                      )
+                      .toList(),
+                ),
+                const SizedBox(height: 16),
+                const _FilterLabel('Post Time'),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _postTimes.entries
+                      .map(
+                        (e) => _SelectableChip(
+                          label: e.key,
+                          selected: prov.postDaysFilter == e.value,
+                          onTap: () => prov.setPostDays(e.value),
+                        ),
+                      )
+                      .toList(),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    const _FilterLabel('Remote Only'),
+                    const Spacer(),
+                    Switch(
+                      value: prov.remoteOnly,
+                      activeColor: const Color(0xFF2563EB),
+                      onChanged: prov.setRemoteOnly,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                const _FilterLabel('Location'),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _locationCtrl,
+                  decoration: InputDecoration(
+                    hintText: 'e.g. Kuala Lumpur',
+                    hintStyle: const TextStyle(
+                      fontSize: 13,
+                      color: Colors.blueGrey,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
+                    filled: true,
+                    fillColor: const Color(0xFFF1F5F9),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF2563EB),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    onPressed: () {
+                      prov.setLocation(_locationCtrl.text.trim());
+                      Navigator.pop(context);
+                    },
+                    child: const Text(
+                      'Apply Filters',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 }
 
-// SMALL REUSABLE WIDGETS
+// ─────────────────────────────────────────────────────────────────────────────
+// REUSABLE SMALL WIDGETS
+// ─────────────────────────────────────────────────────────────────────────────
+
 class _JobTag extends StatelessWidget {
   final String label;
   final Color color;
@@ -505,8 +698,10 @@ class _JobTag extends StatelessWidget {
       color: color.withOpacity(0.1),
       borderRadius: BorderRadius.circular(20),
     ),
-    child: Text(label,
-        style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600)),
+    child: Text(
+      label,
+      style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600),
+    ),
   );
 }
 
@@ -525,9 +720,14 @@ class _ActiveChip extends StatelessWidget {
     child: Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(label,
-            style: const TextStyle(
-                fontSize: 12, color: Color(0xFF1D4ED8), fontWeight: FontWeight.w500)),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 12,
+            color: Color(0xFF1D4ED8),
+            fontWeight: FontWeight.w500,
+          ),
+        ),
         const SizedBox(width: 4),
         GestureDetector(
           onTap: onRemove,
@@ -542,7 +742,11 @@ class _SelectableChip extends StatelessWidget {
   final String label;
   final bool selected;
   final VoidCallback onTap;
-  const _SelectableChip({required this.label, required this.selected, required this.onTap});
+  const _SelectableChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) => GestureDetector(
@@ -556,9 +760,10 @@ class _SelectableChip extends StatelessWidget {
       child: Text(
         label,
         style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: selected ? Colors.white : Colors.blueGrey),
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: selected ? Colors.white : Colors.blueGrey,
+        ),
       ),
     ),
   );
@@ -569,8 +774,14 @@ class _FilterLabel extends StatelessWidget {
   const _FilterLabel(this.text);
 
   @override
-  Widget build(BuildContext context) => Text(text,
-      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: Colors.black87));
+  Widget build(BuildContext context) => Text(
+    text,
+    style: const TextStyle(
+      fontWeight: FontWeight.w700,
+      fontSize: 13,
+      color: Colors.black87,
+    ),
+  );
 }
 
 class _LogoBox extends StatelessWidget {
@@ -580,17 +791,30 @@ class _LogoBox extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const palette = [
-      Color(0xFF6366F1), Color(0xFF2563EB), Color(0xFF10B981),
-      Color(0xFFEC4899), Color(0xFFF59E0B),
+      Color(0xFF6366F1),
+      Color(0xFF2563EB),
+      Color(0xFF10B981),
+      Color(0xFFEC4899),
+      Color(0xFFF59E0B),
     ];
-    final color = name.isEmpty ? palette[0] : palette[name.codeUnitAt(0) % palette.length];
+    final color = name.isEmpty
+        ? palette[0]
+        : palette[name.codeUnitAt(0) % palette.length];
     return Container(
-      width: 42, height: 42,
-      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(8)),
+      width: 42,
+      height: 42,
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(8),
+      ),
       child: Center(
         child: Text(
           name.isEmpty ? '?' : name[0].toUpperCase(),
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 18,
+          ),
         ),
       ),
     );
@@ -605,7 +829,11 @@ class _EmptyJobs extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.work_off_outlined, size: 56, color: Colors.blueGrey.shade200),
+          Icon(
+            Icons.work_off_outlined,
+            size: 56,
+            color: Colors.blueGrey.shade200,
+          ),
           const SizedBox(height: 16),
           Text(
             'No jobs found.\nTry adjusting your filters.',

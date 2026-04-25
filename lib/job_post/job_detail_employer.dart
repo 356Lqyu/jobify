@@ -8,6 +8,7 @@ import 'package:jobify/job/applicant_list.dart';
 
 class JobDetailEmployer extends StatefulWidget {
   final Map<String, dynamic> job;
+
   const JobDetailEmployer({super.key, required this.job});
 
   @override
@@ -52,13 +53,20 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
     }
   }
 
-  Future<void> _refresh() async {
-    final updated = await _jobRepo.fetchJobPostById(_job['job_id']);
-    if (updated != null && mounted) {
-      setState(() {
-        _job = updated;
-        _initYoutubePlayer();
-      });
+  Future<void> _refresh({bool force = true}) async {
+    setState(() => _isLoading = true);
+    try {
+      final updated = await _jobRepo.fetchJobPostById(_job['job_id']);
+      if (updated != null && mounted) {
+        setState(() {
+          _job = updated;
+          _initYoutubePlayer();
+        });
+      }
+    } catch (e) {
+      print('Refresh error: $e');
+    } finally {
+      setState(() => _isLoading = false);
     }
   }
 
@@ -83,7 +91,10 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
         title: const Text('Delete Job'),
         content: const Text('This cannot be undone. Delete this job?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Delete', style: TextStyle(color: Colors.red)),
@@ -101,7 +112,7 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
         if (e.toString().contains('23503') ||
             e.toString().contains('foreign key constraint')) {
           errorMessage =
-          'Cannot delete this job because it has existing applications. Please close the job instead.';
+              'Cannot delete this job because it has existing applications. Please close the job instead.';
         }
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -128,7 +139,8 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: Text(_job['job_title'] ?? 'Job Details',
+        title: Text(
+          _job['job_title'] ?? 'Job Details',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         backgroundColor: Colors.blue,
@@ -136,14 +148,23 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
         elevation: 0,
         actions: [
           IconButton(
-            icon: const Icon(Icons.edit),
-            onPressed: () async {
+            icon: Icon(Icons.edit, color: hasApplications ? Colors.grey : Colors.white),
+            onPressed: hasApplications
+                ? null
+                : () async {
               final result = await Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => CreateJobPost(existingJob: _job)),
               );
-              if (result == true) _refresh();
+              if (result == true) {
+                // Clear the stale cache entry for this job
+                await LocalDB.deleteJobPost(_job['job_id']);
+                await _refresh(); // force fresh load
+              }
             },
+            tooltip: hasApplications
+                ? 'Cannot edit a job with existing applications'
+                : 'Edit this job',
           ),
         ],
       ),
@@ -156,7 +177,10 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
               // Employer notice banner
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
+                ),
                 margin: const EdgeInsets.only(bottom: 16),
                 decoration: BoxDecoration(
                   color: Colors.blue.withOpacity(0.08),
@@ -170,7 +194,10 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
                     const Expanded(
                       child: Text(
                         'You are viewing this job as an employer.',
-                        style: TextStyle(fontWeight: FontWeight.w500, color: Colors.blue),
+                        style: TextStyle(
+                          fontWeight: FontWeight.w500,
+                          color: Colors.blue,
+                        ),
                       ),
                     ),
                   ],
@@ -178,7 +205,9 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
               ),
               Card(
                 elevation: 2,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
                 child: Padding(
                   padding: const EdgeInsets.all(20),
                   child: Column(
@@ -186,28 +215,44 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
                     children: [
                       Text(
                         _job['job_title'] ?? 'Untitled',
-                        style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                        style: const TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                       const SizedBox(height: 8),
-                      Row(
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(Icons.business, size: 16, color: Colors.grey.shade600),
-                          const SizedBox(width: 4),
-                          Text(
-                            _job['company_profile']?['company_name'] ?? _job['company_name'] ?? 'Company',
-                            style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                          // Company name row
+                          Row(
+                            children: [
+                              Icon(Icons.business, size: 16, color: Colors.grey.shade600),
+                              const SizedBox(width: 4),
+                              Flexible(
+                                child: Text(
+                                  _job['company_profile']?['company_name'] ?? _job['company_name'] ?? 'Company',
+                                  style: TextStyle(fontSize: 14, color: Colors.grey.shade600), // removed const
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: 8),
-                          Container(width: 4, height: 4, decoration: const BoxDecoration(color: Colors.grey, shape: BoxShape.circle)),
-                          const SizedBox(width: 8),
-                          Icon(Icons.location_on_outlined, size: 16, color: Colors.grey.shade600),
-                          const SizedBox(width: 4),
-                          Expanded(
-                            child: Text(
-                              _job['location'] ?? 'Unknown',
-                              style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                          const SizedBox(height: 4),
+                          // Location row
+                          Row(
+                            children: [
+                              Icon(Icons.location_on_outlined, size: 14, color: Colors.grey.shade600),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  _job['location'] ?? 'Unknown',
+                                  style: TextStyle(fontSize: 13, color: Colors.grey.shade600), // removed const
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -216,17 +261,40 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
                         spacing: 8,
                         runSpacing: 8,
                         children: [
+                          // Salary chip
                           if (_job['salary_min'] != null && _job['salary_max'] != null)
-                            _infoChip(Icons.attach_money, '${_job['salary_min']} - ${_job['salary_max']} MYR'),
-                          _infoChip(Icons.work_outline, _job['job_type'] ?? 'Full-time'),
-                          _infoChip(Icons.trending_up, _job['experience_level'] ?? 'Junior'),
-                          if (_job['remote_option'] == true) _infoChip(Icons.wifi, 'Remote'),
-                          _infoChip(Icons.sell_outlined, _job['job_category'] ?? 'General'),
+                            _infoChip(
+                              Icons.attach_money,
+                              '${_job['salary_min']} - ${_job['salary_max']} MYR',
+                            ),
+                          // Job type – handle both nested and flat
+                          _infoChip(
+                            Icons.work_outline,
+                            (_job['job_type_id'] as Map?)?['name'] ?? _job['job_type'] ?? 'Full-time',
+                          ),
+                          // Experience level – handle both
+                          _infoChip(
+                            Icons.trending_up,
+                            (_job['experience_level_id'] as Map?)?['name'] ?? _job['experience_level'] ?? 'Junior',
+                          ),
+                          // Job category – handle both
+                          _infoChip(
+                            Icons.sell_outlined,
+                            (_job['job_category_id'] as Map?)?['name'] ?? _job['job_category'] ?? 'General',
+                          ),
+                          // Remote badge
+                          if (_job['location'] == 'Remote')
+                            _infoChip(Icons.wifi, 'Remote'),
+                          if (_job['location'] == 'Hybrid')
+                            _infoChip(Icons.wifi, 'Hybrid'),
                         ],
                       ),
                       const SizedBox(height: 20),
                       Container(
-                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 12,
+                          horizontal: 16,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.grey.shade50,
                           borderRadius: BorderRadius.circular(16),
@@ -236,7 +304,11 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
                           mainAxisAlignment: MainAxisAlignment.spaceAround,
                           children: [
                             _statItem(Icons.visibility, '$viewCount', 'Views'),
-                            Container(width: 1, height: 30, color: Colors.grey.shade300),
+                            Container(
+                              width: 1,
+                              height: 30,
+                              color: Colors.grey.shade300,
+                            ),
                             GestureDetector(
                               onTap: () {
                                 Navigator.push(
@@ -249,13 +321,23 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
                                   ),
                                 );
                               },
-                              child: _statItem(Icons.description, '$appCount', 'Applications'),
+                              child: _statItem(
+                                Icons.description,
+                                '$appCount',
+                                'Applications',
+                              ),
                             ),
                           ],
                         ),
                       ),
                       const SizedBox(height: 20),
-                      const Text('Job Description', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      const Text(
+                        'Job Description',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                       const SizedBox(height: 8),
                       Text(
                         _job['description'] ?? 'No description provided.',
@@ -263,7 +345,13 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
                       ),
                       const SizedBox(height: 20),
                       if (imageUrls.isNotEmpty) ...[
-                        const Text('Images', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        const Text(
+                          'Images',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                         const SizedBox(height: 8),
                         CarouselSlider(
                           options: CarouselOptions(
@@ -276,7 +364,11 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
                               builder: (BuildContext context) {
                                 return ClipRRect(
                                   borderRadius: BorderRadius.circular(12),
-                                  child: Image.network(url, fit: BoxFit.cover, width: double.infinity),
+                                  child: Image.network(
+                                    url,
+                                    fit: BoxFit.cover,
+                                    width: double.infinity,
+                                  ),
                                 );
                               },
                             );
@@ -285,7 +377,13 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
                         const SizedBox(height: 16),
                       ],
                       if (hasVideo) ...[
-                        const Text('Video', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        const Text(
+                          'Video',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                         const SizedBox(height: 8),
                         YoutubePlayer(controller: _youtubeController!),
                         const SizedBox(height: 16),
@@ -298,12 +396,25 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
                               height: 48, // fixed height for both buttons
                               child: OutlinedButton.icon(
                                 onPressed: _toggleStatus,
-                                icon: Icon(isActive ? Icons.close : Icons.refresh, size: 18),
-                                label: Text(isActive ? 'Close Job' : 'Reopen Job'),
+                                icon: Icon(
+                                  isActive ? Icons.close : Icons.refresh,
+                                  size: 18,
+                                ),
+                                label: Text(
+                                  isActive ? 'Close Job' : 'Reopen Job',
+                                ),
                                 style: OutlinedButton.styleFrom(
-                                  foregroundColor: isActive ? Colors.orange : Colors.green,
-                                  side: BorderSide(color: isActive ? Colors.orange : Colors.green),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                  foregroundColor: isActive
+                                      ? Colors.orange
+                                      : Colors.green,
+                                  side: BorderSide(
+                                    color: isActive
+                                        ? Colors.orange
+                                        : Colors.green,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
                                 ),
                               ),
                             ),
@@ -318,12 +429,23 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
                                 height: 48, // same fixed height
                                 child: OutlinedButton.icon(
                                   onPressed: hasApplications ? null : _delete,
-                                  icon: const Icon(Icons.delete_outline, size: 18),
+                                  icon: const Icon(
+                                    Icons.delete_outline,
+                                    size: 18,
+                                  ),
                                   label: const Text('Delete Job'),
                                   style: OutlinedButton.styleFrom(
-                                    foregroundColor: hasApplications ? Colors.grey : Colors.red,
-                                    side: BorderSide(color: hasApplications ? Colors.grey : Colors.red),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                    foregroundColor: hasApplications
+                                        ? Colors.grey
+                                        : Colors.red,
+                                    side: BorderSide(
+                                      color: hasApplications
+                                          ? Colors.grey
+                                          : Colors.red,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
                                   ),
                                 ),
                               ),
@@ -355,7 +477,10 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
         children: [
           Icon(icon, size: 14, color: Colors.grey.shade700),
           const SizedBox(width: 6),
-          Text(label, style: TextStyle(fontSize: 12, color: Colors.grey.shade800)),
+          Text(
+            label,
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade800),
+          ),
         ],
       ),
     );
@@ -366,7 +491,10 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
       children: [
         Icon(icon, size: 22, color: Colors.blue.shade700),
         const SizedBox(height: 4),
-        Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        Text(
+          value,
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
         Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
       ],
     );

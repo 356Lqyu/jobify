@@ -8,6 +8,8 @@ import 'package:jobify/discovery/job_details.dart';
 import 'package:jobify/data/job_repository.dart';
 import 'package:jobify/social/social_feed_provider.dart';
 
+enum SavedPostSort { savedDate, createdDate }
+
 class SavedPostsPage extends StatefulWidget {
   final Users currentUser;
   const SavedPostsPage({super.key, required this.currentUser});
@@ -19,9 +21,15 @@ class SavedPostsPage extends StatefulWidget {
 class _SavedPostsPageState extends State<SavedPostsPage> {
   final FeedRepository _feedRepo = FeedRepository();
   final JobRepository _jobRepo = JobRepository();
+
   List<FeedPost> _savedPosts = [];
+  List<FeedPost> _originalSavedOrder = [];
+
   bool _isLoading = true;
   String? _error;
+
+  SavedPostSort _sortType = SavedPostSort.savedDate;
+  bool _isAscending = false;
 
   @override
   void initState() {
@@ -38,9 +46,11 @@ class _SavedPostsPageState extends State<SavedPostsPage> {
       final posts = await _feedRepo.fetchSavedPosts();
       if (mounted) {
         setState(() {
-          _savedPosts = posts;
+          _savedPosts = List.from(posts);
+          _originalSavedOrder = List.from(posts);
           _isLoading = false;
         });
+        _sortPosts();
       }
     } catch (e) {
       if (mounted) {
@@ -52,21 +62,40 @@ class _SavedPostsPageState extends State<SavedPostsPage> {
     }
   }
 
+  void _sortPosts() {
+    setState(() {
+      if (_sortType == SavedPostSort.savedDate) {
+        // Original order corresponds to the exact order returned by the repository
+        // (which should be sorted by post_saved.created_at)
+        _savedPosts = List.from(_originalSavedOrder);
+        if (_isAscending) {
+          _savedPosts = _savedPosts.reversed.toList();
+        }
+      } else if (_sortType == SavedPostSort.createdDate) {
+        // Sorts by the time the actual post was created
+        _savedPosts.sort((a, b) {
+          return _isAscending
+              ? a.createdAt.compareTo(b.createdAt)
+              : b.createdAt.compareTo(a.createdAt);
+        });
+      }
+    });
+  }
+
   Future<void> _unsavePost(FeedPost post) async {
-    // Optimistic UI update
     setState(() {
       _savedPosts.removeWhere((p) => p.postId == post.postId);
+      _originalSavedOrder.removeWhere((p) => p.postId == post.postId);
     });
 
     showFeedSnackBar(context, 'Post removed from saved');
 
     final success = await _feedRepo.toggleSavePost(
       post.postId,
-      true, // It was currently saved
+      true,
       jobId: post.jobId,
     );
 
-    // Revert if it failed
     if (success == true && mounted) {
       showFeedSnackBar(context, 'Failed to unsave post', isError: true);
       _loadSavedPosts();
@@ -100,7 +129,6 @@ class _SavedPostsPageState extends State<SavedPostsPage> {
         ),
       );
     }
-    // Refresh after returning in case they unsaved it from the detail page
     _loadSavedPosts();
   }
 
@@ -109,7 +137,8 @@ class _SavedPostsPageState extends State<SavedPostsPage> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text('Saved Posts',
+        title: const Text(
+          'Saved Posts',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         backgroundColor: Colors.blue,
@@ -120,62 +149,142 @@ class _SavedPostsPageState extends State<SavedPostsPage> {
           ? const Center(child: CircularProgressIndicator())
           : _error != null
           ? Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.error_outline,
-                    size: 48,
-                    color: Colors.blueGrey.shade300,
-                  ),
-                  const SizedBox(height: 12),
-                  Text(_error!, style: const TextStyle(color: Colors.blueGrey)),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: _loadSavedPosts,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF2563EB),
-                    ),
-                    child: const Text('Retry'),
-                  ),
-                ],
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.error_outline,
+              size: 48,
+              color: Colors.blueGrey.shade300,
+            ),
+            const SizedBox(height: 12),
+            Text(_error!,
+                style: const TextStyle(color: Colors.blueGrey)),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: _loadSavedPosts,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF2563EB),
               ),
-            )
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
+      )
           : _savedPosts.isEmpty
           ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(32),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.bookmark_border,
-                      size: 64,
-                      color: Colors.blueGrey.shade200,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'No saved posts',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.blueGrey.shade400,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Tap the bookmark icon on any post\nto save it for later.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Colors.blueGrey.shade400,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ],
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.bookmark_border,
+                size: 64,
+                color: Colors.blueGrey.shade200,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'No saved posts',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.blueGrey.shade400,
                 ),
               ),
-            )
-          : RefreshIndicator(
+              const SizedBox(height: 8),
+              Text(
+                'Tap the bookmark icon on any post\nto save it for later.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.blueGrey.shade400,
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+        ),
+      )
+          : Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(
+                horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border(
+                  bottom: BorderSide(
+                      color: Colors.grey.shade200)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                DropdownButton<SavedPostSort>(
+                  value: _sortType,
+                  underline: const SizedBox(),
+                  icon: const Icon(Icons.filter_list,
+                      size: 20, color: Colors.blueGrey),
+                  style: const TextStyle(
+                    color: Colors.black87,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: SavedPostSort.savedDate,
+                      child: Text('Sort by: Saved Date'),
+                    ),
+                    DropdownMenuItem(
+                      value: SavedPostSort.createdDate,
+                      child: Text('Sort by: Created Date'),
+                    ),
+                  ],
+                  onChanged: (val) {
+                    if (val != null) {
+                      setState(() {
+                        _sortType = val;
+                        _sortPosts();
+                      });
+                    }
+                  },
+                ),
+                InkWell(
+                  onTap: () {
+                    setState(() {
+                      _isAscending = !_isAscending;
+                      _sortPosts();
+                    });
+                  },
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: Row(
+                      children: [
+                        Text(
+                          _isAscending ? 'Oldest' : 'Newest',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.blueGrey.shade600,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(
+                          _isAscending
+                              ? Icons.arrow_upward
+                              : Icons.arrow_downward,
+                          size: 18,
+                          color: Colors.blueGrey.shade700,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: RefreshIndicator(
               onRefresh: _loadSavedPosts,
               child: ListView.builder(
                 padding: const EdgeInsets.fromLTRB(14, 16, 14, 40),
@@ -190,6 +299,9 @@ class _SavedPostsPageState extends State<SavedPostsPage> {
                 },
               ),
             ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -363,10 +475,10 @@ class _SavedPostCard extends StatelessWidget {
                         height: 140,
                         width: double.infinity,
                         fit: BoxFit.cover,
-                        placeholder: (_, __) =>
-                            Container(color: Colors.grey.shade100, height: 140),
-                        errorWidget: (_, __, ___) =>
-                            Container(color: Colors.grey.shade100, height: 140),
+                        placeholder: (_, __) => Container(
+                            color: Colors.grey.shade100, height: 140),
+                        errorWidget: (_, __, ___) => Container(
+                            color: Colors.grey.shade100, height: 140),
                       ),
                       if (post.mediaUrls.length > 1)
                         Positioned(

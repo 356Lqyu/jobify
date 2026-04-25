@@ -214,7 +214,7 @@ class JobPost {
   final int viewCount;
   final int applicationCount;
   final DateTime createdAt;
-  final List<String> imageUrls;   // from job_post.image_urls (ARRAY)
+  final List<String> imageUrls;
   final String? videoUrl;
 
   final String companyName;

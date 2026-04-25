@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:provider/provider.dart';
 import 'package:jobify/social/post_feed_setting.dart';
 import 'package:jobify/data/job_repository.dart';
 import 'package:jobify/data/applicantion_respository.dart';
@@ -8,6 +7,7 @@ import 'package:jobify/users/users.dart';
 import 'package:jobify/job/apply_for_job.dart';
 import 'package:jobify/social/social_feed_provider.dart';
 import 'package:intl/intl.dart';
+import 'package:share_plus/share_plus.dart';
 
 class JobDetailPage extends StatefulWidget {
   final JobPost job;
@@ -75,11 +75,6 @@ class _JobDetailPageState extends State<JobDetailPage> {
     if (mounted) setState(() => _isLoading = false);
   }
 
-  Future<void> _refresh() async {
-    setState(() => _isLoading = true);
-    await _loadData();
-  }
-
   void _openApplySheet() {
     Navigator.push(
       context,
@@ -131,7 +126,6 @@ class _JobDetailPageState extends State<JobDetailPage> {
     }
   }
 
-  // --- NEW: Helper method to wrap sections in rounded, shadowed cards ---
   Widget _buildCard({required Widget child, EdgeInsetsGeometry? padding}) {
     return Container(
       width: double.infinity,
@@ -168,14 +162,29 @@ class _JobDetailPageState extends State<JobDetailPage> {
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
-            title: const Text('Job Details',
-              style: TextStyle(fontWeight: FontWeight.bold),
+            title: const Text(
+              'Job Details',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
             ),
             backgroundColor: Colors.blue,
             foregroundColor: Colors.white,
             elevation: 0,
             pinned: true,
             actions: [
+              IconButton(
+                iconSize: 26,
+                padding: const EdgeInsets.all(12),
+                icon: const Icon(Icons.share_outlined, color: Colors.white),
+                onPressed: () {
+                  final jobToShare = _freshJob ?? widget.job;
+                  final deepLink = 'https://jobify.app/job/${jobToShare.jobId}';
+
+                  final shareText =
+                      'Check out this job: ${jobToShare.jobTitle} at ${jobToShare.companyName}!\nLocation: ${jobToShare.location}\nSalary: ${jobToShare.salaryDisplay}\n\nLink: $deepLink';
+                  Share.share(shareText);
+                },
+                tooltip: 'Share job',
+              ),
               IconButton(
                 icon: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 200),
@@ -192,7 +201,7 @@ class _JobDetailPageState extends State<JobDetailPage> {
           ),
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8), // Padding around the column
+              padding: const EdgeInsets.symmetric(vertical: 8),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -208,13 +217,13 @@ class _JobDetailPageState extends State<JobDetailPage> {
                               borderRadius: BorderRadius.circular(10),
                               child: job.companyLogoUrl != null
                                   ? CachedNetworkImage(
-                                imageUrl: job.companyLogoUrl!,
-                                width: 56,
-                                height: 56,
-                                fit: BoxFit.cover,
-                                errorWidget: (_, __, ___) =>
-                                    _LogoBox(name: job.companyName),
-                              )
+                                      imageUrl: job.companyLogoUrl!,
+                                      width: 56,
+                                      height: 56,
+                                      fit: BoxFit.cover,
+                                      errorWidget: (_, __, ___) =>
+                                          _LogoBox(name: job.companyName),
+                                    )
                                   : _LogoBox(name: job.companyName),
                             ),
                             const SizedBox(width: 14),
@@ -322,7 +331,10 @@ class _JobDetailPageState extends State<JobDetailPage> {
 
                   // Stats Container
                   _buildCard(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 14,
+                    ),
                     child: Row(
                       children: [
                         Expanded(
@@ -369,7 +381,9 @@ class _JobDetailPageState extends State<JobDetailPage> {
                         Text(
                           job.description,
                           style: const TextStyle(
-                            fontSize: 14, color: Colors.black87, height: 1.6,
+                            fontSize: 14,
+                            color: Colors.black87,
+                            height: 1.6,
                           ),
                         ),
                       ],
@@ -440,29 +454,29 @@ class _JobDetailPageState extends State<JobDetailPage> {
       bottomNavigationBar: _checkingApply
           ? null
           : Container(
-        // Added subtle shadow to the top of the bottom nav bar
-        decoration: BoxDecoration(
-          color: Colors.white,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 10,
-              offset: const Offset(0, -4),
+              // Added subtle shadow to the top of the bottom nav bar
+              decoration: BoxDecoration(
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.04),
+                    blurRadius: 10,
+                    offset: const Offset(0, -4),
+                  ),
+                ],
+              ),
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+                  child: _isJobSeeker
+                      ? _ApplyButton(
+                          hasApplied: _hasApplied,
+                          onTap: _hasApplied ? null : _openApplySheet,
+                        )
+                      : _DisabledApplyButton(),
+                ),
+              ),
             ),
-          ],
-        ),
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
-            child: _isJobSeeker
-                ? _ApplyButton(
-              hasApplied: _hasApplied,
-              onTap: _hasApplied ? null : _openApplySheet,
-            )
-                : _DisabledApplyButton(),
-          ),
-        ),
-      ),
     );
   }
 }

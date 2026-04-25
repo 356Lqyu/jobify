@@ -4,6 +4,7 @@ import 'package:jobify/social/post_feed_setting.dart';
 import 'package:jobify/data/feed_repository.dart';
 import 'package:jobify/users/users.dart';
 import 'package:jobify/social/social_feed_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 class SocialPostDetails extends StatefulWidget {
   final FeedPost post;
@@ -114,6 +115,20 @@ class _SocialPostDetailsState extends State<SocialPostDetails> {
     }
   }
 
+  void _sharePost() {
+    String deepLink = 'https://jobify.app/post/${_post.postId}';
+    String shareText = '';
+
+    if (_post.jobId != null && _post.linkedJob != null) {
+      deepLink = 'https://jobify.app/job/${_post.linkedJob!.jobId}';
+      shareText = 'Check out this job post: ${_post.linkedJob!.jobTitle} at ${_post.linkedJob!.companyName}!\n$deepLink';
+    } else {
+      shareText = 'Check out this social post by ${_post.authorName}!\n$deepLink';
+    }
+
+    Share.share(shareText);
+  }
+
   @override
   Widget build(BuildContext context) {
     final isOwnPost = _post.userId == widget.currentUser.userId;
@@ -126,11 +141,13 @@ class _SocialPostDetailsState extends State<SocialPostDetails> {
         elevation: 0,
         title: const Text(
           'Post',
-          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17),
+          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
         ),
         actions: [
           if (!isOwnPost)
             IconButton(
+              iconSize: 28,
+              padding: const EdgeInsets.all(12),
               icon: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 200),
                 child: Icon(
@@ -155,6 +172,7 @@ class _SocialPostDetailsState extends State<SocialPostDetails> {
                   currentUser: widget.currentUser,
                   onLikeTap: _toggleLike,
                   onSaveTap: isOwnPost ? null : _toggleSave,
+                  onShareTap: _sharePost
                 ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
@@ -356,18 +374,20 @@ class _SocialPostDetailsState extends State<SocialPostDetails> {
   }
 }
 
-// -------------------- POST BODY --------------------
 class _PostBody extends StatelessWidget {
   final FeedPost post;
   final Users currentUser;
   final VoidCallback onLikeTap;
   final VoidCallback? onSaveTap;
+  final VoidCallback onShareTap;
+
 
   const _PostBody({
     required this.post,
     required this.currentUser,
     required this.onLikeTap,
     this.onSaveTap,
+    required this.onShareTap
   });
 
   @override
@@ -526,7 +546,7 @@ class _PostBody extends StatelessWidget {
                   icon: Icons.share_outlined,
                   label: '',
                   color: Colors.blueGrey,
-                  onTap: () {},
+                  onTap: onShareTap,
                 ),
                 const Spacer(),
                 if (onSaveTap != null)
@@ -591,7 +611,7 @@ class _MediaGridState extends State<_MediaGrid> {
           ClipRRect(
             borderRadius: BorderRadius.circular(12),
             child: SizedBox(
-              height: 350, // Fixed height for a consistent carousel
+              height: 350,
               child: Stack(
                 children: [
                   PageView.builder(
@@ -725,42 +745,46 @@ class _LinkedJobCard extends StatelessWidget {
   }
 }
 
-// -------------------- SMALL WIDGETS --------------------
 class _ActionBtn extends StatelessWidget {
   final IconData icon;
   final String label;
   final Color color;
   final VoidCallback onTap;
+
   const _ActionBtn({
     required this.icon,
     required this.label,
     required this.color,
     required this.onTap,
   });
+
   @override
-  Widget build(BuildContext context) => InkWell(
-    borderRadius: BorderRadius.circular(20),
-    onTap: onTap,
-    child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      child: Row(
-        children: [
-          Icon(icon, size: 20, color: color),
-          if (label.isNotEmpty) ...[
-            const SizedBox(width: 4),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 13,
-                color: color,
-                fontWeight: FontWeight.w500,
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: color, size: 26),
+            if (label.isNotEmpty) ...[
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
-            ),
+            ]
           ],
-        ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _Avatar extends StatelessWidget {

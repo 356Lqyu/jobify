@@ -18,10 +18,7 @@ const String supabaseKey = 'sb_secret_518COekCnlz8R_OAgQVCIw_2E9LVs8_';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await Supabase.initialize(
-    url: supabaseUrl,
-    anonKey: supabaseKey,
-  );
+  await Supabase.initialize(url: supabaseUrl, anonKey: supabaseKey);
 
   // Clear any stale recovery session flags
   final session = Supabase.instance.client.auth.currentSession;
@@ -45,9 +42,7 @@ class MainApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (_) => UserProvider()),
-      ],
+      providers: [ChangeNotifierProvider(create: (_) => UserProvider())],
       child: MaterialApp(
         title: 'Jobify',
         debugShowCheckedModeBanner: false,
@@ -109,7 +104,13 @@ class AuthGate extends StatelessWidget {
 
   Future<Users?> _loadUserData(BuildContext context) async {
     final userProvider = Provider.of<UserProvider>(context, listen: false);
-    await userProvider.loadUser();
+
+    // 💡【核心修复】：使用 Future.microtask 延迟加载动作
+    // 这样不会在 Flutter 正在 Build UI 的时候触发 notifyListeners() 导致崩溃
+    await Future.microtask(() async {
+      await userProvider.loadUser();
+    });
+
     return userProvider.currentUser;
   }
 }
@@ -170,7 +171,9 @@ class WelcomePage extends StatelessWidget {
                   onPressed: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (_) => const Login(selectedRole: 'JOB_SEEKER')),
+                      MaterialPageRoute(
+                        builder: (_) => const Login(selectedRole: 'JOB_SEEKER'),
+                      ),
                     );
                   },
                   child: Row(
@@ -178,7 +181,10 @@ class WelcomePage extends StatelessWidget {
                     children: const [
                       Icon(Icons.work, color: Colors.white, size: 25),
                       SizedBox(width: 10),
-                      Text("I'm Looking for a job", style: TextStyle(fontSize: 17)),
+                      Text(
+                        "I'm Looking for a job",
+                        style: TextStyle(fontSize: 17),
+                      ),
                     ],
                   ),
                 ),
@@ -203,7 +209,9 @@ class WelcomePage extends StatelessWidget {
                   onPressed: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (_) => const Login(selectedRole: 'POSTER')),
+                      MaterialPageRoute(
+                        builder: (_) => const Login(selectedRole: 'POSTER'),
+                      ),
                     );
                   },
                   child: Row(

@@ -21,6 +21,13 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
   String? _userId;
   String? _userRole;
 
+  // Search / filter / batch selection
+  String _searchKeyword = '';
+  String _statusFilter = 'all'; // 'all', 'active', 'closed'
+  List<Map<String, dynamic>> _filteredJobs = [];
+  bool _selectionMode = false;
+  Set<String> _selectedJobIds = {};
+
   @override
   void initState() {
     super.initState();
@@ -52,7 +59,7 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
         .from('job_application')
         .select('application_id')
         .eq('job_id', jobId);
-    return results.length;  // counts all applications (pending, accepted, rejected)
+    return results.length;
   }
 
   Future<int> _getPendingApplicationCount(String jobId) async {
@@ -71,7 +78,7 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
   Future<void> loadJobs() async {
     if (_userId == null) return;
 
-    // Show cached data first (optional)
+    // Show cached data first
     try {
       final cached = await LocalDB.getCachedJobMapsByUser(_userId!);
       if (cached.isNotEmpty) setState(() => _jobs = cached);
@@ -88,17 +95,31 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
         final flatJob = _flattenJobMap(job);
         jobsWithCounts.add({
           ...flatJob,
-          'application_count': totalCount,   // total applications (excluding withdrawn)
-          'pending_count': pendingCount,     // pending only
+          'application_count': totalCount,
+          'pending_count': pendingCount,
         });
       }
       setState(() => _jobs = jobsWithCounts);
+      _applyFilters();
       await LocalDB.insertJobMaps(jobsWithCounts);
     } catch (e) {
       print('Network error: $e');
     } finally {
       setState(() => _isLoading = false);
     }
+  }
+
+  void _applyFilters() {
+    setState(() {
+      _filteredJobs = _jobs.where((job) {
+        if (_statusFilter != 'all' && job['status'] != _statusFilter) return false;
+        if (_searchKeyword.isNotEmpty) {
+          final title = job['job_title']?.toLowerCase() ?? '';
+          if (!title.contains(_searchKeyword.toLowerCase())) return false;
+        }
+        return true;
+      }).toList();
+    });
   }
 
   Map<String, dynamic> _flattenJobMap(Map<String, dynamic> job) {
@@ -149,18 +170,13 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
       await loadJobs();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Job ${newStatus == 'active' ? 'reopened' : 'closed'}'),
-            backgroundColor: Colors.green,
-          ),
-
+          SnackBar(content: Text('Job ${newStatus == 'active' ? 'reopened' : 'closed'}'), backgroundColor: Colors.green),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to update status: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('Failed to update status: $e'), backgroundColor: Colors.red),
         );
       }
     }
@@ -174,10 +190,7 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
         content: const Text('This action cannot be undone. Delete this job?'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete', style: TextStyle(color: Colors.red))),
         ],
       ),
     );
@@ -186,12 +199,7 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
         await _jobRepo.deleteJobPost(jobId);
         await loadJobs();
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Job deleted successfully'),
-              backgroundColor: Colors.green,
-            ),
-          );
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Job deleted successfully'), backgroundColor: Colors.green));
         }
       } catch (e) {
         String errorMessage = 'Failed to delete job';
@@ -199,16 +207,66 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
           errorMessage = 'Cannot delete this job because it has existing applications. Please close the job instead.';
         }
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(errorMessage),
-              backgroundColor: Colors.red,
-              duration: const Duration(seconds: 4),
-            ),
-          );
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorMessage), backgroundColor: Colors.red, duration: const Duration(seconds: 4)));
         }
       }
     }
+  }
+
+  Future<void> _batchClose() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Close Selected Jobs'),
+        content: Text('Are you sure you want to close ${_selectedJobIds.length} job(s)?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Close')),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    for (final id in _selectedJobIds) {
+      await _jobRepo.updateJobPost(id, {'status': 'closed'});
+    }
+    await loadJobs();
+    setState(() {
+      _selectionMode = false;
+      _selectedJobIds.clear();
+    });
+  }
+
+  Future<void> _batchDelete() async {
+    final jobsWithApps = _selectedJobIds.where((id) {
+      final job = _jobs.firstWhere((j) => j['job_id'] == id);
+      return (job['application_count'] ?? 0) > 0;
+    }).toList();
+    if (jobsWithApps.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Cannot delete jobs that have applications'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Selected Jobs'),
+        content: Text('Are you sure you want to delete ${_selectedJobIds.length} job(s)? This cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete', style: TextStyle(color: Colors.red))),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    for (final id in _selectedJobIds) {
+      await _jobRepo.deleteJobPost(id);
+    }
+    await loadJobs();
+    setState(() {
+      _selectionMode = false;
+      _selectedJobIds.clear();
+    });
   }
 
   @override
@@ -246,13 +304,53 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text('My Jobs',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
+        title: const Text('My Jobs', style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
         elevation: 0,
         automaticallyImplyLeading: false,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.search),
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: const Text('Search Jobs'),
+                  content: TextField(
+                    autofocus: true,
+                    decoration: const InputDecoration(hintText: 'Job title'),
+                    onChanged: (value) {
+                      _searchKeyword = value;
+                      _applyFilters();
+                    },
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('Close'),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+          if (!_selectionMode)
+            IconButton(
+              icon: const Icon(Icons.select_all),
+              onPressed: () => setState(() => _selectionMode = true),
+            ),
+          if (_selectionMode)
+            TextButton(
+              onPressed: () {
+                setState(() {
+                  _selectionMode = false;
+                  _selectedJobIds.clear();
+                });
+              },
+              child: const Text('Cancel'),
+            ),
+        ],
       ),
       body: RefreshIndicator(
         onRefresh: loadJobs,
@@ -263,7 +361,7 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
               child: Row(
                 children: [
                   _buildSummaryCard('Active Jobs', activeCount, Icons.work_outline, Colors.blue),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 8),
                   _buildSummaryCard('Total Jobs', _jobs.length, Icons.list_alt, Colors.grey.shade700),
                 ],
               ),
@@ -274,49 +372,80 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('Your Job Posts', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
-                  ElevatedButton.icon(
-                    onPressed: () async {
-                      final result = await showModalBottomSheet<bool>(
-                        context: context,
-                        isScrollControlled: true,
-                        backgroundColor: Colors.transparent,
-                        builder: (context) => DraggableScrollableSheet(
-                          initialChildSize: 0.88,
-                          maxChildSize: 0.96,
-                          minChildSize: 0.5,
-                          expand: false,
-                          builder: (_, scrollController) => CreateJobPost(
-                            isModal: true,
-                            onPostSuccess: () => Navigator.pop(context, true),
-                          ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(30),
+                        border: Border.all(color: Colors.grey.shade300),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: _statusFilter,
+                          icon: const Icon(Icons.arrow_drop_down, color: Colors.blue),
+                          elevation: 0,
+                          style: const TextStyle(color: Colors.black87, fontSize: 14),
+                          dropdownColor: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          items: const [
+                            DropdownMenuItem(
+                              value: 'all',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.list, size: 18, color: Colors.blue),
+                                  SizedBox(width: 8),
+                                  Text('All Jobs'),
+                                ],
+                              ),
+                            ),
+                            DropdownMenuItem(
+                              value: 'active',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.check_circle_outline, size: 18, color: Colors.green),
+                                  SizedBox(width: 8),
+                                  Text('Active'),
+                                ],
+                              ),
+                            ),
+                            DropdownMenuItem(
+                              value: 'closed',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.cancel_outlined, size: 18, color: Colors.grey),
+                                  SizedBox(width: 8),
+                                  Text('Closed'),
+                                ],
+                              ),
+                            ),
+                          ],
+                          onChanged: (value) {
+                            if (value != null) {
+                              setState(() {
+                                _statusFilter = value;
+                                _applyFilters();
+                              });
+                            }
+                          },
                         ),
-                      );
-                      if (result == true) loadJobs();
-                    },
-                    icon: const Icon(Icons.add, size: 20),
-                    label: const Text('Post a Job'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                      minimumSize: const Size(0, 40),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
             Expanded(
-              child: _jobs.isEmpty
+              child: _filteredJobs.isEmpty
                   ? _buildEmptyState()
                   : ListView.builder(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                itemCount: _jobs.length,
+                itemCount: _filteredJobs.length,
                 itemBuilder: (ctx, i) {
-                  final job = _jobs[i];
+                  final job = _filteredJobs[i];
                   final isActive = job['status'] == 'active';
                   final List<String> imageUrls = List<String>.from(job['image_urls'] ?? []);
                   final thumbnail = imageUrls.isNotEmpty ? imageUrls.first : null;
@@ -327,6 +456,25 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
           ],
         ),
       ),
+      bottomNavigationBar: _selectionMode
+          ? BottomAppBar(
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            TextButton.icon(
+              onPressed: _batchClose,
+              icon: const Icon(Icons.close),
+              label: Text('Close (${_selectedJobIds.length})'),
+            ),
+            TextButton.icon(
+              onPressed: _batchDelete,
+              icon: const Icon(Icons.delete),
+              label: Text('Delete (${_selectedJobIds.length})'),
+            ),
+          ],
+        ),
+      )
+          : null,
     );
   }
 
@@ -345,19 +493,23 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
           boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8, offset: const Offset(0, 2))],
         ),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Container(
-              padding: const EdgeInsets.all(10),
+              padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(14)),
-              child: Icon(icon, color: color, size: 28),
+              child: Icon(icon, color: color, size: 24),
             ),
-            const SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('$count', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: color)),
-                Text(title, style: TextStyle(fontSize: 14, color: Colors.grey.shade600)),
-              ],
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('$count', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: color), overflow: TextOverflow.ellipsis),
+                  Text(title, style: TextStyle(fontSize: 12, color: Colors.grey.shade600), overflow: TextOverflow.ellipsis),
+                ],
+              ),
             ),
           ],
         ),
@@ -371,7 +523,6 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
     final pendingCount = job['pending_count'] as int? ?? 0;
     final hasApplications = (job['application_count'] ?? 0) > 0;
 
-    // Ensure thumbnail is a valid non‑empty URL
     final validThumbnail = (thumbnail != null && thumbnail.trim().isNotEmpty) ? thumbnail : null;
 
     return Card(
@@ -381,151 +532,175 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Clickable content area (navigates to job detail)
-          GestureDetector(
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => JobDetailEmployer(job: job)),
-            ),
-            behavior: HitTestBehavior.opaque,
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Thumbnail (if any)
-                      if (validThumbnail != null) ...[
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Image.network(
-                            validThumbnail,
-                            width: 60,
-                            height: 60,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => Container(
-                              width: 60,
-                              height: 60,
-                              color: Colors.grey.shade200,
-                              child: const Icon(Icons.broken_image, size: 30),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                      ],
-                      Expanded(
-                        child: Column(
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (_selectionMode)
+                Checkbox(
+                  value: _selectedJobIds.contains(job['job_id']),
+                  onChanged: (_) {
+                    setState(() {
+                      if (_selectedJobIds.contains(job['job_id']))
+                        _selectedJobIds.remove(job['job_id']);
+                      else
+                        _selectedJobIds.add(job['job_id']);
+                    });
+                  },
+                ),
+              Expanded(
+                child: GestureDetector(
+                  onTap: _selectionMode ? null : () => Navigator.push(context, MaterialPageRoute(builder: (_) => JobDetailEmployer(job: job))),
+                  behavior: HitTestBehavior.opaque,
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              job['job_title'] ?? 'Untitled',
-                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 4),
-                            Row(
-                              children: [
-                                Icon(Icons.location_on_outlined, size: 14, color: Colors.grey.shade600),
-                                const SizedBox(width: 4),
-                                Expanded(
-                                  child: Text(
-                                    location,
-                                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                            if (validThumbnail != null) ...[
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: Image.network(
+                                  validThumbnail,
+                                  width: 60,
+                                  height: 60,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => Container(
+                                    width: 60,
+                                    height: 60,
+                                    color: Colors.grey.shade200,
+                                    child: const Icon(Icons.broken_image, size: 30),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                            ],
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    job['job_title'] ?? 'Untitled',
+                                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                   ),
-                                ),
-                                const SizedBox(width: 8),
+                                  const SizedBox(height: 6),
+                                  // Location row (separate)
+                                  Row(
+                                    children: [
+                                      Icon(Icons.location_on_outlined, size: 14, color: Colors.grey.shade600),
+                                      const SizedBox(width: 4),
+                                      Expanded(
+                                        child: Text(
+                                          location,
+                                          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  // Job type row (separate)
+                                  Row(
+                                    children: [
+                                      Icon(Icons.work_outline, size: 14, color: Colors.grey.shade600),
+                                      const SizedBox(width: 4),
+                                      Expanded(
+                                        child: Text(
+                                          jobType,
+                                          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  // Stats row (unchanged, uses Wrap)
+                                  Wrap(
+                                    spacing: 12,
+                                    runSpacing: 4,
+                                    children: [
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.visibility, size: 14, color: Colors.grey.shade600),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            '${job['view_count'] ?? 0} views',
+                                            style: const TextStyle(fontSize: 11, color: Colors.grey),
+                                          ),
+                                        ],
+                                      ),
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.description, size: 14, color: Colors.grey.shade600),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            '${job['application_count'] ?? 0} applications',
+                                            style: const TextStyle(fontSize: 11, color: Colors.grey),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
                                 Container(
-                                  width: 4,
-                                  height: 4,
-                                  decoration: const BoxDecoration(color: Colors.grey, shape: BoxShape.circle),
-                                ),
-                                const SizedBox(width: 8),
-                                Icon(Icons.work_outline, size: 14, color: Colors.grey.shade600),
-                                const SizedBox(width: 4),
-                                Flexible(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                  decoration: BoxDecoration(
+                                    color: isActive ? Colors.green.shade50 : Colors.grey.shade200,
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
                                   child: Text(
-                                    jobType,
-                                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
+                                    isActive ? 'Active' : 'Closed',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: isActive ? Colors.green.shade700 : Colors.grey.shade700,
+                                    ),
                                   ),
                                 ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                Icon(Icons.visibility, size: 14, color: Colors.grey.shade600),
-                                const SizedBox(width: 4),
-                                Text(
-                                  '${job['view_count'] ?? 0} views',
-                                  style: const TextStyle(fontSize: 12, color: Colors.grey),
-                                ),
-                                const SizedBox(width: 16),
-                                Icon(Icons.description, size: 14, color: Colors.grey.shade600),
-                                const SizedBox(width: 4),
-                                Text(
-                                  '${job['application_count'] ?? 0} applications',
-                                  style: const TextStyle(fontSize: 12, color: Colors.grey),
-                                ),
+                                if (pendingCount > 0) ...[
+                                  const SizedBox(height: 6),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: Colors.orange.shade50,
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(color: Colors.orange.shade200),
+                                    ),
+                                    child: Text(
+                                      '$pendingCount pending',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w500,
+                                        color: Colors.orange.shade700,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ],
                             ),
                           ],
                         ),
-                      ),
-                      // Right column: status badge + pending badge
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                            decoration: BoxDecoration(
-                              color: isActive ? Colors.green.shade50 : Colors.grey.shade200,
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Text(
-                              isActive ? 'Active' : 'Closed',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: isActive ? Colors.green.shade700 : Colors.grey.shade700,
-                              ),
-                            ),
-                          ),
-                          if (pendingCount > 0) ...[
-                            const SizedBox(height: 6),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: Colors.orange.shade50,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: Colors.orange.shade200),
-                              ),
-                              child: Text(
-                                '$pendingCount pending',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w500,
-                                  color: Colors.orange.shade700,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ],
+                ),
               ),
-            ),
+            ],
           ),
           const Divider(height: 1),
-          // Action buttons row (unchanged)
           Padding(
             padding: const EdgeInsets.all(12),
             child: Row(
@@ -534,17 +709,15 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
                 _actionButton(
                   icon: Icons.people_outline,
                   label: 'Applicants ($pendingCount)',
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => ApplicantListPage(
-                          jobId: job['job_id'],
-                          jobTitle: job['job_title'] ?? 'Position',
-                        ),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => ApplicantListPage(
+                        jobId: job['job_id'],
+                        jobTitle: job['job_title'] ?? 'Position',
                       ),
-                    );
-                  },
+                    ),
+                  ),
                   color: Colors.blue,
                 ),
                 if (isActive)
@@ -576,9 +749,7 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
                       if (result == true) loadJobs();
                     } else {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Failed to load job details'),
-                          backgroundColor: Colors.red,
-                        ),
+                        const SnackBar(content: Text('Failed to load job details'), backgroundColor: Colors.red),
                       );
                     }
                   },
@@ -598,12 +769,7 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
     );
   }
 
-  Widget _actionButton({
-    required IconData icon,
-    required String label,
-    required VoidCallback? onTap,   // now nullable
-    required Color color,
-  }) {
+  Widget _actionButton({required IconData icon, required String label, required VoidCallback? onTap, required Color color}) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(30),
@@ -613,10 +779,7 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
           children: [
             Icon(icon, size: 20, color: color),
             const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(fontSize: 12, color: color, fontWeight: FontWeight.w500),
-            ),
+            Text(label, style: TextStyle(fontSize: 12, color: color, fontWeight: FontWeight.w500)),
           ],
         ),
       ),

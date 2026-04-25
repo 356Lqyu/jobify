@@ -315,7 +315,7 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
                     },
                   ),
                   const SizedBox(height: 12),
-                  // Hidden Option (replaces Private)
+                  // Hidden Option
                   _buildVisibilityCard(
                     context: context,
                     icon: Icons.visibility_off,
@@ -416,68 +416,6 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
     );
   }
 
-  Widget _buildVisibilityOption(
-      BuildContext context, {
-        required IconData icon,
-        required String title,
-        required String description,
-        required String value,
-        required String currentValue,
-        required VoidCallback onTap,
-      }) {
-    final isSelected = currentValue == value;
-
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Row(
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: isSelected ? Colors.blue : Colors.grey.shade100,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(
-                icon,
-                color: isSelected ? Colors.white : Colors.grey.shade600,
-                size: 24,
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 16,
-                      color: isSelected ? Colors.blue : Colors.black87,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    description,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey.shade600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (isSelected)
-              Icon(Icons.check_circle, color: Colors.blue, size: 24),
-          ],
-        ),
-      ),
-    );
-  }
-
   String _getVisibilityLabel(String visibility) {
     switch (visibility) {
       case 'public': return 'Public';
@@ -496,15 +434,6 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
     }
   }
 
-  Color _getVisibilityColor(String visibility) {
-    switch (visibility) {
-      case 'public': return Colors.green;
-      case 'employers_only': return Colors.orange;
-      case 'hidden': return Colors.red;
-      default: return Colors.green;
-    }
-  }
-
   Future<Map<String, dynamic>> _checkProfileAccess() async {
     // If viewing own profile, always allow
     if (_currentUserId == widget.userId) {
@@ -512,7 +441,7 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
     }
 
     try {
-      // Get profile visibility setting and role
+      // Get profile visibility setting and role for the target user
       final userData = await supabase
           .from('users')
           .select('profile_visibility, role')
@@ -531,8 +460,9 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
 
       // If profile is hidden, check if current user is employer who received application
       if (visibility == 'hidden') {
-        // If current user is a job seeker, cannot view
-        if (_currentUserId == null) return {'canView': false, 'visibility': visibility};
+        // If current user is not logged in, cannot view
+        if (_currentUserId == null)
+          return {'canView': false, 'visibility': visibility};
 
         // Get current user's role
         final currentUserData = await supabase
@@ -541,27 +471,46 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
             .eq('user_id', _currentUserId!)
             .maybeSingle();
 
-        if (currentUserData == null) return {'canView': false, 'visibility': visibility};
+        if (currentUserData == null)
+          return {'canView': false, 'visibility': visibility};
 
         // If current user is not an employer, cannot view
         if (currentUserData['role'] != 'POSTER') {
           return {'canView': false, 'visibility': visibility};
         }
 
-        // Check if this employer has received an application from the profile owner
+        // Get the employer's job posts (posted by current user)
+        final employerJobs = await supabase
+            .from('job_post')
+            .select('job_id')
+            .eq('created_by', _currentUserId!);
+
+        final employerJobIds = (employerJobs as List)
+            .map((job) => job['job_id'] as String)
+            .toList();
+
+        if (employerJobIds.isEmpty) {
+          return {'canView': false, 'visibility': visibility};
+        }
+
+        // Check if the profile owner (job seeker) has applied to any of this employer's jobs
         final applications = await supabase
             .from('job_application')
             .select('application_id')
-            .eq('user_id', widget.userId)
-            .inFilter('job_id', await _getEmployerJobIds());
+            .eq('user_id', widget.userId)  // The profile owner (job seeker)
+            .inFilter('job_id', employerJobIds);
 
         final canView = (applications as List).isNotEmpty;
+
+        debugPrint('Hidden profile check: Profile owner ${widget.userId} has applied to employer jobs: $canView');
+
         return {'canView': canView, 'visibility': visibility};
       }
 
       // If employers_only, check if current user is employer (any employer)
       if (visibility == 'employers_only') {
-        if (_currentUserId == null) return {'canView': false, 'visibility': visibility};
+        if (_currentUserId == null)
+          return {'canView': false, 'visibility': visibility};
 
         // Get current user's role
         final currentUserData = await supabase
@@ -570,7 +519,8 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
             .eq('user_id', _currentUserId!)
             .maybeSingle();
 
-        if (currentUserData == null) return {'canView': false, 'visibility': visibility};
+        if (currentUserData == null)
+          return {'canView': false, 'visibility': visibility};
 
         // Only employers can view
         final canView = currentUserData['role'] == 'POSTER';
@@ -581,21 +531,6 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
     } catch (e) {
       debugPrint('Error checking visibility: $e');
       return {'canView': true, 'visibility': 'public'};
-    }
-  }
-  Future<List<String>> _getEmployerJobIds() async {
-    if (_currentUserId == null) return [];
-
-    try {
-      final jobs = await supabase
-          .from('job_post')
-          .select('job_id')
-          .eq('created_by', _currentUserId!);
-
-      return (jobs as List).map((job) => job['job_id'] as String).toList();
-    } catch (e) {
-      debugPrint('Error getting job IDs: $e');
-      return [];
     }
   }
 
@@ -1072,7 +1007,7 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
     }
   }
 
-  // Add this method for the hidden/restricted page
+  // Hidden page
   Widget _buildHiddenRestrictedPage() {
     final String displayName = widget.isCompany
         ? (_companyName ?? widget.name ?? 'Company')
@@ -1113,7 +1048,6 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // Profile Header - Top position, centered horizontally
             Container(
               width: double.infinity,
               padding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
@@ -1263,7 +1197,6 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // Profile Header - Top position, centered horizontally
             Container(
               width: double.infinity,
               padding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
@@ -1397,7 +1330,6 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
           }
           return _buildHiddenRestrictedPage();
         }
-
         return _buildProfileContent(isOwnProfile);
       },
     );

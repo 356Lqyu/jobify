@@ -407,7 +407,7 @@ class _SettingPageState extends State<SettingPage> {
 
     await supabase.auth.signOut();
     if (mounted) {
-      Navigator.pushReplacementNamed(context, '/');
+      Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
     }
   }
 

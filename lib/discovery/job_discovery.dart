@@ -7,6 +7,7 @@ import 'package:jobify/social/social_feed_provider.dart';
 import 'package:jobify/data/job_repository.dart';
 import 'package:jobify/users/users.dart';
 import 'package:jobify/discovery/job_details.dart';
+import 'package:share_plus/share_plus.dart';
 
 class DiscoveryJob extends StatefulWidget {
   final Users user;
@@ -51,7 +52,6 @@ class _DiscoveryJobState extends State<DiscoveryJob>
 
   void refresh() => _provider.refresh();
 
-  /// Debounced search – triggers after the user stops typing for 300 ms
   void _onSearchChanged(String value) {
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 300), () {
@@ -104,9 +104,9 @@ class _DiscoveryJobState extends State<DiscoveryJob>
               Material(
                 color: Colors.white,
                 elevation: 2,
-                shadowColor: Colors.black.withOpacity(0.1), // Softer, nicer shadow
+                shadowColor: Colors.black.withOpacity(0.1),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start, // Aligns everything to the start
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // 1. Search Bar & Filter Button Row
                     Padding(
@@ -127,7 +127,7 @@ class _DiscoveryJobState extends State<DiscoveryJob>
                                 children: [
                                   const Icon(
                                     Icons.search,
-                                    size: 18, // Slightly larger for better proportions
+                                    size: 20,
                                     color: Colors.blueGrey,
                                   ),
                                   const SizedBox(width: 8),
@@ -155,12 +155,12 @@ class _DiscoveryJobState extends State<DiscoveryJob>
                               return GestureDetector(
                                 onTap: _showFilterSheet,
                                 child: Container(
-                                  padding: const EdgeInsets.all(10),
+                                  padding: const EdgeInsets.all(13),
                                   decoration: BoxDecoration(
                                     color: p.hasActiveFilters
                                         ? const Color(0xFF2563EB)
                                         : const Color(0xFFF1F5F9),
-                                    borderRadius: BorderRadius.circular(12),
+                                    borderRadius: BorderRadius.circular(14),
                                   ),
                                   child: Icon(
                                     Icons.tune_rounded,
@@ -182,12 +182,12 @@ class _DiscoveryJobState extends State<DiscoveryJob>
                       builder: (_, p, __) {
                         if (!p.hasActiveFilters) return const SizedBox.shrink();
                         return Container(
-                          width: double.infinity, // Forces the white background to stretch fully
-                          padding: const EdgeInsets.fromLTRB(14, 0, 14, 14), // Bottom padding for spacing
+                          width: double.infinity,
+                          padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
                           child: Wrap(
-                            alignment: WrapAlignment.start, // "Start with the first" (Left-aligned)
-                            spacing: 8, // Horizontal space between chips
-                            runSpacing: 8, // Vertical space if they wrap to a new line
+                            alignment: WrapAlignment.start,
+                            spacing: 8,
+                            runSpacing: 8,
                             children: [
                               if (p.jobTypeFilter != 'All')
                                 _ActiveChip(
@@ -251,7 +251,7 @@ class _DiscoveryJobState extends State<DiscoveryJob>
                         child: ListView.builder(
                           padding: const EdgeInsets.only(top: 20, bottom: 100),
                           itemCount:
-                              prov.jobs.length + (prov.isLoading ? 1 : 0),
+                          prov.jobs.length + (prov.isLoading ? 1 : 0),
                           itemBuilder: (ctx, i) {
                             if (i >= prov.jobs.length) {
                               return const Padding(
@@ -268,6 +268,14 @@ class _DiscoveryJobState extends State<DiscoveryJob>
                               job: job,
                               onSaveTap: () => prov.toggleSaveJob(job, ctx),
                               onTap: () => _navigateToJobDetail(ctx, job),
+                              onShareTap: () {
+                                final deepLink = 'https://jobify.app/job/${job.jobId}';
+                                final text =
+                                    '🚀 ${job.jobTitle} at ${job.companyName}\n'
+                                    '📍 ${job.location}  •  💰 ${job.salaryDisplay}\n\n'
+                                    'Check it out on Jobify:\n$deepLink';
+                                Share.share(text, subject: '${job.jobTitle} — ${job.companyName}');
+                              },
                             );
                           },
                         ),
@@ -284,19 +292,19 @@ class _DiscoveryJobState extends State<DiscoveryJob>
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// JOB CARD
-// ─────────────────────────────────────────────────────────────────────────────
 
+// JOB CARD
 class _JobCard extends StatelessWidget {
   final JobPost job;
   final VoidCallback onSaveTap;
   final VoidCallback onTap;
+  final VoidCallback onShareTap;
 
   const _JobCard({
     required this.job,
     required this.onSaveTap,
     required this.onTap,
+    required this.onShareTap,
   });
 
   @override
@@ -328,15 +336,15 @@ class _JobCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(8),
                     child: job.companyLogoUrl != null
                         ? CachedNetworkImage(
-                            imageUrl: job.companyLogoUrl!,
-                            width: 42,
-                            height: 42,
-                            fit: BoxFit.cover,
-                            placeholder: (_, __) =>
-                                _LogoBox(name: job.companyName),
-                            errorWidget: (_, __, ___) =>
-                                _LogoBox(name: job.companyName),
-                          )
+                      imageUrl: job.companyLogoUrl!,
+                      width: 42,
+                      height: 42,
+                      fit: BoxFit.cover,
+                      placeholder: (_, __) =>
+                          _LogoBox(name: job.companyName),
+                      errorWidget: (_, __, ___) =>
+                          _LogoBox(name: job.companyName),
+                    )
                         : _LogoBox(name: job.companyName),
                   ),
                   const SizedBox(width: 10),
@@ -363,9 +371,22 @@ class _JobCard extends StatelessWidget {
                     ),
                   ),
                   GestureDetector(
+                    onTap: onShareTap,
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 4),
+                      child: Icon(
+                        Icons.share_outlined,
+                        size: 22,
+                        color: Colors.blueGrey.shade300,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  GestureDetector(
                     onTap: onSaveTap,
                     child: Icon(
                       job.isSaved ? Icons.bookmark : Icons.bookmark_border,
+                      size: 22,
                       color: job.isSaved
                           ? const Color(0xFF2563EB)
                           : Colors.blueGrey.shade300,
@@ -577,11 +598,11 @@ class _FilterSheetState extends State<_FilterSheet> {
                   children: _jobTypes
                       .map(
                         (t) => _SelectableChip(
-                          label: t,
-                          selected: prov.jobTypeFilter == t,
-                          onTap: () => prov.setJobType(t),
-                        ),
-                      )
+                      label: t,
+                      selected: prov.jobTypeFilter == t,
+                      onTap: () => prov.setJobType(t),
+                    ),
+                  )
                       .toList(),
                 ),
                 const SizedBox(height: 16),
@@ -593,11 +614,11 @@ class _FilterSheetState extends State<_FilterSheet> {
                   children: _expLevels
                       .map(
                         (l) => _SelectableChip(
-                          label: l,
-                          selected: prov.expLevelFilter == l,
-                          onTap: () => prov.setExpLevel(l),
-                        ),
-                      )
+                      label: l,
+                      selected: prov.expLevelFilter == l,
+                      onTap: () => prov.setExpLevel(l),
+                    ),
+                  )
                       .toList(),
                 ),
                 const SizedBox(height: 16),
@@ -609,11 +630,11 @@ class _FilterSheetState extends State<_FilterSheet> {
                   children: _postTimes.entries
                       .map(
                         (e) => _SelectableChip(
-                          label: e.key,
-                          selected: prov.postDaysFilter == e.value,
-                          onTap: () => prov.setPostDays(e.value),
-                        ),
-                      )
+                      label: e.key,
+                      selected: prov.postDaysFilter == e.value,
+                      onTap: () => prov.setPostDays(e.value),
+                    ),
+                  )
                       .toList(),
                 ),
                 const SizedBox(height: 16),
@@ -658,9 +679,9 @@ class _FilterSheetState extends State<_FilterSheet> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF2563EB),
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      padding: const EdgeInsets.symmetric(vertical: 18),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(14),
                       ),
                     ),
                     onPressed: () {
@@ -669,7 +690,7 @@ class _FilterSheetState extends State<_FilterSheet> {
                     },
                     child: const Text(
                       'Apply Filters',
-                      style: TextStyle(fontWeight: FontWeight.w600),
+                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
                     ),
                   ),
                 ),
@@ -752,15 +773,15 @@ class _SelectableChip extends StatelessWidget {
   Widget build(BuildContext context) => GestureDetector(
     onTap: onTap,
     child: Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
       decoration: BoxDecoration(
         color: selected ? const Color(0xFF2563EB) : const Color(0xFFF1F5F9),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(24),
       ),
       child: Text(
         label,
         style: TextStyle(
-          fontSize: 12,
+          fontSize: 13,
           fontWeight: FontWeight.w600,
           color: selected ? Colors.white : Colors.blueGrey,
         ),
@@ -778,7 +799,7 @@ class _FilterLabel extends StatelessWidget {
     text,
     style: const TextStyle(
       fontWeight: FontWeight.w700,
-      fontSize: 13,
+      fontSize: 15,
       color: Colors.black87,
     ),
   );

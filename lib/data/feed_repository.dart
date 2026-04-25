@@ -106,7 +106,7 @@ class FeedRepository {
       final likedIds = _uid != null ? await _getLikedPostIds() : <String>{};
       final savedIds = _uid != null
           ? await _getSavedPostIds()
-          : <String>{}; // UPDATED
+          : <String>{};
       final followedUserIds = _uid != null
           ? await _getFollowedUserIds()
           : <String>{};
@@ -254,6 +254,49 @@ class FeedRepository {
   }
 
   // POSTS  –  FETCH / CREATE / UPDATE / DELETE
+  Future<FeedPost?> fetchPostById(String postId) async {
+    try {
+      final r = await _sb.from('post').select('''
+        post_id, user_id, company_id, job_id,
+        content, post_type, hashtags, media_urls,
+        created_at, updated_at,
+        users!post_user_id_fkey ( fullname, profile_image_url ),
+        company_profile!post_company_id_fkey ( company_name, logo_url, industry )
+      ''').eq('post_id', postId).maybeSingle();
+
+      if (r == null) return null;
+
+      final userRow = r['users'] as Map<String, dynamic>?;
+      final compRow = r['company_profile'] as Map<String, dynamic>?;
+
+      JobPost? linkedJob;
+      if (r['job_id'] != null && r['post_type'] == 'job') {
+        linkedJob = await _jobRepo.fetchJobById(r['job_id'] as String);
+      }
+
+      return FeedPost(
+        postId: r['post_id'] as String,
+        userId: r['user_id'] as String,
+        companyId: r['company_id'] as String?,
+        jobId: r['job_id'] as String?,
+        content: r['content'] as String? ?? '',
+        postType: postTypeFromString(r['post_type'] as String?),
+        hashtags: List<String>.from(r['hashtags'] as List? ?? []),
+        mediaUrls: List<String>.from(r['media_urls'] as List? ?? []),
+        createdAt: DateTime.parse(r['created_at'] as String),
+        updatedAt: DateTime.parse(r['updated_at'] as String? ?? r['created_at'] as String),
+        authorName: compRow?['company_name'] as String? ?? userRow?['fullname'] as String? ?? 'Unknown',
+        authorAvatar: compRow?['logo_url'] as String? ?? userRow?['profile_image_url'] as String? ?? '',
+        authorSubtitle: compRow?['industry'] as String? ?? '',
+        isVerified: compRow != null,
+        linkedJob: linkedJob,
+      );
+    } catch (e) {
+      debugPrint('fetchPostById error: $e');
+      return null;
+    }
+  }
+
   Future<List<FeedPost>> fetchUserPosts(String userId) async {
     try {
       final rows =
@@ -534,32 +577,33 @@ class FeedRepository {
   Future<List<FeedPost>> fetchSavedPosts() async {
     if (_uid == null) return [];
     try {
+      // 1. Fetch saved post IDs ordered by post_saved.created_at (descending)
       final savedRows =
-          await _sb
-                  .from('post_saved')
-                  .select('post_id')
-                  .eq('user_id', _uid!)
-                  .order('created_at', ascending: false)
-              as List<dynamic>;
+      await _sb
+          .from('post_saved')
+          .select('post_id')
+          .eq('user_id', _uid!)
+          .order('created_at', ascending: false)
+      as List<dynamic>;
 
       final postIds = savedRows
           .map((r) => (r as Map)['post_id'] as String)
           .toList();
       if (postIds.isEmpty) return [];
 
+      // 2. Fetch the actual posts without ordering by post.created_at
       final rows =
-          await _sb
-                  .from('post')
-                  .select('''
+      await _sb
+          .from('post')
+          .select('''
         post_id, user_id, company_id, job_id,
         content, post_type, hashtags, media_urls,
         created_at, updated_at,
         users!post_user_id_fkey ( fullname, profile_image_url ),
         company_profile!post_company_id_fkey ( company_name, logo_url, industry )
       ''')
-                  .inFilter('post_id', postIds)
-                  .order('created_at', ascending: false)
-              as List<dynamic>;
+          .inFilter('post_id', postIds)
+      as List<dynamic>;
 
       final likedIds = await _getLikedPostIds();
       final savedIds = postIds.toSet();
@@ -599,11 +643,11 @@ class FeedRepository {
               r['updated_at'] as String? ?? r['created_at'] as String,
             ),
             authorName:
-                compRow?['company_name'] as String? ??
+            compRow?['company_name'] as String? ??
                 userRow?['fullname'] as String? ??
                 'Unknown',
             authorAvatar:
-                compRow?['logo_url'] as String? ??
+            compRow?['logo_url'] as String? ??
                 userRow?['profile_image_url'] as String? ??
                 '',
             authorSubtitle: compRow?['industry'] as String? ?? '',
@@ -616,6 +660,9 @@ class FeedRepository {
           ),
         );
       }
+
+      // 3. Re-order the fetched posts to match the savedDate (postIds order)
+      posts.sort((a, b) => postIds.indexOf(a.postId).compareTo(postIds.indexOf(b.postId)));
 
       await LocalDB.insertPosts(posts);
       return posts;

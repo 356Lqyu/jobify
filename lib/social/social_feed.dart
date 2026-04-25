@@ -14,6 +14,7 @@ import 'package:jobify/data/local_db.dart';
 import 'package:jobify/job_post/job_detail_employer.dart';
 import 'package:jobify/social/social_post_details.dart';
 import '../users/view_profile_page.dart';
+import 'package:share_plus/share_plus.dart';
 
 class SocialFeedPage extends StatefulWidget {
   final Users user;
@@ -81,9 +82,8 @@ class _SocialFeedPageState extends State<SocialFeedPage>
           elevation: 0,
           automaticallyImplyLeading: false,
           actions: [
-            // UPDATED
             IconButton(
-              icon: const Icon(Icons.bookmark_outline),
+              icon: const Icon(Icons.bookmark_outline, size: 30,),
               onPressed: () async {
                 await Navigator.push(
                   context,
@@ -91,7 +91,6 @@ class _SocialFeedPageState extends State<SocialFeedPage>
                     builder: (_) => SavedPostsPage(currentUser: widget.user),
                   ),
                 );
-                // Refresh after returning to sync unsaved changes
                 if (context.mounted) {
                   final p = context.read<SocialFeedProvider>();
                   p.refreshForYou();
@@ -101,7 +100,7 @@ class _SocialFeedPageState extends State<SocialFeedPage>
               tooltip: 'Saved Posts',
             ),
             IconButton(
-              icon: const Icon(Icons.list_alt),
+              icon: const Icon(Icons.list_alt,  size: 30,),
               onPressed: () {
                 Navigator.push(
                   context,
@@ -147,17 +146,16 @@ class _SocialFeedPageState extends State<SocialFeedPage>
         ),
         floatingActionButton: widget.user.role == 'JOB_SEEKER'
             ? FloatingActionButton(
-                onPressed: _openCreatePost,
-                backgroundColor: const Color(0xFF2563EB),
-                child: const Icon(Icons.add, color: Colors.white),
-              )
+          onPressed: _openCreatePost,
+          backgroundColor: const Color(0xFF2563EB),
+          child: const Icon(Icons.add, color: Colors.white),
+        )
             : null,
       ),
     );
   }
 }
 
-// Filter chips widget
 class _FilterChips extends StatelessWidget {
   final String currentFilter;
   final ValueChanged<String> onFilterChanged;
@@ -203,12 +201,12 @@ class _FilterChips extends StatelessWidget {
                 ),
                 boxShadow: sel
                     ? [
-                        BoxShadow(
-                          color: const Color(0xFF2563EB).withOpacity(0.3),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ]
+                  BoxShadow(
+                    color: const Color(0xFF2563EB).withOpacity(0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
                     : null,
               ),
               child: Center(
@@ -229,7 +227,6 @@ class _FilterChips extends StatelessWidget {
   }
 }
 
-// FOR YOU TAB
 class _ForYouTab extends StatelessWidget {
   final Users user;
   const _ForYouTab({required this.user});
@@ -252,41 +249,41 @@ class _ForYouTab extends StatelessWidget {
                     ? const Center(child: CircularProgressIndicator())
                     : prov.forYouPosts.isEmpty
                     ? const _EmptyState(
-                        icon: Icons.article_outlined,
-                        message: 'No posts yet. Be the first to share!',
-                      )
+                  icon: Icons.article_outlined,
+                  message: 'No posts yet. Be the first to share!',
+                )
                     : RefreshIndicator(
-                        onRefresh: prov.refreshForYou,
-                        child: NotificationListener<ScrollNotification>(
-                          onNotification: (n) {
-                            if (n.metrics.pixels >=
-                                n.metrics.maxScrollExtent - 200) {
-                              prov.loadMoreForYou();
-                            }
-                            return false;
-                          },
-                          child: ListView.builder(
-                            padding: const EdgeInsets.only(top: 8, bottom: 100),
-                            itemCount:
-                                prov.forYouPosts.length +
-                                (prov.isLoadingForYou ? 1 : 0),
-                            itemBuilder: (ctx, i) {
-                              if (i >= prov.forYouPosts.length) {
-                                return const Padding(
-                                  padding: EdgeInsets.all(16),
-                                  child: Center(
-                                    child: CircularProgressIndicator(),
-                                  ),
-                                );
-                              }
-                              return FeedCard(
-                                post: prov.forYouPosts[i],
-                                currentUser: user,
-                              );
-                            },
-                          ),
-                        ),
-                      ),
+                  onRefresh: prov.refreshForYou,
+                  child: NotificationListener<ScrollNotification>(
+                    onNotification: (n) {
+                      if (n.metrics.pixels >=
+                          n.metrics.maxScrollExtent - 200) {
+                        prov.loadMoreForYou();
+                      }
+                      return false;
+                    },
+                    child: ListView.builder(
+                      padding: const EdgeInsets.only(top: 8, bottom: 100),
+                      itemCount:
+                      prov.forYouPosts.length +
+                          (prov.isLoadingForYou ? 1 : 0),
+                      itemBuilder: (ctx, i) {
+                        if (i >= prov.forYouPosts.length) {
+                          return const Padding(
+                            padding: EdgeInsets.all(16),
+                            child: Center(
+                              child: CircularProgressIndicator(),
+                            ),
+                          );
+                        }
+                        return FeedCard(
+                          post: prov.forYouPosts[i],
+                          currentUser: user,
+                        );
+                      },
+                    ),
+                  ),
+                ),
               ),
             ],
           ),
@@ -296,7 +293,6 @@ class _ForYouTab extends StatelessWidget {
   }
 }
 
-// FOLLOWING TAB
 class _FollowingTab extends StatelessWidget {
   final Users user;
   const _FollowingTab({required this.user});
@@ -319,42 +315,42 @@ class _FollowingTab extends StatelessWidget {
                     ? const Center(child: CircularProgressIndicator())
                     : prov.followingPosts.isEmpty
                     ? const _EmptyState(
-                        icon: Icons.people_outline,
-                        message:
-                            'Follow companies & people to see their posts here.',
-                      )
+                  icon: Icons.people_outline,
+                  message:
+                  'Follow companies & people to see their posts here.',
+                )
                     : RefreshIndicator(
-                        onRefresh: prov.refreshFollowing,
-                        child: NotificationListener<ScrollNotification>(
-                          onNotification: (n) {
-                            if (n.metrics.pixels >=
-                                n.metrics.maxScrollExtent - 200) {
-                              prov.loadMoreFollowing();
-                            }
-                            return false;
-                          },
-                          child: ListView.builder(
-                            padding: const EdgeInsets.only(top: 8, bottom: 100),
-                            itemCount:
-                                prov.followingPosts.length +
-                                (prov.isLoadingFollowing ? 1 : 0),
-                            itemBuilder: (_, i) {
-                              if (i >= prov.followingPosts.length) {
-                                return const Padding(
-                                  padding: EdgeInsets.all(16),
-                                  child: Center(
-                                    child: CircularProgressIndicator(),
-                                  ),
-                                );
-                              }
-                              return FeedCard(
-                                post: prov.followingPosts[i],
-                                currentUser: user,
-                              );
-                            },
-                          ),
-                        ),
-                      ),
+                  onRefresh: prov.refreshFollowing,
+                  child: NotificationListener<ScrollNotification>(
+                    onNotification: (n) {
+                      if (n.metrics.pixels >=
+                          n.metrics.maxScrollExtent - 200) {
+                        prov.loadMoreFollowing();
+                      }
+                      return false;
+                    },
+                    child: ListView.builder(
+                      padding: const EdgeInsets.only(top: 8, bottom: 100),
+                      itemCount:
+                      prov.followingPosts.length +
+                          (prov.isLoadingFollowing ? 1 : 0),
+                      itemBuilder: (_, i) {
+                        if (i >= prov.followingPosts.length) {
+                          return const Padding(
+                            padding: EdgeInsets.all(16),
+                            child: Center(
+                              child: CircularProgressIndicator(),
+                            ),
+                          );
+                        }
+                        return FeedCard(
+                          post: prov.followingPosts[i],
+                          currentUser: user,
+                        );
+                      },
+                    ),
+                  ),
+                ),
               ),
             ],
           ),
@@ -364,11 +360,25 @@ class _FollowingTab extends StatelessWidget {
   }
 }
 
-// FEED CARD
 class FeedCard extends StatelessWidget {
   final FeedPost post;
   final Users currentUser;
   const FeedCard({super.key, required this.post, required this.currentUser});
+
+  // UPDATED WITH DEEP LINK
+  void _sharePost() {
+    // Generate the correct deep link based on post type
+    String deepLink = post.postType == PostType.job && post.linkedJob != null
+        ? 'https://jobify.app/job/${post.linkedJob!.jobId}'
+        : 'https://jobify.app/post/${post.postId}';
+
+    String shareText = 'Check out this ${post.postType.label.toLowerCase()} by ${post.authorName} on Jobify:\n\n$deepLink';
+
+    if (post.postType == PostType.job && post.linkedJob != null) {
+      shareText = 'Check out this job: ${post.linkedJob!.jobTitle} at ${post.linkedJob!.companyName}!\nLocation: ${post.linkedJob!.location}\n\nLink: $deepLink';
+    }
+    Share.share(shareText);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -492,14 +502,14 @@ class FeedCard extends StatelessWidget {
                       children: post.hashtags
                           .map(
                             (tag) => Text(
-                              '#$tag',
-                              style: const TextStyle(
-                                color: Color(0xFF2563EB),
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          )
+                          '#$tag',
+                          style: const TextStyle(
+                            color: Color(0xFF2563EB),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      )
                           .toList(),
                     ),
                   ),
@@ -529,7 +539,7 @@ class FeedCard extends StatelessWidget {
                   icon: Icons.share_outlined,
                   label: '',
                   color: Colors.blueGrey,
-                  onTap: () {},
+                  onTap: _sharePost,
                 ),
                 const Spacer(),
                 if (post.userId != currentUser.userId)
@@ -612,7 +622,6 @@ class FeedCard extends StatelessWidget {
   }
 }
 
-// RICH CONTENT
 class _RichContent extends StatefulWidget {
   final String content;
   const _RichContent({required this.content});
@@ -672,7 +681,6 @@ class _RichContentState extends State<_RichContent> {
   }
 }
 
-// MEDIA GRID
 class _MediaGrid extends StatelessWidget {
   final List<String> urls;
   const _MediaGrid({required this.urls});
@@ -681,7 +689,6 @@ class _MediaGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     if (urls.isEmpty) return const SizedBox.shrink();
 
-    // 1 Image: Display "Full" with a flexible height up to 400px
     if (urls.length == 1) {
       return Padding(
         padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
@@ -689,7 +696,7 @@ class _MediaGrid extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           child: ConstrainedBox(
             constraints: const BoxConstraints(
-              maxHeight: 400, // Lets tall images show more of their content
+              maxHeight: 400,
               minHeight: 200,
             ),
             child: CachedNetworkImage(
@@ -712,30 +719,25 @@ class _MediaGrid extends StatelessWidget {
       );
     }
 
-    // 2 or more Images: Facebook-style 2-column layout
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(12),
         child: SizedBox(
-          height: 240, // Nice large height for the two side-by-side images
+          height: 240,
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // First Image (Left)
               Expanded(child: _buildImage(urls[0])),
-              const SizedBox(width: 4), // Small Facebook-style gap
-              // Second Image (Right)
+              const SizedBox(width: 4),
               Expanded(
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
                     _buildImage(urls[1]),
-
-                    // The "+X" overlay if there are more than 2 images
                     if (urls.length > 2)
                       Container(
-                        color: Colors.black.withOpacity(0.5), // Dark overlay
+                        color: Colors.black.withOpacity(0.5),
                         child: Center(
                           child: Text(
                             '+${urls.length - 2}',
@@ -770,7 +772,6 @@ class _MediaGrid extends StatelessWidget {
   }
 }
 
-// LINKED JOB CARD
 class _LinkedJobCard extends StatelessWidget {
   final JobPost job;
   const _LinkedJobCard({required this.job});
@@ -834,7 +835,6 @@ class _LinkedJobCard extends StatelessWidget {
   }
 }
 
-// SMALL WIDGETS
 class _InlineChip extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -928,7 +928,7 @@ class _ActionBtn extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       child: Row(
         children: [
-          Icon(icon, size: 19, color: color),
+          Icon(icon, size: 20, color: color),
           if (label.isNotEmpty) ...[
             const SizedBox(width: 4),
             Text(
@@ -1028,7 +1028,6 @@ class _EmptyState extends StatelessWidget {
   );
 }
 
-// ------------ COMMENT SHEET ------------
 class _CommentSheet extends StatefulWidget {
   final FeedPost post;
   final Users currentUser;
@@ -1134,77 +1133,77 @@ class _CommentSheetState extends State<_CommentSheet> {
                   ? const Center(child: CircularProgressIndicator())
                   : _comments.isEmpty
                   ? const Center(
-                      child: Text(
-                        'No comments yet.',
-                        style: TextStyle(color: Colors.blueGrey),
-                      ),
-                    )
+                child: Text(
+                  'No comments yet.',
+                  style: TextStyle(color: Colors.blueGrey),
+                ),
+              )
                   : ListView.builder(
-                      controller: ctrl,
-                      padding: const EdgeInsets.all(16),
-                      itemCount: _comments.length,
-                      itemBuilder: (_, i) {
-                        final c = _comments[i];
-                        final isMe = c.userId == widget.currentUser.userId;
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 14),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              _FeedAvatar(
-                                name: isMe ? 'You' : c.authorName,
-                                url: isMe
-                                    ? widget.currentUser.profileImageUrl
-                                    : c.authorAvatar,
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Container(
-                                  padding: const EdgeInsets.all(10),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFF8FAFC),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        children: [
-                                          Text(
-                                            isMe ? 'You' : c.authorName,
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.w600,
-                                              fontSize: 13,
-                                            ),
-                                          ),
-                                          const Spacer(),
-                                          Text(
-                                            c.timeAgo,
-                                            style: const TextStyle(
-                                              fontSize: 10,
-                                              color: Colors.blueGrey,
-                                            ),
-                                          ),
-                                        ],
+                controller: ctrl,
+                padding: const EdgeInsets.all(16),
+                itemCount: _comments.length,
+                itemBuilder: (_, i) {
+                  final c = _comments[i];
+                  final isMe = c.userId == widget.currentUser.userId;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 14),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _FeedAvatar(
+                          name: isMe ? 'You' : c.authorName,
+                          url: isMe
+                              ? widget.currentUser.profileImageUrl
+                              : c.authorAvatar,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF8FAFC),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Column(
+                              crossAxisAlignment:
+                              CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Text(
+                                      isMe ? 'You' : c.authorName,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 13,
                                       ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        c.commentText,
-                                        style: const TextStyle(
-                                          fontSize: 13,
-                                          height: 1.4,
-                                        ),
+                                    ),
+                                    const Spacer(),
+                                    Text(
+                                      c.timeAgo,
+                                      style: const TextStyle(
+                                        fontSize: 10,
+                                        color: Colors.blueGrey,
                                       ),
-                                    ],
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  c.commentText,
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    height: 1.4,
                                   ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                        );
-                      },
+                        ),
+                      ],
                     ),
+                  );
+                },
+              ),
             ),
             Padding(
               padding: EdgeInsets.fromLTRB(
@@ -1242,24 +1241,24 @@ class _CommentSheetState extends State<_CommentSheet> {
                     ),
                     child: _submitting
                         ? const Padding(
-                            padding: EdgeInsets.all(12),
-                            child: SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            ),
-                          )
+                      padding: EdgeInsets.all(12),
+                      child: SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      ),
+                    )
                         : IconButton(
-                            icon: const Icon(
-                              Icons.send,
-                              color: Colors.white,
-                              size: 18,
-                            ),
-                            onPressed: _submit,
-                          ),
+                      icon: const Icon(
+                        Icons.send,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                      onPressed: _submit,
+                    ),
                   ),
                 ],
               ),

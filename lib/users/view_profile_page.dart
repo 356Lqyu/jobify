@@ -94,18 +94,30 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
   void initState() {
     super.initState();
     _getCurrentUser();
-    _loadProfile();
-    _loadStats();
-    _loadRecentPosts();
-    _loadJobPosts();
-    _loadBranches();
-    _loadFollowers();
-    _loadFollowing();
-    _loadHeadOffice();
-    _checkFollowStatus();
-    _loadVisibilitySetting();
-    if (!widget.isCompany) {
-      _loadJobSeekerDetails();
+    _loadAllData();
+  }
+
+  Future<void> _loadAllData() async {
+    setState(() => _isLoading = true);
+
+    try {
+      await Future.wait([
+        _loadProfile(),
+        _loadStats(),
+        _loadRecentPosts(),
+        _loadJobPosts(),
+        _loadBranches(),
+        _loadFollowers(),
+        _loadFollowing(),
+        _loadHeadOffice(),
+        _checkFollowStatus(),
+        _loadVisibilitySetting(),
+        if (!widget.isCompany) _loadJobSeekerDetails(),
+      ]);
+    } catch (e) {
+      debugPrint('Error loading profile: $e');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -127,13 +139,11 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
           .eq('is_head_office', true)
           .maybeSingle();
 
-      if (headOffice != null && mounted) {
-        setState(() {
-          _headOfficeAddress = headOffice['address'];
-          _headOfficeCity = headOffice['city'];
-          _headOfficeState = headOffice['state'];
-          _headOfficeCountry = headOffice['country'];
-        });
+      if (headOffice != null) {
+        _headOfficeAddress = headOffice['address'];
+        _headOfficeCity = headOffice['city'];
+        _headOfficeState = headOffice['state'];
+        _headOfficeCountry = headOffice['country'];
       }
     } catch (e) {
       debugPrint('Error loading head office: $e');
@@ -147,27 +157,21 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
           .select()
           .eq('user_id', widget.userId)
           .order('skill_name');
-      setState(() {
-        _skills = List<Map<String, dynamic>>.from(skillsData);
-      });
+      _skills = List<Map<String, dynamic>>.from(skillsData);
 
       final educationData = await supabase
           .from('education')
           .select()
           .eq('user_id', widget.userId)
           .order('start_date', ascending: false);
-      setState(() {
-        _education = List<Map<String, dynamic>>.from(educationData);
-      });
+      _education = List<Map<String, dynamic>>.from(educationData);
 
       final experienceData = await supabase
           .from('experience')
           .select()
           .eq('user_id', widget.userId)
           .order('start_date', ascending: false);
-      setState(() {
-        _experience = List<Map<String, dynamic>>.from(experienceData);
-      });
+      _experience = List<Map<String, dynamic>>.from(experienceData);
     } catch (e) {
       debugPrint('Error loading job seeker details: $e');
     }
@@ -183,12 +187,10 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
           .eq('user_id', _currentUserId!)
           .maybeSingle();
 
-      if (data != null && mounted) {
-        setState(() {
-          _profileVisibility = data['profile_visibility'] ?? 'public';
-        });
+      if (data != null) {
+        _profileVisibility = data['profile_visibility'] ?? 'public';
       }
-    } catch (e) {
+    }  catch (e) {
       debugPrint('Error loading visibility: $e');
     }
   }
@@ -537,8 +539,6 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
   }
 
   Future<void> _loadProfile() async {
-    setState(() => _isLoading = true);
-
     try {
       if (widget.isCompany && widget.companyId != null) {
         final companyData = await supabase
@@ -553,17 +553,15 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
             .eq('company_id', widget.companyId!)
             .maybeSingle();
 
-        if (companyData != null && mounted) {
-          setState(() {
-            _companyName = companyData['company_name'];
-            _companyDescription = companyData['company_description'];
-            _industry = companyData['industry'];
-            _companySize = companyData['company_size'];
-            _location = companyData['location'];
-            _profileImageUrl = companyData['logo_url'];
-            _email = companyData['users']?['email'];
-            _phone = companyData['users']?['phone'];
-          });
+        if (companyData != null) {
+          _companyName = companyData['company_name'];
+          _companyDescription = companyData['company_description'];
+          _industry = companyData['industry'];
+          _companySize = companyData['company_size'];
+          _location = companyData['location'];
+          _profileImageUrl = companyData['logo_url'];
+          _email = companyData['users']?['email'];
+          _phone = companyData['users']?['phone'];
         }
       } else {
         final userData = await supabase
@@ -579,7 +577,7 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
             .eq('user_id', widget.userId)
             .maybeSingle();
 
-        if (userData != null && mounted) {
+        if (userData != null) {
           // Try to get existing profile
           var profileData = await supabase
               .from('job_seeker_profile')
@@ -605,21 +603,17 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
                 .maybeSingle();
           }
 
-          setState(() {
-            _fullname = userData['fullname'];
-            _email = userData['email'];
-            _profileImageUrl = userData['profile_image_url'];
-            _phone = userData['phone'];
-            _bio = profileData?['bio'];
-            _dateOfBirth = profileData?['date_of_birth'];
-            _gender = profileData?['gender'];
-          });
+          _fullname = userData['fullname'];
+          _email = userData['email'];
+          _profileImageUrl = userData['profile_image_url'];
+          _phone = userData['phone'];
+          _bio = profileData?['bio'];
+          _dateOfBirth = profileData?['date_of_birth'];
+          _gender = profileData?['gender'];
         }
       }
     } catch (e) {
       debugPrint('Error loading profile: $e');
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -670,11 +664,8 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
             .eq('follower_id', widget.userId);
         _followingCount = (followingResult as List).length;
       }
-
-      if (mounted) setState(() {});
     } catch (e) {
       debugPrint('Error loading stats: $e');
-      if (mounted) setState(() {});
     }
   }
 
@@ -698,69 +689,39 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
           .order('created_at', ascending: false)
           .limit(10);
 
-      if (mounted) {
-        final postsList = List<Map<String, dynamic>>.from(posts);
-        final postIds = postsList.map((p) => p['post_id'] as String).toList();
-        if (postIds.isNotEmpty) {
-          final likeCounts = await supabase
-              .from('post_like')
-              .select('post_id')
-              .inFilter('post_id', postIds);
+      final postsList = List<Map<String, dynamic>>.from(posts);
+      final postIds = postsList.map((p) => p['post_id'] as String).toList();
+      if (postIds.isNotEmpty) {
+        final likeCounts = await supabase
+            .from('post_like')
+            .select('post_id')
+            .inFilter('post_id', postIds);
 
-          final likeCountMap = <String, int>{};
-          for (final like in likeCounts) {
-            final postId = like['post_id'] as String;
-            likeCountMap[postId] = (likeCountMap[postId] ?? 0) + 1;
-          }
-
-          final commentCounts = await supabase
-              .from('post_comment')
-              .select('post_id')
-              .inFilter('post_id', postIds);
-
-          final commentCountMap = <String, int>{};
-          for (final comment in commentCounts) {
-            final postId = comment['post_id'] as String;
-            commentCountMap[postId] = (commentCountMap[postId] ?? 0) + 1;
-          }
-
-          // === NEW: Fetch user's liked and saved states ===
-          Set<String> likedIds = {};
-          Set<String> savedIds = {};
-
-          if (_currentUserId != null) {
-            final likes = await supabase
-                .from('post_like')
-                .select('post_id')
-                .eq('user_id', _currentUserId!)
-                .inFilter('post_id', postIds);
-            for (var like in likes) {
-              likedIds.add(like['post_id'] as String);
-            }
-
-            final saves = await supabase
-                .from('post_saved')
-                .select('post_id')
-                .eq('user_id', _currentUserId!)
-                .inFilter('post_id', postIds);
-            for (var save in saves) {
-              savedIds.add(save['post_id'] as String);
-            }
-          }
-
-          for (final post in postsList) {
-            final pid = post['post_id'] as String;
-            post['like_count'] = likeCountMap[pid] ?? 0;
-            post['comment_count'] = commentCountMap[pid] ?? 0;
-            post['is_liked'] = likedIds.contains(pid); // Map state
-            post['is_saved'] = savedIds.contains(pid); // Map state
-          }
+        final likeCountMap = <String, int>{};
+        for (final like in likeCounts) {
+          final postId = like['post_id'] as String;
+          likeCountMap[postId] = (likeCountMap[postId] ?? 0) + 1;
         }
 
-        setState(() {
-          _recentPosts = postsList;
-        });
+        final commentCounts = await supabase
+            .from('post_comment')
+            .select('post_id')
+            .inFilter('post_id', postIds);
+
+        final commentCountMap = <String, int>{};
+        for (final comment in commentCounts) {
+          final postId = comment['post_id'] as String;
+          commentCountMap[postId] = (commentCountMap[postId] ?? 0) + 1;
+        }
+
+        for (final post in postsList) {
+          final pid = post['post_id'] as String;
+          post['like_count'] = likeCountMap[pid] ?? 0;
+          post['comment_count'] = commentCountMap[pid] ?? 0;
+        }
       }
+
+      _recentPosts = postsList;
     } catch (e) {
       debugPrint('Error loading recent posts: $e');
     }
@@ -788,36 +749,32 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
           .eq('company_id', widget.companyId!)
           .order('created_at', ascending: false);
 
-      if (mounted) {
-        final jobList = List<Map<String, dynamic>>.from(jobPosts);
+      final jobList = List<Map<String, dynamic>>.from(jobPosts);
 
-        for (final job in jobList) {
-          final jobTypeData = job['job_type_id'];
-          if (jobTypeData is List && jobTypeData.isNotEmpty) {
-            job['job_type'] = jobTypeData[0]['name'];
-          } else if (jobTypeData is Map) {
-            job['job_type'] = jobTypeData['name'];
-          } else {
-            job['job_type'] = 'Not specified';
-          }
-
-          final expLevelData = job['experience_level_id'];
-          if (expLevelData is List && expLevelData.isNotEmpty) {
-            job['experience_level'] = expLevelData[0]['name'];
-          } else if (expLevelData is Map) {
-            job['experience_level'] = expLevelData['name'];
-          } else {
-            job['experience_level'] = 'Not specified';
-          }
-
-          job.remove('job_type_id');
-          job.remove('experience_level_id');
+      for (final job in jobList) {
+        final jobTypeData = job['job_type_id'];
+        if (jobTypeData is List && jobTypeData.isNotEmpty) {
+          job['job_type'] = jobTypeData[0]['name'];
+        } else if (jobTypeData is Map) {
+          job['job_type'] = jobTypeData['name'];
+        } else {
+          job['job_type'] = 'Not specified';
         }
 
-        setState(() {
-          _jobPosts = jobList;
-        });
+        final expLevelData = job['experience_level_id'];
+        if (expLevelData is List && expLevelData.isNotEmpty) {
+          job['experience_level'] = expLevelData[0]['name'];
+        } else if (expLevelData is Map) {
+          job['experience_level'] = expLevelData['name'];
+        } else {
+          job['experience_level'] = 'Not specified';
+        }
+
+        job.remove('job_type_id');
+        job.remove('experience_level_id');
       }
+
+      _jobPosts = jobList;
     } catch (e) {
       debugPrint('Error loading job posts: $e');
     }
@@ -834,11 +791,7 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
           .order('is_head_office', ascending: false)
           .order('branch_name');
 
-      if (mounted) {
-        setState(() {
-          _branches = List<Map<String, dynamic>>.from(branches);
-        });
-      }
+      _branches = List<Map<String, dynamic>>.from(branches);
     } catch (e) {
       debugPrint('Error loading branches: $e');
     }
@@ -851,7 +804,7 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
           .select('follower_id')
           .eq('following_id', widget.userId);
 
-      if (mounted && (followersData as List).isNotEmpty) {
+      if ((followersData as List).isNotEmpty) {
         final followerIds = followersData
             .map((f) => f['follower_id'] as String)
             .toList();
@@ -875,24 +828,16 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
             return {'users': user};
           }).toList();
 
-          setState(() {
-            _followers = List<Map<String, dynamic>>.from(followersList);
-          });
+          _followers = List<Map<String, dynamic>>.from(followersList);
         } else {
-          setState(() {
-            _followers = [];
-          });
+          _followers = [];
         }
       } else {
-        setState(() {
-          _followers = [];
-        });
+        _followers = [];
       }
     } catch (e) {
       debugPrint('Error loading followers: $e');
-      setState(() {
-        _followers = [];
-      });
+      _followers = [];
     }
   }
 
@@ -903,7 +848,7 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
           .select('following_id')
           .eq('follower_id', widget.userId);
 
-      if (mounted && (followingData as List).isNotEmpty) {
+      if ((followingData as List).isNotEmpty) {
         final followingIds = followingData
             .map((f) => f['following_id'] as String)
             .toList();
@@ -927,24 +872,16 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
             return {'users': user};
           }).toList();
 
-          setState(() {
-            _following = List<Map<String, dynamic>>.from(followingList);
-          });
+          _following = List<Map<String, dynamic>>.from(followingList);
         } else {
-          setState(() {
-            _following = [];
-          });
+          _following = [];
         }
       } else {
-        setState(() {
-          _following = [];
-        });
+        _following = [];
       }
     } catch (e) {
       debugPrint('Error loading following: $e');
-      setState(() {
-        _following = [];
-      });
+      _following = [];
     }
   }
 
@@ -960,11 +897,7 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
           .eq('following_id', followingId)
           .maybeSingle();
 
-      if (mounted) {
-        setState(() {
-          _isFollowing = result != null;
-        });
-      }
+      _isFollowing = result != null;
     } catch (e) {
       debugPrint('Error checking follow status: $e');
     }
@@ -2815,8 +2748,8 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
       isVerified: widget.isCompany,
       likeCount: post['like_count'] ?? 0,
       commentCount: post['comment_count'] ?? 0,
-      isLiked: post['is_liked'] == true,
-      isSaved: post['is_saved'] == true,
+      isLiked: false,
+      isSaved: false,
       isFollowing: _isFollowing,
       linkedJob: null,
     );
@@ -2850,7 +2783,7 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
     final currentUser = Users.fromJson(currentUserData);
 
     if (mounted) {
-      await Navigator.push(
+      Navigator.push(
         context,
         MaterialPageRoute(
           builder: (_) => SocialPostDetails(
@@ -2859,7 +2792,6 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
           ),
         ),
       );
-      _loadRecentPosts();
     }
   }
 

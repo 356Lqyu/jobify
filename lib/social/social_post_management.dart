@@ -236,7 +236,7 @@ class _MyPostsPageState extends State<MyPostsPage> {
 class _MyPostCard extends StatelessWidget {
   final FeedPost post;
   final VoidCallback onTap;
-  final VoidCallback? onDelete; // null = non-deletable (job post)
+  final VoidCallback? onDelete;
 
   const _MyPostCard({required this.post, required this.onTap, this.onDelete});
 
@@ -477,20 +477,22 @@ class _MyPostCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 16),
-                  Icon(
-                    Icons.mode_comment,
-                    size: 16,
-                    color: Colors.blueAccent.shade400,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    '${post.commentCount}',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: Colors.blueGrey,
-                      fontWeight: FontWeight.w500,
+                  if (post.postType != PostType.job) ...[
+                    Icon(
+                      Icons.mode_comment,
+                      size: 16,
+                      color: Colors.blueAccent.shade400,
                     ),
-                  ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${post.commentCount}',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Colors.blueGrey,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ],

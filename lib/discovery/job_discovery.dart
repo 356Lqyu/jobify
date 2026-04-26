@@ -9,6 +9,8 @@ import 'package:jobify/users/users.dart';
 import 'package:jobify/discovery/job_details.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../job_post/job_detail_employer.dart';
+
 class DiscoveryJob extends StatefulWidget {
   final Users user;
   const DiscoveryJob({super.key, required this.user});
@@ -72,15 +74,26 @@ class _DiscoveryJobState extends State<DiscoveryJob>
   }
 
   Future<void> _navigateToJobDetail(BuildContext context, JobPost job) async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => JobDetailPage(job: job, currentUser: widget.user),
-      ),
-    );
+    // Check if the current user is the one who created the job post
+    if (widget.user.userId == job.createdBy) {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => JobDetailEmployer(job: job.toMap()),
+        ),
+      );
+    } else {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => JobDetailPage(job: job, currentUser: widget.user),
+        ),
+      );
+    }
+
+    // Refresh the feed when returning to discovery
     _provider.refresh();
   }
-
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider.value(

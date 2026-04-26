@@ -480,7 +480,7 @@ class _MyPostCard extends StatelessWidget {
                   Icon(
                     Icons.mode_comment,
                     size: 16,
-                    color: Colors.blueGrey.shade400,
+                    color: Colors.blueAccent.shade400,
                   ),
                   const SizedBox(width: 4),
                   Text(

@@ -185,7 +185,6 @@ class _HomePageState extends State<HomePage> {
       _screens = [
         SocialFeedPage(user: widget.user),
         DiscoveryJob(user: widget.user),
-        JobPostManagementPage(key: _jobsPageKey),
         CreateJobPost(
           onPostSuccess: () {
             _jobsPageKey.currentState?.loadJobs();
@@ -194,6 +193,7 @@ class _HomePageState extends State<HomePage> {
             });
           },
         ),
+        JobPostManagementPage(key: _jobsPageKey),
         const SettingPage(),
       ];
 
@@ -210,14 +210,14 @@ class _HomePageState extends State<HomePage> {
           label: 'Discover',
         ),
         BottomBarItem(
-          icon: Icons.work_outline,
-          activeIcon: Icons.work,
-          label: 'My Jobs',
-        ),
-        BottomBarItem(
           icon: Icons.add_box_outlined,
           activeIcon: Icons.add_box,
           label: 'Post',
+        ),
+        BottomBarItem(
+          icon: Icons.work_outline,
+          activeIcon: Icons.work,
+          label: 'My Jobs',
         ),
         BottomBarItem(
           icon: Icons.business_outlined,

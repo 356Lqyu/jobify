@@ -724,10 +724,36 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
             commentCountMap[postId] = (commentCountMap[postId] ?? 0) + 1;
           }
 
+          // === NEW: Fetch user's liked and saved states ===
+          Set<String> likedIds = {};
+          Set<String> savedIds = {};
+
+          if (_currentUserId != null) {
+            final likes = await supabase
+                .from('post_like')
+                .select('post_id')
+                .eq('user_id', _currentUserId!)
+                .inFilter('post_id', postIds);
+            for (var like in likes) {
+              likedIds.add(like['post_id'] as String);
+            }
+
+            final saves = await supabase
+                .from('post_saved')
+                .select('post_id')
+                .eq('user_id', _currentUserId!)
+                .inFilter('post_id', postIds);
+            for (var save in saves) {
+              savedIds.add(save['post_id'] as String);
+            }
+          }
+
           for (final post in postsList) {
             final pid = post['post_id'] as String;
             post['like_count'] = likeCountMap[pid] ?? 0;
             post['comment_count'] = commentCountMap[pid] ?? 0;
+            post['is_liked'] = likedIds.contains(pid); // Map state
+            post['is_saved'] = savedIds.contains(pid); // Map state
           }
         }
 
@@ -2789,8 +2815,8 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
       isVerified: widget.isCompany,
       likeCount: post['like_count'] ?? 0,
       commentCount: post['comment_count'] ?? 0,
-      isLiked: false,
-      isSaved: false,
+      isLiked: post['is_liked'] == true,
+      isSaved: post['is_saved'] == true,
       isFollowing: _isFollowing,
       linkedJob: null,
     );
@@ -2824,7 +2850,7 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
     final currentUser = Users.fromJson(currentUserData);
 
     if (mounted) {
-      Navigator.push(
+      await Navigator.push(
         context,
         MaterialPageRoute(
           builder: (_) => SocialPostDetails(
@@ -2833,6 +2859,7 @@ class _ViewProfilePageState extends State<ViewProfilePage> {
           ),
         ),
       );
+      _loadRecentPosts();
     }
   }
 

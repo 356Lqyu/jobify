@@ -8,6 +8,7 @@ import 'package:jobify/job/apply_for_job.dart';
 import 'package:jobify/social/social_feed_provider.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class JobDetailPage extends StatefulWidget {
   final JobPost job;
@@ -217,13 +218,13 @@ class _JobDetailPageState extends State<JobDetailPage> {
                               borderRadius: BorderRadius.circular(10),
                               child: job.companyLogoUrl != null
                                   ? CachedNetworkImage(
-                                      imageUrl: job.companyLogoUrl!,
-                                      width: 56,
-                                      height: 56,
-                                      fit: BoxFit.cover,
-                                      errorWidget: (_, __, ___) =>
-                                          _LogoBox(name: job.companyName),
-                                    )
+                                imageUrl: job.companyLogoUrl!,
+                                width: 56,
+                                height: 56,
+                                fit: BoxFit.cover,
+                                errorWidget: (_, __, ___) =>
+                                    _LogoBox(name: job.companyName),
+                              )
                                   : _LogoBox(name: job.companyName),
                             ),
                             const SizedBox(width: 14),
@@ -390,6 +391,120 @@ class _JobDetailPageState extends State<JobDetailPage> {
                     ),
                   ),
 
+                  // Media Section (Images & Video)
+                  if (job.imageUrls.isNotEmpty || (job.videoUrl != null && job.videoUrl!.isNotEmpty))
+                    _buildCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Media',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 16,
+                              color: Colors.black87,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+
+                          // Image Carousel
+                          if (job.imageUrls.isNotEmpty)
+                            SizedBox(
+                              height: 140,
+                              child: ListView.separated(
+                                scrollDirection: Axis.horizontal,
+                                itemCount: job.imageUrls.length,
+                                separatorBuilder: (_, __) => const SizedBox(width: 12),
+                                itemBuilder: (context, index) {
+                                  return ClipRRect(
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: CachedNetworkImage(
+                                      imageUrl: job.imageUrls[index],
+                                      width: 200,
+                                      height: 140,
+                                      fit: BoxFit.cover,
+                                      placeholder: (context, url) => Container(
+                                        color: Colors.grey.shade100,
+                                        width: 200,
+                                        child: const Center(child: CircularProgressIndicator()),
+                                      ),
+                                      errorWidget: (context, url, error) => Container(
+                                        color: Colors.grey.shade100,
+                                        width: 200,
+                                        child: const Icon(Icons.image_not_supported, color: Colors.grey),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+
+                          // Spacing if both images and video exist
+                          if (job.imageUrls.isNotEmpty && (job.videoUrl != null && job.videoUrl!.isNotEmpty))
+                            const SizedBox(height: 16),
+
+                          // Video Button
+                          if (job.videoUrl != null && job.videoUrl!.isNotEmpty)
+                            InkWell(
+                              onTap: () async {
+                                final Uri url = Uri.parse(job.videoUrl!);
+                                if (await canLaunchUrl(url)) {
+                                  await launchUrl(url, mode: LaunchMode.externalApplication);
+                                } else {
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('Could not launch video URL')),
+                                    );
+                                  }
+                                }
+                              },
+                              borderRadius: BorderRadius.circular(12),
+                              child: Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  border: Border.all(color: Colors.grey.shade200),
+                                  borderRadius: BorderRadius.circular(12),
+                                  color: const Color(0xFF2563EB).withOpacity(0.05),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: const BoxDecoration(
+                                        color: Color(0xFF2563EB),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(Icons.play_arrow, color: Colors.white, size: 20),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    const Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'Watch Job Video',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 14,
+                                              color: Colors.black87,
+                                            ),
+                                          ),
+                                          Text(
+                                            'Tap to open link',
+                                            style: TextStyle(fontSize: 12, color: Colors.blueGrey),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const Icon(Icons.open_in_new, size: 18, color: Colors.blueGrey),
+                                  ],
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+
                   // Details
                   _buildCard(
                     child: Column(
@@ -454,29 +569,28 @@ class _JobDetailPageState extends State<JobDetailPage> {
       bottomNavigationBar: _checkingApply
           ? null
           : Container(
-              // Added subtle shadow to the top of the bottom nav bar
-              decoration: BoxDecoration(
-                color: Colors.white,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.04),
-                    blurRadius: 10,
-                    offset: const Offset(0, -4),
-                  ),
-                ],
-              ),
-              child: SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
-                  child: _isJobSeeker
-                      ? _ApplyButton(
-                          hasApplied: _hasApplied,
-                          onTap: _hasApplied ? null : _openApplySheet,
-                        )
-                      : _DisabledApplyButton(),
-                ),
-              ),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 10,
+              offset: const Offset(0, -4),
             ),
+          ],
+        ),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+            child: _isJobSeeker
+                ? _ApplyButton(
+              hasApplied: _hasApplied,
+              onTap: _hasApplied ? null : _openApplySheet,
+            )
+                : _DisabledApplyButton(),
+          ),
+        ),
+      ),
     );
   }
 }

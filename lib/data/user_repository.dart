@@ -155,7 +155,6 @@ class UserRepository {
 
   /// All write operation will update/insert in supabase , then invalidate local cache by clearUserCache, then next read will fetch fresh data and recache
   Future<void> updateUser(String userId, Map<String, dynamic> updates) async {
-    // Update Supabase
     await _sb
         .from('users')
         .update({
@@ -404,11 +403,10 @@ class UserRepository {
     }
   }
 
-  // pre-cache all user data immediately after login (call after successful authentication)
+  // pre-cache all user data immediately after login
   Future<void> cacheFullProfileAfterLogin(String userId) async {
     try {
       debugPrint('Caching full profile for user: $userId');
-      // Fetch complete profile and cache it
       await _fetchFreshProfile(userId);
       debugPrint('Full profile cached successfully');
     } catch (e) {
@@ -417,7 +415,7 @@ class UserRepository {
   }
 }
 
-// Helper class for complete profile (pass complete user data between screen)
+// Pass complete user data between screen
 class CompleteUserProfile {
   final String userId;
   Users? user;

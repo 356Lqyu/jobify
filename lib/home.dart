@@ -55,7 +55,7 @@ class _HomePageState extends State<HomePage> {
 
   @override
   void dispose() {
-    // CRITICAL: Cancel the stream subscription when the page is closed
+    // Cancel the stream subscription when the page is closed
     _linkSubscription?.cancel();
     super.dispose();
   }

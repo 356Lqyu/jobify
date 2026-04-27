@@ -357,7 +357,7 @@ class UserRepository {
             .update({'is_head_office': false})
             .eq('company_id', branch['company_id'])
             .eq('is_head_office', true)
-            .not('branch_id', 'eq', branchId); // Don't unset the current branch if it was already head office
+            .not('branch_id', 'eq', branchId); 
       }
 
       await _sb

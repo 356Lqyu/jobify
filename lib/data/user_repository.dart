@@ -321,7 +321,6 @@ class UserRepository {
         cleanedData['city'] = null;
       }
 
-      // Remove any other null values if your table allows them
       cleanedData.removeWhere((key, value) => value == null);
 
       debugPrint('Adding branch with cleaned data: $cleanedData');

@@ -105,8 +105,6 @@ class AuthGate extends StatelessWidget {
   Future<Users?> _loadUserData(BuildContext context) async {
     final userProvider = Provider.of<UserProvider>(context, listen: false);
 
-    // 💡【核心修复】：使用 Future.microtask 延迟加载动作
-    // 这样不会在 Flutter 正在 Build UI 的时候触发 notifyListeners() 导致崩溃
     await Future.microtask(() async {
       await userProvider.loadUser();
     });

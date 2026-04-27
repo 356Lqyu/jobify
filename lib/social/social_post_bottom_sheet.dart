@@ -116,7 +116,7 @@ class _SocialPostBottomSheetState extends State<SocialPostBottomSheet> {
     setState(() => _isPosting = true);
 
     try {
-      // 1. Upload images → get public URLs
+      // 1. Upload images - get public URLs
       final repo      = FeedRepository();
       final mediaUrls = <String>[];
 

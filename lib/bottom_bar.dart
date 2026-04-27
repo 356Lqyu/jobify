@@ -14,10 +14,7 @@ class BottomBarItem {
   });
 }
 
-// ─────────────────────────────────────────────
 //  Main widget
-// ─────────────────────────────────────────────
-
 class CustomBottomBar extends StatefulWidget {
   final int currentIndex;
   final ValueChanged<int> onTap;
@@ -108,8 +105,6 @@ class _CustomBottomBarState extends State<CustomBottomBar>
     }
     super.dispose();
   }
-
-  // ── build ────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {

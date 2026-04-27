@@ -307,7 +307,6 @@ class _SocialPostDetailsState extends State<SocialPostDetails> {
                 ),
               ],
             ),
-            // Add the SafeArea and standard padding back here:
             child: SafeArea(
               top: false,
               child: Padding(
@@ -500,7 +499,6 @@ class _PostBody extends StatelessWidget {
               ),
             ),
           ),
-          // Uses the new Paging Media Grid below
           if (post.mediaUrls.isNotEmpty) _MediaGrid(urls: post.mediaUrls),
           if (post.hashtags.isNotEmpty)
             Padding(

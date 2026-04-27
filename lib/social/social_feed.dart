@@ -365,7 +365,6 @@ class FeedCard extends StatelessWidget {
   final Users currentUser;
   const FeedCard({super.key, required this.post, required this.currentUser});
 
-  // UPDATED WITH DEEP LINK
   void _sharePost() {
     // Generate the correct deep link based on post type
     String deepLink = post.postType == PostType.job && post.linkedJob != null

@@ -432,7 +432,6 @@ class LocalDB {
           'view_count': job['view_count'] ?? 0,
           'application_count': job['application_count'] ?? 0,
           'created_at': job['created_at'],
-          // UPDATED
           'image_urls': jsonEncode(job['image_urls'] ?? []),
           'video_url': job['video_url'],
           'company_name': job['company_name'] ?? '',
@@ -528,7 +527,6 @@ class LocalDB {
       'view_count': row['view_count'],
       'application_count': row['application_count'],
       'created_at': row['created_at'],
-      // UPDATED
       'image_urls': _decodeList(row['image_urls'] as String?),
       'video_url': row['video_url'],
       'company_name': row['company_name'],
@@ -566,7 +564,6 @@ class LocalDB {
         'view_count': row['view_count'],
         'application_count': row['application_count'],
         'created_at': row['created_at'],
-        // UPDATED
         'image_urls': _decodeList(row['image_urls'] as String?),
         'video_url': row['video_url'],
         'company_name': row['company_name'],

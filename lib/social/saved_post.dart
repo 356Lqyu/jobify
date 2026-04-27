@@ -65,14 +65,11 @@ class _SavedPostsPageState extends State<SavedPostsPage> {
   void _sortPosts() {
     setState(() {
       if (_sortType == SavedPostSort.savedDate) {
-        // Original order corresponds to the exact order returned by the repository
-        // (which should be sorted by post_saved.created_at)
         _savedPosts = List.from(_originalSavedOrder);
         if (_isAscending) {
           _savedPosts = _savedPosts.reversed.toList();
         }
       } else if (_sortType == SavedPostSort.createdDate) {
-        // Sorts by the time the actual post was created
         _savedPosts.sort((a, b) {
           return _isAscending
               ? a.createdAt.compareTo(b.createdAt)

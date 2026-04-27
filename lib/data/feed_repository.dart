@@ -224,7 +224,7 @@ class FeedRepository {
     }
   }
 
-  // UPDATED HELPER FOR GETTING SAVED POSTS
+  // GETTING SAVED POSTS
   Future<Set<String>> _getSavedPostIds() async {
     if (_uid == null) return {};
     try {

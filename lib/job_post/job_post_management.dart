@@ -78,7 +78,7 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
   Future<void> loadJobs() async {
     if (_userId == null) return;
 
-    // Show cached data first
+    // Show cached data
     try {
       final cached = await LocalDB.getCachedJobMapsByUser(_userId!);
       if (cached.isNotEmpty) setState(() => _jobs = cached);
@@ -588,7 +588,6 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                   const SizedBox(height: 6),
-                                  // Location row (separate)
                                   Row(
                                     children: [
                                       Icon(Icons.location_on_outlined, size: 14, color: Colors.grey.shade600),
@@ -604,7 +603,6 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
                                     ],
                                   ),
                                   const SizedBox(height: 4),
-                                  // Job type row (separate)
                                   Row(
                                     children: [
                                       Icon(Icons.work_outline, size: 14, color: Colors.grey.shade600),
@@ -620,7 +618,6 @@ class JobPostManagementPageState extends State<JobPostManagementPage> {
                                     ],
                                   ),
                                   const SizedBox(height: 8),
-                                  // Stats row (unchanged, uses Wrap)
                                   Wrap(
                                     spacing: 12,
                                     runSpacing: 4,

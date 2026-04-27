@@ -108,7 +108,7 @@ class _LoginState extends State<Login> {
 
       // check if email is confirmed
       if (authUser.emailConfirmedAt == null) {
-        //await authService.signOut(); // Sign out immediately
+        await authService.signOut(); // Sign out immediately
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text("Please verify your email address before logging in."),

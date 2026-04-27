@@ -316,7 +316,7 @@ class FeedRepository {
       final likedIds = _uid != null ? await _getLikedPostIds() : <String>{};
       final savedIds = _uid != null
           ? await _getSavedPostIds()
-          : <String>{}; // UPDATED
+          : <String>{};
       final followedUserIds = _uid != null
           ? await _getFollowedUserIds()
           : <String>{};

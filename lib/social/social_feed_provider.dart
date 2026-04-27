@@ -52,7 +52,7 @@ class SocialFeedProvider extends ChangeNotifier {
   bool _hasMoreFollowing = true;
   String? _error;
   String _activeFilter = 'All';
-  String _followingFilter = 'All'; // new
+  String _followingFilter = 'All'; 
   int _forYouOffset = 0;
   int _followingOffset = 0;
   static const int _pageSize = 20;
@@ -66,7 +66,7 @@ class SocialFeedProvider extends ChangeNotifier {
   bool get hasMoreFollowing => _hasMoreFollowing;
   String? get error => _error;
   String get activeFilter => _activeFilter;
-  String get followingFilter => _followingFilter; // new
+  String get followingFilter => _followingFilter; 
 
   // Init
   Future<void> init() async {
@@ -234,7 +234,6 @@ class SocialFeedProvider extends ChangeNotifier {
     final wasSaved = post.isSaved;
     final newSaved = !wasSaved;
 
-    // UPDATED: Sync the nested job as well!
     _updateInLists(post.postId, (p) {
       p.isSaved = newSaved;
       if (p.linkedJob != null) {

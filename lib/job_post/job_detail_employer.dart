@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:carousel_slider/carousel_slider.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
+import 'package:video_player/video_player.dart';
+import 'package:chewie/chewie.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:jobify/data/job_repository.dart';
 import 'package:jobify/job_post/create_job_post.dart';
 import 'package:jobify/data/local_db.dart';
@@ -19,27 +22,76 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
   final JobRepository _jobRepo = JobRepository();
   late Map<String, dynamic> _job;
   bool _isLoading = false;
+
   YoutubePlayerController? _youtubeController;
+  VideoPlayerController? _videoPlayerController;
+  ChewieController? _chewieController;
 
   @override
   void initState() {
     super.initState();
     _job = Map.from(widget.job);
-    _initYoutubePlayer();
+    _initVideoPlayers();
     _loadFromCache();
     _refresh();
   }
 
-  void _initYoutubePlayer() {
+  @override
+  void dispose() {
+    _youtubeController?.dispose();
+    _videoPlayerController?.dispose();
+    _chewieController?.dispose();
+    super.dispose();
+  }
+
+  String? _extractDriveId(String url) {
+    final RegExp regExp = RegExp(r'(?:file\/d\/|open\?id=)([a-zA-Z0-9_-]+)');
+    final match = regExp.firstMatch(url);
+    return match?.group(1);
+  }
+
+  void _initVideoPlayers() {
     final videoUrl = _job['video_url'] as String?;
-    if (videoUrl != null && videoUrl.isNotEmpty) {
-      final videoId = YoutubePlayer.convertUrlToId(videoUrl);
-      if (videoId != null) {
-        _youtubeController = YoutubePlayerController(
-          initialVideoId: videoId,
-          flags: const YoutubePlayerFlags(autoPlay: false),
-        );
-      }
+    if (videoUrl == null || videoUrl.trim().isEmpty) return;
+
+    // 1. Try YouTube First
+    final videoId = YoutubePlayer.convertUrlToId(videoUrl);
+    if (videoId != null) {
+      _youtubeController = YoutubePlayerController(
+        initialVideoId: videoId,
+        flags: const YoutubePlayerFlags(autoPlay: false),
+      );
+      return;
+    }
+
+    // 2. Try Google Drive Second
+    final driveId = _extractDriveId(videoUrl);
+    if (driveId != null) {
+      final directStreamUrl = 'https://drive.google.com/uc?export=download&id=$driveId';
+
+      _videoPlayerController = VideoPlayerController.networkUrl(Uri.parse(directStreamUrl))
+        ..initialize().then((_) {
+          if (mounted) {
+            setState(() {
+              _chewieController = ChewieController(
+                videoPlayerController: _videoPlayerController!,
+                autoPlay: false,
+                looping: false,
+                aspectRatio: _videoPlayerController!.value.aspectRatio,
+                errorBuilder: (context, errorMessage) {
+                  return const Center(
+                    child: Text(
+                      'Error loading video. Ensure Drive link is public.',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  );
+                },
+              );
+            });
+          }
+        }).catchError((error) {
+          debugPrint('Drive Video Error: $error');
+        });
     }
   }
 
@@ -48,7 +100,10 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
     if (cached != null && mounted) {
       setState(() {
         _job = cached;
-        _initYoutubePlayer();
+        // Re-initialize if URL changed from cache
+        if (_youtubeController == null && _videoPlayerController == null) {
+          _initVideoPlayers();
+        }
       });
     }
   }
@@ -60,11 +115,13 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
       if (updated != null && mounted) {
         setState(() {
           _job = updated;
-          _initYoutubePlayer();
+          if (_youtubeController == null && _videoPlayerController == null) {
+            _initVideoPlayers();
+          }
         });
       }
     } catch (e) {
-      print('Refresh error: $e');
+      debugPrint('Refresh error: $e');
     } finally {
       setState(() => _isLoading = false);
     }
@@ -112,7 +169,7 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
         if (e.toString().contains('23503') ||
             e.toString().contains('foreign key constraint')) {
           errorMessage =
-              'Cannot delete this job because it has existing applications. Please close the job instead.';
+          'Cannot delete this job because it has existing applications. Please close the job instead.';
         }
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -131,7 +188,10 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
         .whereType<String>()
         .where((url) => url.trim().isNotEmpty)
         .toList();
-    final hasVideo = _youtubeController != null;
+
+    final videoUrl = _job['video_url'] as String?;
+    final hasVideoUrl = videoUrl != null && videoUrl.trim().isNotEmpty;
+
     final viewCount = _job['view_count'] ?? 0;
     final appCount = _job['application_count'] ?? 0;
     final hasApplications = appCount > 0;
@@ -141,7 +201,7 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
       appBar: AppBar(
         title: Text(
           _job['job_title'] ?? 'Job Details',
-          style: TextStyle(fontWeight: FontWeight.bold),
+          style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
@@ -157,9 +217,8 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
                 MaterialPageRoute(builder: (_) => CreateJobPost(existingJob: _job)),
               );
               if (result == true) {
-                // Clear the stale cache entry for this job
                 await LocalDB.deleteJobPost(_job['job_id']);
-                await _refresh(); // force fresh load
+                await _refresh();
               }
             },
             tooltip: hasApplications
@@ -174,7 +233,6 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
           padding: const EdgeInsets.all(16),
           child: Column(
             children: [
-              // Employer notice banner
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(
@@ -189,7 +247,7 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.business_center, color: Colors.blue, size: 20),
+                    const Icon(Icons.business_center, color: Colors.blue, size: 20),
                     const SizedBox(width: 8),
                     const Expanded(
                       child: Text(
@@ -224,7 +282,6 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Company name row
                           Row(
                             children: [
                               Icon(Icons.business, size: 16, color: Colors.grey.shade600),
@@ -232,7 +289,7 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
                               Flexible(
                                 child: Text(
                                   _job['company_profile']?['company_name'] ?? _job['company_name'] ?? 'Company',
-                                  style: TextStyle(fontSize: 14, color: Colors.grey.shade600), // removed const
+                                  style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
@@ -240,7 +297,6 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
                             ],
                           ),
                           const SizedBox(height: 4),
-                          // Location row
                           Row(
                             children: [
                               Icon(Icons.location_on_outlined, size: 14, color: Colors.grey.shade600),
@@ -248,7 +304,7 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
                               Expanded(
                                 child: Text(
                                   _job['location'] ?? 'Unknown',
-                                  style: TextStyle(fontSize: 13, color: Colors.grey.shade600), // removed const
+                                  style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
@@ -261,28 +317,23 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
                         spacing: 8,
                         runSpacing: 8,
                         children: [
-                          // Salary chip
                           if (_job['salary_min'] != null && _job['salary_max'] != null)
                             _infoChip(
                               Icons.attach_money,
                               '${_job['salary_min']} - ${_job['salary_max']} MYR',
                             ),
-                          // Job type – handle both nested and flat
                           _infoChip(
                             Icons.work_outline,
                             (_job['job_type_id'] as Map?)?['name'] ?? _job['job_type'] ?? 'Full-time',
                           ),
-                          // Experience level – handle both
                           _infoChip(
                             Icons.trending_up,
                             (_job['experience_level_id'] as Map?)?['name'] ?? _job['experience_level'] ?? 'Junior',
                           ),
-                          // Job category – handle both
                           _infoChip(
                             Icons.sell_outlined,
                             (_job['job_category_id'] as Map?)?['name'] ?? _job['job_category'] ?? 'General',
                           ),
-                          // Remote badge
                           if (_job['location'] == 'Remote')
                             _infoChip(Icons.wifi, 'Remote'),
                           if (_job['location'] == 'Hybrid')
@@ -376,7 +427,7 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
                         ),
                         const SizedBox(height: 16),
                       ],
-                      if (hasVideo) ...[
+                      if (hasVideoUrl) ...[
                         const Text(
                           'Video',
                           style: TextStyle(
@@ -385,7 +436,78 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
                           ),
                         ),
                         const SizedBox(height: 8),
-                        YoutubePlayer(controller: _youtubeController!),
+
+                        // HYBRID PLAYER RENDERER
+                        if (_youtubeController != null)
+                          YoutubePlayer(controller: _youtubeController!)
+                        else if (_chewieController != null)
+                          Container(
+                            height: 200, // Fixed height or aspect ratio
+                            color: Colors.black,
+                            child: Chewie(controller: _chewieController!),
+                          )
+                        else if (_videoPlayerController != null && _chewieController == null)
+                            const SizedBox(
+                              height: 150,
+                              child: Center(child: CircularProgressIndicator()),
+                            )
+                          else
+                            InkWell(
+                              onTap: () async {
+                                final Uri url = Uri.parse(videoUrl!);
+                                if (await canLaunchUrl(url)) {
+                                  await launchUrl(url, mode: LaunchMode.externalApplication);
+                                } else {
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('Could not launch video URL')),
+                                    );
+                                  }
+                                }
+                              },
+                              borderRadius: BorderRadius.circular(12),
+                              child: Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  border: Border.all(color: Colors.grey.shade200),
+                                  borderRadius: BorderRadius.circular(12),
+                                  color: const Color(0xFF2563EB).withOpacity(0.05),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: const BoxDecoration(
+                                        color: Color(0xFF2563EB),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(Icons.play_arrow, color: Colors.white, size: 20),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    const Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'Watch Job Video',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 14,
+                                              color: Colors.black87,
+                                            ),
+                                          ),
+                                          Text(
+                                            'Tap to open link',
+                                            style: TextStyle(fontSize: 12, color: Colors.blueGrey),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const Icon(Icons.open_in_new, size: 18, color: Colors.blueGrey),
+                                  ],
+                                ),
+                              ),
+                            ),
                         const SizedBox(height: 16),
                       ],
                       const Divider(height: 32),
@@ -393,7 +515,7 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
                         children: [
                           Expanded(
                             child: SizedBox(
-                              height: 48, // fixed height for both buttons
+                              height: 48,
                               child: OutlinedButton.icon(
                                 onPressed: _toggleStatus,
                                 icon: Icon(
@@ -426,7 +548,7 @@ class _JobDetailEmployerState extends State<JobDetailEmployer> {
                                   ? 'Cannot delete a job with existing applications'
                                   : 'Delete this job',
                               child: SizedBox(
-                                height: 48, // same fixed height
+                                height: 48,
                                 child: OutlinedButton.icon(
                                   onPressed: hasApplications ? null : _delete,
                                   icon: const Icon(

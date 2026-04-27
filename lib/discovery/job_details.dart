@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:youtube_player_flutter/youtube_player_flutter.dart';
+import 'package:video_player/video_player.dart';
+import 'package:chewie/chewie.dart';
 import 'package:jobify/social/post_feed_setting.dart';
 import 'package:jobify/data/job_repository.dart';
 import 'package:jobify/data/applicantion_respository.dart';
@@ -33,6 +36,10 @@ class _JobDetailPageState extends State<JobDetailPage> {
   bool _checkingApply = true;
   JobPost? _freshJob;
 
+  YoutubePlayerController? _youtubeController;
+  VideoPlayerController? _videoPlayerController;
+  ChewieController? _chewieController;
+
   bool get _isJobSeeker =>
       widget.currentUser.role.toUpperCase() == 'JOB_SEEKER';
 
@@ -42,8 +49,67 @@ class _JobDetailPageState extends State<JobDetailPage> {
   void initState() {
     super.initState();
     _isSaved = widget.job.isSaved;
+    _initVideoPlayers(widget.job.videoUrl);
     _loadData();
     if (!_isJobSeeker) setState(() => _checkingApply = false);
+  }
+
+  @override
+  void dispose() {
+    _youtubeController?.dispose();
+    _videoPlayerController?.dispose();
+    _chewieController?.dispose();
+    super.dispose();
+  }
+
+  String? _extractDriveId(String url) {
+    final RegExp regExp = RegExp(r'(?:file\/d\/|open\?id=)([a-zA-Z0-9_-]+)');
+    final match = regExp.firstMatch(url);
+    return match?.group(1);
+  }
+
+  void _initVideoPlayers(String? videoUrl) {
+    if (videoUrl == null || videoUrl.trim().isEmpty) return;
+
+    // 1. Try YouTube
+    final videoId = YoutubePlayer.convertUrlToId(videoUrl);
+    if (videoId != null) {
+      _youtubeController = YoutubePlayerController(
+        initialVideoId: videoId,
+        flags: const YoutubePlayerFlags(autoPlay: false),
+      );
+      return;
+    }
+
+    // 2. Try Google Drive
+    final driveId = _extractDriveId(videoUrl);
+    if (driveId != null) {
+      final directStreamUrl = 'https://drive.google.com/uc?export=download&id=$driveId';
+
+      _videoPlayerController = VideoPlayerController.networkUrl(Uri.parse(directStreamUrl))
+        ..initialize().then((_) {
+          if (mounted) {
+            setState(() {
+              _chewieController = ChewieController(
+                videoPlayerController: _videoPlayerController!,
+                autoPlay: false,
+                looping: false,
+                aspectRatio: _videoPlayerController!.value.aspectRatio,
+                errorBuilder: (context, errorMessage) {
+                  return const Center(
+                    child: Text(
+                      'Error loading video. Ensure Drive link is public.',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  );
+                },
+              );
+            });
+          }
+        }).catchError((error) {
+          debugPrint('Drive Video Error: $error');
+        });
+    }
   }
 
   Future<void> _loadData() async {
@@ -391,7 +457,7 @@ class _JobDetailPageState extends State<JobDetailPage> {
                     ),
                   ),
 
-                  // Media Section (Images & Video)
+                  // Media Section
                   if (job.imageUrls.isNotEmpty || (job.videoUrl != null && job.videoUrl!.isNotEmpty))
                     _buildCard(
                       child: Column(
@@ -407,7 +473,6 @@ class _JobDetailPageState extends State<JobDetailPage> {
                           ),
                           const SizedBox(height: 12),
 
-                          // Image Carousel
                           if (job.imageUrls.isNotEmpty)
                             SizedBox(
                               height: 140,
@@ -439,68 +504,81 @@ class _JobDetailPageState extends State<JobDetailPage> {
                               ),
                             ),
 
-                          // Spacing if both images and video exist
                           if (job.imageUrls.isNotEmpty && (job.videoUrl != null && job.videoUrl!.isNotEmpty))
                             const SizedBox(height: 16),
 
-                          // Video Button
+                          // HYBRID PLAYER RENDERER
                           if (job.videoUrl != null && job.videoUrl!.isNotEmpty)
-                            InkWell(
-                              onTap: () async {
-                                final Uri url = Uri.parse(job.videoUrl!);
-                                if (await canLaunchUrl(url)) {
-                                  await launchUrl(url, mode: LaunchMode.externalApplication);
-                                } else {
-                                  if (context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(content: Text('Could not launch video URL')),
-                                    );
-                                  }
-                                }
-                              },
-                              borderRadius: BorderRadius.circular(12),
-                              child: Container(
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  border: Border.all(color: Colors.grey.shade200),
+                            if (_youtubeController != null)
+                              YoutubePlayer(controller: _youtubeController!)
+                            else if (_chewieController != null)
+                              Container(
+                                height: 200,
+                                color: Colors.black,
+                                child: Chewie(controller: _chewieController!),
+                              )
+                            else if (_videoPlayerController != null && _chewieController == null)
+                                const SizedBox(
+                                  height: 150,
+                                  child: Center(child: CircularProgressIndicator()),
+                                )
+                              else
+                                InkWell(
+                                  onTap: () async {
+                                    final Uri url = Uri.parse(job.videoUrl!);
+                                    if (await canLaunchUrl(url)) {
+                                      await launchUrl(url, mode: LaunchMode.externalApplication);
+                                    } else {
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(content: Text('Could not launch video URL')),
+                                        );
+                                      }
+                                    }
+                                  },
                                   borderRadius: BorderRadius.circular(12),
-                                  color: const Color(0xFF2563EB).withOpacity(0.05),
-                                ),
-                                child: Row(
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.all(10),
-                                      decoration: const BoxDecoration(
-                                        color: Color(0xFF2563EB),
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: const Icon(Icons.play_arrow, color: Colors.white, size: 20),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      border: Border.all(color: Colors.grey.shade200),
+                                      borderRadius: BorderRadius.circular(12),
+                                      color: const Color(0xFF2563EB).withOpacity(0.05),
                                     ),
-                                    const SizedBox(width: 12),
-                                    const Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            'Watch Job Video',
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.w600,
-                                              fontSize: 14,
-                                              color: Colors.black87,
-                                            ),
+                                    child: Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.all(10),
+                                          decoration: const BoxDecoration(
+                                            color: Color(0xFF2563EB),
+                                            shape: BoxShape.circle,
                                           ),
-                                          Text(
-                                            'Tap to open link',
-                                            style: TextStyle(fontSize: 12, color: Colors.blueGrey),
+                                          child: const Icon(Icons.play_arrow, color: Colors.white, size: 20),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        const Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                'Watch Job Video',
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.w600,
+                                                  fontSize: 14,
+                                                  color: Colors.black87,
+                                                ),
+                                              ),
+                                              Text(
+                                                'Tap to open link',
+                                                style: TextStyle(fontSize: 12, color: Colors.blueGrey),
+                                              ),
+                                            ],
                                           ),
-                                        ],
-                                      ),
+                                        ),
+                                        const Icon(Icons.open_in_new, size: 18, color: Colors.blueGrey),
+                                      ],
                                     ),
-                                    const Icon(Icons.open_in_new, size: 18, color: Colors.blueGrey),
-                                  ],
+                                  ),
                                 ),
-                              ),
-                            ),
                         ],
                       ),
                     ),

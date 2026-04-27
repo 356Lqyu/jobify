@@ -145,7 +145,6 @@ class _HomePageState extends State<HomePage> {
       ),
     );
   }
-  // --------------------------
 
   void _buildScreensAndItems() {
     if (_isJobSeeker) {
